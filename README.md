@@ -82,6 +82,13 @@ Los archivos quedan en `src-tauri/target/release/bundle/`:
 - `deb/*.deb` → para instalar en Mint/Ubuntu.
 
 > En Fedora, el objetivo recomendado es el **AppImage** (portátil, sin instalación compleja).
+>
+> ℹ️ La **primera vez** que generas el AppImage, Tauri descarga un archivo de ayuda pequeño
+> desde internet (solo durante la compilación, no al usar la app). Necesitas conexión ese
+> momento. El paquete `.deb` no requiere ninguna descarga.
+>
+> Para generar solo uno de los dos: `npm run tauri build -- --bundles deb`
+> (o `--bundles appimage`).
 
 ---
 
