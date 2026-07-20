@@ -1,0 +1,18 @@
+# Dependencias
+node_modules
+# Build del frontend
+dist
+dist-ssr
+# Build de Rust / Tauri
+src-tauri/target
+# Esquemas generados automaticamente por Tauri en cada build
+src-tauri/gen
+# Logs y temporales
+*.log
+npm-debug.log*
+.DS_Store
+*.local
+.vite
+
+# Datos locales generados por la app en pruebas
+*.bpmcache.json

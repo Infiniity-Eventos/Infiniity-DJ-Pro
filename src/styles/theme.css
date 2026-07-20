@@ -1,0 +1,139 @@
+/*
+ * Infiniity DJ - Tema visual (glassmorphism morado).
+ * Paleta PROVISIONAL: reemplazar los valores morados por los oficiales de
+ * Infiniity cuando Stiven los envie. Soporta modo oscuro y claro.
+ */
+
+:root {
+  /* Morados de marca (provisionales) */
+  --purple-900: #1a0b2e;
+  --purple-800: #2a1250;
+  --purple-700: #3d1a6b;
+  --purple-600: #5b21b6;
+  --purple-500: #7c3aed;
+  --purple-400: #a855f7;
+  --purple-300: #c084fc;
+  --purple-200: #ddd6fe;
+
+  --accent: var(--purple-400);
+  --accent-strong: var(--purple-500);
+  --accent-soft: var(--purple-300);
+
+  /* Transiciones globales suaves */
+  --t-fast: 120ms ease;
+  --t-med: 240ms ease;
+
+  --radius-lg: 22px;
+  --radius-md: 14px;
+  --radius-sm: 9px;
+}
+
+/* ---------------- MODO OSCURO (por defecto) ---------------- */
+:root,
+:root[data-theme="dark"] {
+  --bg-0: #0d0618;
+  --bg-1: #16092b;
+  --bg-2: #1f0d3d;
+
+  --text-1: #f3ecff;
+  --text-2: #b9a8d8;
+  --text-dim: #8a76ad;
+
+  --glass-bg: rgba(124, 58, 237, 0.10);
+  --glass-bg-strong: rgba(139, 92, 246, 0.16);
+  --glass-border: rgba(192, 132, 252, 0.22);
+  --glass-highlight: rgba(255, 255, 255, 0.06);
+  --shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+
+  --track-bg: rgba(255, 255, 255, 0.05);
+  --slider-track: rgba(255, 255, 255, 0.12);
+}
+
+/* ---------------- MODO CLARO ---------------- */
+:root[data-theme="light"] {
+  --bg-0: #ece7f7;
+  --bg-1: #e2d9f5;
+  --bg-2: #d8ccf2;
+
+  --text-1: #241340;
+  --text-2: #4b3170;
+  --text-dim: #7a63a0;
+
+  --glass-bg: rgba(255, 255, 255, 0.45);
+  --glass-bg-strong: rgba(255, 255, 255, 0.62);
+  --glass-border: rgba(124, 58, 237, 0.28);
+  --glass-highlight: rgba(255, 255, 255, 0.55);
+  --shadow: 0 8px 30px rgba(80, 40, 140, 0.18);
+
+  --track-bg: rgba(124, 58, 237, 0.08);
+  --slider-track: rgba(124, 58, 237, 0.18);
+}
+
+/* Fondo general con degradado morado y "orbes" difuminados */
+body {
+  background:
+    radial-gradient(1100px 700px at 12% -10%, var(--bg-2), transparent 60%),
+    radial-gradient(900px 600px at 110% 20%, var(--purple-700), transparent 55%),
+    linear-gradient(160deg, var(--bg-0), var(--bg-1));
+  background-attachment: fixed;
+  color: var(--text-1);
+}
+
+/* ---------------- Componentes de vidrio ---------------- */
+.glass {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--glass-highlight);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+}
+
+.glass-strong {
+  background: var(--glass-bg-strong);
+}
+
+/* Botones */
+.btn {
+  font: inherit;
+  color: var(--text-1);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: transform var(--t-fast), background var(--t-fast), border-color var(--t-fast);
+  user-select: none;
+}
+.btn:hover {
+  background: var(--glass-bg-strong);
+  border-color: var(--accent-soft);
+}
+.btn:active {
+  transform: scale(0.96);
+}
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-accent {
+  background: linear-gradient(135deg, var(--accent-strong), var(--accent));
+  border: none;
+  color: #fff;
+  box-shadow: 0 6px 20px rgba(124, 58, 237, 0.45);
+}
+.btn-accent:hover {
+  filter: brightness(1.08);
+  background: linear-gradient(135deg, var(--accent-strong), var(--accent));
+}
+
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 50%;
+}

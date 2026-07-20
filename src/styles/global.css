@@ -1,0 +1,446 @@
+/* Reset ligero + estilos base de la app */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  cursor: default;
+}
+
+button,
+input {
+  font-family: inherit;
+}
+
+/* Scrollbars discretas y moradas */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--accent-strong);
+  border-radius: 6px;
+  opacity: 0.5;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---------------- Layout principal ---------------- */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  padding: 12px;
+  gap: 12px;
+}
+
+.decks-row {
+  display: grid;
+  grid-template-columns: 1fr 300px 1fr;
+  gap: 12px;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 1200px) {
+  .decks-row {
+    grid-template-columns: 1fr 250px 1fr;
+  }
+}
+
+.library-area {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* ---------------- Barra superior ---------------- */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 16px;
+}
+.topbar .brand {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  background: linear-gradient(120deg, var(--accent-soft), var(--accent));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.topbar .spacer {
+  flex: 1;
+}
+.topbar .path-chip {
+  font-size: 12px;
+  color: var(--text-2);
+  max-width: 340px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--track-bg);
+}
+.midi-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 6px;
+}
+.midi-dot.on {
+  background: #34d399;
+  box-shadow: 0 0 8px #34d399;
+}
+.midi-dot.off {
+  background: #6b7280;
+}
+
+/* ---------------- Deck ---------------- */
+.deck {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+.deck-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.deck-badge {
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--accent-soft);
+}
+.deck-bpm {
+  font-size: 13px;
+  color: var(--text-2);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.deck-bpm b {
+  color: var(--text-1);
+  font-size: 15px;
+}
+.deck-main {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+.deck-info {
+  flex: 1;
+  min-width: 0;
+}
+.track-title {
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.track-sub {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+.deck-transport {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.time-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------- Barra de progreso ---------------- */
+.progress {
+  height: 10px;
+  border-radius: 6px;
+  background: var(--slider-track);
+  position: relative;
+  cursor: pointer;
+  overflow: hidden;
+}
+.progress .fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, var(--accent-strong), var(--accent-soft));
+  border-radius: 6px;
+}
+
+/* ---------------- Vinilo ---------------- */
+.vinyl-wrap {
+  width: 120px;
+  height: 120px;
+  flex: 0 0 auto;
+  position: relative;
+}
+
+/* ---------------- Sliders verticales/horizontales ---------------- */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 4px;
+  background: var(--slider-track);
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-soft), var(--accent-strong));
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.vol-slider {
+  width: 100%;
+}
+
+/* ---------------- Mezclador central ---------------- */
+.mixer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  gap: 14px;
+}
+.mix-btn {
+  width: 100%;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  padding: 16px;
+  border-radius: var(--radius-md);
+}
+.mix-btn .mix-sub {
+  display: block;
+  font-size: 10px;
+  font-weight: 500;
+  opacity: 0.85;
+  letter-spacing: 0.5px;
+  margin-top: 3px;
+}
+.crossfader-block {
+  width: 100%;
+}
+.crossfader-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-2);
+  margin-bottom: 6px;
+}
+.master-block {
+  width: 100%;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* ---------------- Biblioteca ---------------- */
+.folder-tree {
+  padding: 12px;
+  overflow-y: auto;
+}
+.folder-tree h3 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+}
+.folder-node {
+  border-radius: var(--radius-sm);
+}
+.folder-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 13px;
+  transition: background var(--t-fast);
+}
+.folder-row:hover {
+  background: var(--track-bg);
+}
+.folder-row.active {
+  background: var(--glass-bg-strong);
+  color: var(--accent-soft);
+}
+.folder-row.drop-target {
+  outline: 2px dashed var(--accent);
+  background: var(--glass-bg-strong);
+}
+.folder-row .count {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.folder-children {
+  margin-left: 14px;
+  border-left: 1px solid var(--glass-border);
+  padding-left: 4px;
+}
+
+.tracklist {
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  min-height: 0;
+}
+.search-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.search-bar input {
+  flex: 1;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--glass-border);
+  background: var(--track-bg);
+  color: var(--text-1);
+  outline: none;
+}
+.search-bar input::placeholder {
+  color: var(--text-dim);
+}
+.track-rows {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+.track-row {
+  display: grid;
+  grid-template-columns: 1fr 70px 60px auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  cursor: grab;
+  transition: background var(--t-fast);
+}
+.track-row:hover {
+  background: var(--track-bg);
+}
+.track-row .t-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.track-row .t-bpm {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+  text-align: right;
+}
+.track-row .t-bpm.unknown {
+  color: var(--text-dim);
+  font-style: italic;
+}
+.track-row .t-actions {
+  display: flex;
+  gap: 6px;
+}
+.load-btn {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+/* ---------------- Toast ---------------- */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 12px 22px;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  z-index: 100;
+  animation: toastIn var(--t-med);
+}
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 12px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* ---------------- Pantalla de bienvenida (elegir carpeta) ---------------- */
+.welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  gap: 20px;
+  text-align: center;
+}
+.welcome h1 {
+  font-size: 42px;
+  background: linear-gradient(120deg, var(--accent-soft), var(--accent));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.welcome p {
+  color: var(--text-2);
+  max-width: 460px;
+  line-height: 1.5;
+}
+
+.win-controls {
+  display: flex;
+  gap: 6px;
+}
+.win-controls .btn-icon {
+  width: 32px;
+  height: 32px;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}
