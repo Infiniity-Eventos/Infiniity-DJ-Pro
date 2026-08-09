@@ -4,8 +4,10 @@
 mod bpm;
 mod cache;
 mod ddj200;
+mod downloader;
 mod library;
 mod midi;
+mod sysmon;
 
 use cache::{track_key, Cache, TrackMeta};
 use std::sync::Mutex;
@@ -15,6 +17,7 @@ use tauri::Manager;
 pub struct AppState {
     pub cache: Mutex<Cache>,
     pub midi: Mutex<midi::MidiState>,
+    pub cpu_prev: Mutex<Option<sysmon::CpuSample>>,
 }
 
 fn modified_secs(meta: &std::fs::Metadata) -> u64 {
@@ -48,6 +51,46 @@ fn create_folder(parent: String, name: String) -> Result<String, String> {
 #[tauri::command]
 fn ensure_unclassified(root: String) -> Result<String, String> {
     library::ensure_unclassified(&root)
+}
+
+/// Lee un archivo de audio y devuelve sus bytes crudos.
+/// En Linux/WebKitGTK, el reproductor (GStreamer) no puede leer archivos por el
+/// protocolo interno de assets; entregar los bytes y armar un Blob en el frontend
+/// es la via mas compatible. La respuesta se envia como bytes crudos (rapido, sin
+/// convertir a JSON).
+#[tauri::command]
+fn read_media(path: String) -> Result<tauri::ipc::Response, String> {
+    let bytes = std::fs::read(&path).map_err(|e| format!("No se pudo leer el archivo: {e}"))?;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
+/// Recursos que consume la app AHORA (RAM real y CPU%), sumando todos sus procesos.
+/// Ademas registra la muestra en el archivo de diagnostico (para medir en el
+/// equipo real). `note` describe que esta haciendo la app en ese momento.
+#[tauri::command]
+fn system_stats(
+    app: tauri::AppHandle,
+    state: tauri::State<AppState>,
+    note: String,
+) -> Result<sysmon::Stats, String> {
+    let stats = {
+        let mut prev = state.cpu_prev.lock().map_err(|_| "monitor ocupado".to_string())?;
+        sysmon::read_stats(&mut prev)
+    };
+    sysmon::log_sample(&app, &stats, &note);
+    Ok(stats)
+}
+
+/// Abre la carpeta donde queda el archivo de diagnostico (para enviarlo).
+#[tauri::command]
+fn diag_reveal(app: tauri::AppHandle) -> Result<(), String> {
+    let path = sysmon::diag_path(&app);
+    let dir = path.parent().unwrap_or(&path);
+    std::process::Command::new("xdg-open")
+        .arg(dir)
+        .spawn()
+        .map_err(|e| format!("No se pudo abrir la carpeta: {e}"))?;
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -159,9 +202,12 @@ fn toggle_fullscreen(window: tauri::Window) -> Result<bool, String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(AppState {
             cache: Mutex::new(Cache::default()),
             midi: Mutex::new(midi::MidiState::default()),
+            cpu_prev: Mutex::new(None),
         })
         .setup(|app| {
             // Cargar el cache de BPM desde la carpeta de datos de la app.
@@ -181,6 +227,13 @@ pub fn run() {
             move_track,
             create_folder,
             ensure_unclassified,
+            read_media,
+            system_stats,
+            diag_reveal,
+            downloader::ytdl_tools,
+            downloader::ytdl_search,
+            downloader::ytdl_download,
+            downloader::ytdl_install,
             analyze_bpm,
             set_manual_bpm,
             midi_list,

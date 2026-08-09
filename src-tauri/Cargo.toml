@@ -1,6 +1,6 @@
 [package]
 name = "infiniity-dj"
-version = "0.1.0"
+version = "0.1.6"
 description = "Infiniity DJ - Mezclador de musica liviano para eventos"
 authors = ["Infiniity Eventos"]
 edition = "2021"
@@ -28,6 +28,11 @@ symphonia = { version = "0.5", default-features = false, features = ["mp3", "wav
 
 # Controladora DDJ-200 por MIDI nativo (no depende de Web MIDI)
 midir = "0.10"
+
+# Actualizacion automatica: revisa GitHub Releases al abrir y avisa si hay
+# version nueva. `process` es para reiniciar la app despues de actualizar.
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 
 [features]
 # por defecto vacio

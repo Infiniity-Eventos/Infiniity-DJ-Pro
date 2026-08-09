@@ -81,18 +81,20 @@ export function FolderTree() {
   const setSelectedFolder = useStore((s) => s.setSelectedFolder);
   const showToast = useStore((s) => s.showToast);
 
-  const newFolder = async () => {
+  const newFolder = () => {
     const parent = selectedFolder ?? library?.root;
     if (!parent) return;
-    const name = window.prompt("Nombre de la nueva carpeta (ej: Merengue)");
-    if (!name) return;
-    try {
-      await createFolder(parent, name);
-      await reloadLibrary();
-      showToast(`Carpeta "${name}" creada`);
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : "No se pudo crear");
-    }
+    // Cuadro propio (NO window.prompt) para no bloquear el audio.
+    useStore.getState().askPrompt("Nombre de la nueva carpeta (ej: Merengue)", "", async (name) => {
+      if (!name.trim()) return;
+      try {
+        await createFolder(parent, name.trim());
+        await reloadLibrary();
+        showToast(`Carpeta "${name.trim()}" creada`);
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : "No se pudo crear");
+      }
+    });
   };
 
   return (

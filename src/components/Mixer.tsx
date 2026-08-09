@@ -51,6 +51,8 @@ export function Mixer() {
           step={0.01}
           value={crossfader}
           onChange={(e) => engine.setCrossfader(parseFloat(e.target.value))}
+          onDoubleClick={() => engine.setCrossfader(0.5)}
+          title="Doble clic para volver al centro"
         />
       </div>
 

@@ -68,6 +68,46 @@ export const createFolder = (parent: string, name: string) =>
 export const ensureUnclassified = (root: string) =>
   invoke<string>("ensure_unclassified", { root });
 
+// --- Descargador de YouTube (yt-dlp) ---
+export interface YtdlTools {
+  ytdlp: string | null;
+  deno: string | null;
+  ffmpeg: string | null;
+  ready: boolean;
+}
+export interface YtdlProgress {
+  id: string;
+  percent: number;
+  stage: string; // "descargando" | "convirtiendo" | "listo" | "error"
+  message: string;
+}
+export interface YtSearchResult {
+  id: string;
+  title: string;
+  duration: number | null;
+  channel: string;
+}
+export const ytdlTools = () => invoke<YtdlTools>("ytdl_tools");
+export const ytdlSearch = (query: string) => invoke<YtSearchResult[]>("ytdl_search", { query });
+export const ytdlInstall = () => invoke<YtdlTools>("ytdl_install");
+export const ytdlDownload = (url: string, destFolder: string, id: string) =>
+  invoke<string>("ytdl_download", { url, destFolder, id });
+export const onYtdlProgress = (
+  handler: (p: YtdlProgress) => void
+): Promise<UnlistenFn> => {
+  if (!isTauri()) return Promise.resolve(() => {});
+  return tauriListen<YtdlProgress>("ytdl://progress", (e) => handler(e.payload));
+};
+
+// --- Monitor de recursos ---
+export interface SystemStats {
+  ram_mb: number;
+  cpu_pct: number;
+  procs: number;
+}
+export const systemStats = (note: string) => invoke<SystemStats>("system_stats", { note });
+export const diagReveal = () => invoke<void>("diag_reveal").catch(() => {});
+
 // --- BPM ---
 export const analyzeBpm = (path: string) => invoke<TrackMeta>("analyze_bpm", { path });
 export const setManualBpm = (path: string, bpm: number) =>
@@ -101,4 +141,17 @@ export async function pickFolder(): Promise<string | null> {
 export function fileUrl(path: string): string {
   if (!isTauri()) return path;
   return convertFileSrc(path);
+}
+
+/**
+ * Lee un archivo de audio del disco y devuelve sus bytes crudos (ArrayBuffer).
+ * El motor de audio los decodifica a PCM para reproducir con la Web Audio API
+ * (via AudioBufferSourceNode), que es lo mas fiable en Linux/WebKitGTK.
+ */
+export async function readMediaBytes(path: string): Promise<ArrayBuffer> {
+  if (!isTauri()) throw new Error("(modo navegador) sin acceso a archivos");
+  const buf = await tauriInvoke<ArrayBuffer>("read_media", { path });
+  // Algunos entornos devuelven un tipo array-like; normalizar a ArrayBuffer.
+  if (buf instanceof ArrayBuffer) return buf;
+  return new Uint8Array(buf as unknown as ArrayLike<number>).buffer;
 }

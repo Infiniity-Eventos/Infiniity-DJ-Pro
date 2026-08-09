@@ -31,22 +31,24 @@
 /* ---------------- MODO OSCURO (por defecto) ---------------- */
 :root,
 :root[data-theme="dark"] {
-  --bg-0: #0d0618;
-  --bg-1: #16092b;
-  --bg-2: #1f0d3d;
+  --bg-0: #4a3a8c;
+  --bg-1: #46599e;
+  --bg-2: #5b4ba0;
 
-  --text-1: #f3ecff;
-  --text-2: #b9a8d8;
-  --text-dim: #8a76ad;
+  --text-1: #ffffff;
+  --text-2: #e7ddfb;
+  --text-dim: #cbbdea;
 
-  --glass-bg: rgba(124, 58, 237, 0.10);
-  --glass-bg-strong: rgba(139, 92, 246, 0.16);
-  --glass-border: rgba(192, 132, 252, 0.22);
-  --glass-highlight: rgba(255, 255, 255, 0.06);
-  --shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  /* Vidrio blanco esmerilado, VISIBLE (tarjetas que "flotan" como en LUMINA)
+     pero con blur bajo => se ve el efecto sin castigar la GPU. */
+  --glass-bg: rgba(255, 255, 255, 0.15);
+  --glass-bg-strong: rgba(255, 255, 255, 0.26);
+  --glass-border: rgba(255, 255, 255, 0.34);
+  --glass-highlight: rgba(255, 255, 255, 0.22);
+  --shadow: 0 10px 30px rgba(28, 14, 66, 0.32);
 
-  --track-bg: rgba(255, 255, 255, 0.05);
-  --slider-track: rgba(255, 255, 255, 0.12);
+  --track-bg: rgba(255, 255, 255, 0.10);
+  --slider-track: rgba(255, 255, 255, 0.20);
 }
 
 /* ---------------- MODO CLARO ---------------- */
@@ -69,12 +71,14 @@
   --slider-track: rgba(124, 58, 237, 0.18);
 }
 
-/* Fondo general con degradado morado y "orbes" difuminados */
+/* Fondo vibrante (morado -> azul -> rosa) con "orbes" suaves. Opaco y estatico
+   (background-attachment: fixed) => se pinta una sola vez, muy liviano. */
 body {
   background:
-    radial-gradient(1100px 700px at 12% -10%, var(--bg-2), transparent 60%),
-    radial-gradient(900px 600px at 110% 20%, var(--purple-700), transparent 55%),
-    linear-gradient(160deg, var(--bg-0), var(--bg-1));
+    radial-gradient(1200px 800px at 8% -5%, #6f5bc4, transparent 55%),
+    radial-gradient(1000px 750px at 105% 6%, #5488cf, transparent 55%),
+    radial-gradient(900px 760px at 96% 108%, #c98bc0, transparent 52%),
+    linear-gradient(150deg, #4a3a8c, #3f5aa0);
   background-attachment: fixed;
   color: var(--text-1);
 }
@@ -85,12 +89,28 @@ body {
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow), inset 0 1px 0 var(--glass-highlight);
-  backdrop-filter: blur(16px) saturate(140%);
-  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  /* Desenfoque MUY leve: da el efecto vidrio sin castigar la GPU en gama baja. */
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .glass-strong {
   background: var(--glass-bg-strong);
+}
+
+/* ---------------- MODO BAJO CONSUMO ----------------
+   Quita el desenfoque (lo mas caro en render por software) y sube la opacidad
+   del vidrio para que siga legible. Pensado para equipos flojos. */
+:root[data-lowpower="1"] {
+  --glass-bg: rgba(255, 255, 255, 0.17);
+  --glass-bg-strong: rgba(255, 255, 255, 0.3);
+}
+:root[data-lowpower="1"] .glass {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+:root[data-lowpower="1"] .progress .fill {
+  box-shadow: none;
 }
 
 /* Botones */
@@ -136,4 +156,11 @@ body {
   height: 40px;
   padding: 0;
   border-radius: 50%;
+}
+
+/* Boton del modo bajo consumo cuando esta ACTIVO (ambar, para que se note) */
+.btn.lowpower-on {
+  background: linear-gradient(135deg, #f59e0b, #f97316);
+  border-color: transparent;
+  color: #fff;
 }

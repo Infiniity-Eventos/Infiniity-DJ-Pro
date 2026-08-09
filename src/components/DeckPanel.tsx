@@ -1,42 +1,78 @@
+import { useState } from "react";
 import { engine } from "../audio/AudioEngine";
 import { useStore, type DeckId } from "../state/store";
 import { setManualBpm } from "../lib/tauri";
 import { Vinyl } from "./Vinyl";
 import { ProgressBar } from "./ProgressBar";
+import { IconPrev, IconNext, IconPlay, IconPause } from "./Icons";
 
 export function DeckPanel({ deckId }: { deckId: DeckId }) {
   const deck = useStore((s) => s.decks[deckId]);
   const patchDeck = useStore((s) => s.patchDeck);
   const showToast = useStore((s) => s.showToast);
+  const library = useStore((s) => s.library);
+  const [dragOver, setDragOver] = useState(false);
 
   const hasTrack = !!deck.trackPath;
 
-  const editBpm = async () => {
-    if (!deck.trackPath) return;
-    const current = deck.bpm ? String(deck.bpm) : "";
-    const input = window.prompt(
-      `BPM de "${deck.trackName}"\n(escribe el valor correcto y guarda)`,
-      current
-    );
-    if (input === null) return;
-    const value = parseFloat(input.replace(",", "."));
-    if (!isFinite(value) || value <= 0) {
-      showToast("BPM invalido");
-      return;
-    }
-    try {
-      const meta = await setManualBpm(deck.trackPath, value);
-      // Actualiza el tempo natural del motor (para la mezcla) y el estado.
-      engine.setNaturalBpm(deckId, meta.bpm);
-      patchDeck(deckId, { bpmManual: true });
-      showToast("BPM corregido y guardado");
-    } catch {
-      showToast("No se pudo guardar el BPM");
+  // Soltar una cancion (arrastrada desde la lista) la carga en este deck.
+  const onDropTrack = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const path = e.dataTransfer.getData("text/plain");
+    if (!path || !library) return;
+    const t = library.tracks.find((x) => x.path === path);
+    if (!t) return;
+    const doLoad = () => {
+      void engine.load(deckId, t.path, t.bpm, t.name);
+      showToast(`Cargando en Deck ${deckId}: ${t.name}`);
+    };
+    // Aviso de seguridad: no cortar por accidente una cancion que esta sonando.
+    if (deck.isPlaying) {
+      useStore
+        .getState()
+        .askConfirm(
+          `⚠️ El Deck ${deckId} está SONANDO ("${deck.trackName}"). ¿Reemplazarla por "${t.name}"?`,
+          doLoad
+        );
+    } else {
+      doLoad();
     }
   };
 
+  const editBpm = () => {
+    const path = deck.trackPath;
+    if (!path) return;
+    const current = deck.bpm ? String(deck.bpm) : "";
+    // Cuadro propio (NO window.prompt): así la música NUNCA se pausa.
+    useStore.getState().askPrompt(`BPM de "${deck.trackName}"`, current, async (input) => {
+      const value = parseFloat(input.replace(",", "."));
+      if (!isFinite(value) || value <= 0) {
+        showToast("BPM invalido");
+        return;
+      }
+      try {
+        const meta = await setManualBpm(path, value);
+        // Actualiza el tempo natural del motor (para la mezcla) y el estado.
+        engine.setNaturalBpm(deckId, meta.bpm);
+        patchDeck(deckId, { bpmManual: true });
+        showToast("BPM corregido y guardado");
+      } catch {
+        showToast("No se pudo guardar el BPM");
+      }
+    });
+  };
+
   return (
-    <div className={`glass deck deck-${deckId.toLowerCase()}`}>
+    <div
+      className={`glass deck deck-${deckId.toLowerCase()} ${dragOver ? "drag-over" : ""}`}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragOver(true);
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={onDropTrack}
+    >
       <div className="deck-header">
         <span className="deck-badge">Deck {deckId}</span>
         <span className="deck-bpm">
@@ -72,10 +108,10 @@ export function DeckPanel({ deckId }: { deckId: DeckId }) {
         <button
           className="btn btn-icon"
           disabled={!hasTrack}
-          title="Retroceder"
+          title="Retroceder 5s"
           onClick={() => engine.nudge(deckId, -5)}
         >
-          ⏪
+          <IconPrev />
         </button>
         <button
           className="btn btn-icon btn-accent"
@@ -83,15 +119,15 @@ export function DeckPanel({ deckId }: { deckId: DeckId }) {
           title={deck.isPlaying ? "Pausar" : "Reproducir"}
           onClick={() => engine.togglePlay(deckId)}
         >
-          {deck.isPlaying ? "⏸" : "▶"}
+          {deck.isPlaying ? <IconPause /> : <IconPlay />}
         </button>
         <button
           className="btn btn-icon"
           disabled={!hasTrack}
-          title="Adelantar"
+          title="Adelantar 5s"
           onClick={() => engine.nudge(deckId, 5)}
         >
-          ⏩
+          <IconNext />
         </button>
 
         <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8 }}>

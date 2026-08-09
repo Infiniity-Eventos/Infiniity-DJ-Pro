@@ -1,27 +1,39 @@
 /**
- * Motor de audio de Infiniity DJ (Web Audio API).
+ * Motor de audio de Infiniity DJ (Web Audio API con AudioBuffer).
  *
- * Diseno pensado para GAMA BAJA:
- *  - Cada deck reproduce con un <audio> (MediaElement) que transmite el archivo
- *    desde el disco, en vez de cargarlo entero en memoria. Esto usa muy poca RAM
- *    incluso con WAV largos.
- *  - El cambio de tempo (beatmatch) se hace con `playbackRate` y
- *    `preservesPitch = false`: es practicamente gratis en CPU (como el pitch de
- *    un tornamesa), en vez del "time-stretch" que consume mucho.
- *  - Los volumenes se manejan con GainNodes (en el hilo de audio), asi la mezcla
- *    no se entrecorta aunque la interfaz este ocupada.
+ * POR QUE ASI (Linux/WebKitGTK):
+ *  - `createMediaElementSource` (enrutar un <audio> a la Web Audio) NO funciona
+ *    en WebKitGTK, y reproducir/buscar dentro de un Blob con <audio> es poco
+ *    fiable (saltos, seek roto). La via robusta es decodificar la cancion a PCM
+ *    (`decodeAudioData`) y reproducirla con `AudioBufferSourceNode`, que si esta
+ *    bien soportado. Da reproduccion sin saltos y busqueda instantanea y precisa.
  *
- * Grafo por deck:  <audio> -> source -> volumeGain -> xfadeGain -> masterGain -> salida
+ * BEATMATCH: cambiar `playbackRate` en el AudioBufferSourceNode mueve el tono
+ * junto con el tempo (como un tornamesa). Es gratis en CPU (sin time-stretch).
+ *
+ * RENDIMIENTO/RAM: cada deck mantiene UN AudioBuffer decodificado (~80MB por
+ * cancion). Maximo 2 a la vez; al cargar otra cancion en un deck, el buffer
+ * anterior queda libre para el recolector de basura.
+ *
+ * Grafo por deck:  BufferSource -> volumeGain -> xfadeGain -> master -> salida
  */
 
 import { useStore, type DeckId } from "../state/store";
+import { readMediaBytes } from "../lib/tauri";
 
 interface Deck {
-  el: HTMLAudioElement;
-  source: MediaElementAudioSourceNode | null;
+  buffer: AudioBuffer | null;
+  source: AudioBufferSourceNode | null;
+  normGain: GainNode; // auto-nivelacion: iguala la sonoridad entre canciones
   volumeGain: GainNode;
   xfadeGain: GainNode;
   naturalBpm: number | null;
+  rate: number; // playbackRate actual (1 = natural)
+  offset: number; // posicion (seg) donde arranco la reproduccion actual / donde quedo en pausa
+  startCtxTime: number; // ctx.currentTime cuando arranco la reproduccion actual
+  playing: boolean;
+  endedGuard: boolean; // true cuando nosotros paramos la fuente (para ignorar onended)
+  loadToken: number; // identifica la carga vigente (descarta cargas viejas)
 }
 
 export interface MixResult {
@@ -29,14 +41,16 @@ export interface MixResult {
   reason?: string;
 }
 
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+
 class AudioEngine {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
   private decks: Record<DeckId, Deck> | null = null;
   private rateAnim: Record<DeckId, number | null> = { A: null, B: null };
   private mixRaf: number | null = null;
+  private tokenSeq = 0;
 
-  /** Se debe llamar tras el primer gesto del usuario (requisito del navegador). */
   ensure(): void {
     if (this.ctx) return;
     const ctx = new AudioContext({ latencyHint: "playback" });
@@ -45,23 +59,31 @@ class AudioEngine {
     master.connect(ctx.destination);
 
     const makeDeck = (): Deck => {
-      const el = new Audio();
-      el.preload = "auto";
-      el.crossOrigin = "anonymous";
-      // Clave para el rendimiento: dejar que el tempo mueva el tono (como vinilo).
-      (el as HTMLAudioElement & { preservesPitch?: boolean }).preservesPitch = false;
+      const normGain = ctx.createGain();
       const volumeGain = ctx.createGain();
       const xfadeGain = ctx.createGain();
+      normGain.connect(volumeGain);
       volumeGain.connect(xfadeGain);
       xfadeGain.connect(master);
-      return { el, source: null, volumeGain, xfadeGain, naturalBpm: null };
+      return {
+        buffer: null,
+        source: null,
+        normGain,
+        volumeGain,
+        xfadeGain,
+        naturalBpm: null,
+        rate: 1,
+        offset: 0,
+        startCtxTime: 0,
+        playing: false,
+        endedGuard: false,
+        loadToken: 0,
+      };
     };
 
     this.ctx = ctx;
     this.master = master;
     this.decks = { A: makeDeck(), B: makeDeck() };
-
-    // Aplicar crossfader inicial.
     this.applyCrossfader(useStore.getState().crossfader);
   }
 
@@ -70,27 +92,62 @@ class AudioEngine {
     return this.decks![id];
   }
 
-  /** Conecta el <audio> al grafo la primera vez que se reproduce. */
-  private connectSource(id: DeckId): void {
+  /** Detiene la fuente actual sin marcar "fin de cancion". */
+  private stopSource(id: DeckId): void {
     const d = this.deck(id);
-    if (!d.source && this.ctx) {
-      d.source = this.ctx.createMediaElementSource(d.el);
-      d.source.connect(d.volumeGain);
+    if (d.source) {
+      d.endedGuard = true;
+      try {
+        d.source.stop();
+      } catch {
+        /* ya estaba detenida */
+      }
+      d.source.disconnect();
+      d.source = null;
     }
   }
 
-  // -------- Carga y transporte --------
+  /** Crea y arranca una fuente desde `offset` segundos. */
+  private startFrom(id: DeckId, offset: number): void {
+    const d = this.deck(id);
+    if (!d.buffer || !this.ctx) return;
+    const off = clamp(offset, 0, Math.max(0, d.buffer.duration - 0.02));
+    const src = this.ctx.createBufferSource();
+    src.buffer = d.buffer;
+    src.playbackRate.value = d.rate;
+    src.connect(d.normGain);
+    d.endedGuard = false;
+    src.onended = () => {
+      if (d.endedGuard) return; // lo paramos nosotros (pausa/seek/carga)
+      // Fin natural de la cancion.
+      d.playing = false;
+      d.offset = 0;
+      useStore.getState().patchDeck(id, { isPlaying: false });
+    };
+    src.start(0, off);
+    d.source = src;
+    d.offset = off;
+    d.startCtxTime = this.ctx.currentTime;
+    d.playing = true;
+  }
 
-  load(id: DeckId, url: string, naturalBpm: number | null, trackName: string, trackPath: string): void {
+  // -------- Carga --------
+
+  async load(id: DeckId, path: string, naturalBpm: number | null, trackName: string): Promise<void> {
     this.ensure();
     const d = this.deck(id);
     this.cancelRateAnim(id);
-    d.el.src = url;
-    d.el.playbackRate = 1;
+    this.stopSource(id);
+    const token = ++this.tokenSeq;
+    d.loadToken = token;
+    d.playing = false;
+    d.offset = 0;
+    d.rate = 1;
     d.naturalBpm = naturalBpm;
+
     const { patchDeck } = useStore.getState();
     patchDeck(id, {
-      trackPath,
+      trackPath: path,
       trackName,
       bpm: naturalBpm,
       isPlaying: false,
@@ -98,111 +155,189 @@ class AudioEngine {
       duration: 0,
       loading: true,
     });
-    const onMeta = () => {
-      patchDeck(id, { duration: d.el.duration || 0, loading: false });
-      d.el.removeEventListener("loadedmetadata", onMeta);
-    };
-    d.el.addEventListener("loadedmetadata", onMeta);
-    d.el.addEventListener(
-      "ended",
-      () => patchDeck(id, { isPlaying: false }),
-      { once: true }
-    );
+
+    let bytes: ArrayBuffer;
+    try {
+      bytes = await readMediaBytes(path);
+    } catch (err) {
+      if (d.loadToken === token) {
+        patchDeck(id, { loading: false });
+        useStore.getState().showToast(`No se pudo leer: ${trackName}`);
+      }
+      console.error("[AudioEngine.load] read_media fallo", err);
+      return;
+    }
+    if (d.loadToken !== token) return; // se cargo otra cancion mientras leiamos
+
+    let buffer: AudioBuffer;
+    try {
+      buffer = await this.ctx!.decodeAudioData(bytes);
+    } catch (err) {
+      if (d.loadToken === token) {
+        patchDeck(id, { loading: false });
+        useStore.getState().showToast(`No se pudo decodificar: ${trackName}`);
+      }
+      console.error("[AudioEngine.load] decodeAudioData fallo", err);
+      return;
+    }
+    if (d.loadToken !== token) return; // llego tarde: descartar
+
+    d.buffer = buffer;
+    d.offset = 0;
+    d.normGain.gain.value = this.computeNormGain(buffer);
+    patchDeck(id, { duration: buffer.duration, loading: false });
   }
 
-  async play(id: DeckId): Promise<void> {
-    this.ensure();
-    const d = this.deck(id);
-    if (!d.el.src) return;
-    this.connectSource(id);
-    if (this.ctx?.state === "suspended") await this.ctx.resume();
-    try {
-      await d.el.play();
-      useStore.getState().patchDeck(id, { isPlaying: true });
-    } catch {
-      /* el navegador puede rechazar si no hubo gesto; se reintenta al tocar play */
+  /**
+   * Auto-nivelacion de volumen: mide la sonoridad (RMS) y el pico de la cancion
+   * y devuelve una ganancia para que TODAS suenen parejo, sin saturar.
+   * Analiza una MUESTRA (no todas las muestras) para no castigar la CPU.
+   */
+  private computeNormGain(buffer: AudioBuffer): number {
+    const chs = buffer.numberOfChannels;
+    const len = buffer.length;
+    if (len === 0) return 1;
+    // Como maximo ~500k muestras por canal: rapidisimo incluso en gama baja.
+    const stride = Math.max(1, Math.floor(len / 500000));
+    let sumSq = 0;
+    let peak = 0;
+    let count = 0;
+    for (let c = 0; c < chs; c++) {
+      const data = buffer.getChannelData(c);
+      for (let i = 0; i < len; i += stride) {
+        const s = data[i];
+        sumSq += s * s;
+        const a = s < 0 ? -s : s;
+        if (a > peak) peak = a;
+        count++;
+      }
     }
+    const rms = Math.sqrt(sumSq / count);
+    const REF_RMS = 0.1; // objetivo de sonoridad (~-20 dBFS)
+    let gain = rms > 0.0001 ? REF_RMS / rms : 1;
+    // No sobrepasar el pico ~0.97 (evita saturacion/distorsion).
+    if (peak > 0) gain = Math.min(gain, 0.97 / peak);
+    return clamp(gain, 0.25, 4);
+  }
+
+  // -------- Transporte --------
+
+  async play(id: DeckId): Promise<void> {
+    const d = this.deck(id);
+    if (!d.buffer || d.playing) return;
+    if (this.ctx?.state === "suspended") {
+      try {
+        await this.ctx.resume();
+      } catch {
+        /* ignorar */
+      }
+    }
+    this.startFrom(id, d.offset);
+    useStore.getState().patchDeck(id, { isPlaying: true });
   }
 
   pause(id: DeckId): void {
     const d = this.deck(id);
-    d.el.pause();
+    if (!d.playing) return;
+    d.offset = this.getPosition(id);
+    this.stopSource(id);
+    d.playing = false;
     useStore.getState().patchDeck(id, { isPlaying: false });
   }
 
   togglePlay(id: DeckId): void {
-    const playing = !this.deck(id).el.paused;
-    if (playing) this.pause(id);
+    if (this.deck(id).playing) this.pause(id);
     else void this.play(id);
   }
 
   setVolume(id: DeckId, v: number): void {
     const d = this.deck(id);
-    d.volumeGain.gain.value = v;
-    useStore.getState().patchDeck(id, { volume: v });
+    d.volumeGain.gain.value = clamp(v, 0, 1);
+    useStore.getState().patchDeck(id, { volume: clamp(v, 0, 1) });
   }
 
   setMasterVolume(v: number): void {
     this.ensure();
-    if (this.master) this.master.gain.value = v;
-    useStore.getState().setMasterVolume(v);
+    if (this.master) this.master.gain.value = clamp(v, 0, 1);
+    useStore.getState().setMasterVolume(clamp(v, 0, 1));
   }
 
-  /** Salta a una posicion (0..1 del total). */
+  /** Va a una posicion absoluta (segundos). */
+  private seekTo(id: DeckId, seconds: number): void {
+    const d = this.deck(id);
+    if (!d.buffer) return;
+    const pos = clamp(seconds, 0, d.buffer.duration);
+    if (d.playing) {
+      this.stopSource(id);
+      this.startFrom(id, pos);
+    } else {
+      d.offset = pos;
+    }
+  }
+
+  /** Salta a una fraccion (0..1) del total. */
   seekFraction(id: DeckId, frac: number): void {
     const d = this.deck(id);
-    if (d.el.duration) d.el.currentTime = frac * d.el.duration;
+    if (d.buffer) this.seekTo(id, frac * d.buffer.duration);
   }
 
   /** Adelanta/retrocede unos segundos (como mover el disco). */
   nudge(id: DeckId, seconds: number): void {
-    const d = this.deck(id);
-    if (!d.el.duration) return;
-    d.el.currentTime = Math.min(
-      d.el.duration,
-      Math.max(0, d.el.currentTime + seconds)
-    );
+    this.seekTo(id, this.getPosition(id) + seconds);
   }
 
   setRate(id: DeckId, rate: number): void {
     const d = this.deck(id);
-    d.el.playbackRate = rate;
+    if (d.playing) {
+      // Rebasar la contabilidad de posicion para que no de un salto.
+      d.offset = this.getPosition(id);
+      d.startCtxTime = this.ctx!.currentTime;
+      d.rate = rate;
+      if (d.source) d.source.playbackRate.value = rate;
+    } else {
+      d.rate = rate;
+    }
     useStore.getState().patchDeck(id, { rate });
   }
 
-  /** Actualiza el tempo natural (BPM) de un deck sin recargar la cancion. */
   setNaturalBpm(id: DeckId, bpm: number | null): void {
     this.deck(id).naturalBpm = bpm;
     useStore.getState().patchDeck(id, { bpm });
   }
 
   getPosition(id: DeckId): number {
-    return this.decks ? this.decks[id].el.currentTime : 0;
+    const d = this.decks?.[id];
+    if (!d || !d.buffer) return 0;
+    if (d.playing && this.ctx) {
+      const pos = d.offset + (this.ctx.currentTime - d.startCtxTime) * d.rate;
+      return clamp(pos, 0, d.buffer.duration);
+    }
+    return d.offset;
   }
   getDuration(id: DeckId): number {
-    return this.decks ? this.decks[id].el.duration || 0 : 0;
+    return this.decks?.[id].buffer?.duration ?? 0;
   }
   isPlaying(id: DeckId): boolean {
-    return this.decks ? !this.decks[id].el.paused : false;
+    return this.decks?.[id].playing ?? false;
   }
 
   // -------- Crossfader (curva de igual potencia) --------
 
   applyCrossfader(x: number): void {
     if (!this.decks) return;
-    const gA = Math.cos((x * Math.PI) / 2);
-    const gB = Math.cos(((1 - x) * Math.PI) / 2);
-    this.decks.A.xfadeGain.gain.value = gA;
-    this.decks.B.xfadeGain.gain.value = gB;
+    // Corte lineal: en el CENTRO ambos decks al 100%; al mover hacia un lado, el
+    // deck OPUESTO baja hasta 0. (A la izquierda solo suena A; a la derecha solo B.)
+    this.decks.A.xfadeGain.gain.value = x <= 0.5 ? 1 : 2 * (1 - x);
+    this.decks.B.xfadeGain.gain.value = x >= 0.5 ? 1 : 2 * x;
   }
 
   setCrossfader(x: number): void {
-    const clamped = Math.min(1, Math.max(0, x));
+    const clamped = clamp(x, 0, 1);
     this.applyCrossfader(clamped);
     useStore.getState().setCrossfader(clamped);
   }
 
-  // -------- Animacion de tempo (para el beatmatch gradual) --------
+  // -------- Animacion de tempo (beatmatch gradual) --------
 
   private cancelRateAnim(id: DeckId): void {
     if (this.rateAnim[id] !== null) {
@@ -211,20 +346,15 @@ class AudioEngine {
     }
   }
 
-  /** Lleva el playbackRate del deck desde su valor actual hasta `target`. */
   private animateRate(id: DeckId, target: number, durationMs: number): Promise<void> {
     return new Promise((resolve) => {
       this.cancelRateAnim(id);
-      const d = this.deck(id);
-      const start = d.el.playbackRate;
+      const start = this.deck(id).rate;
       const t0 = performance.now();
       const step = (now: number) => {
         const p = Math.min(1, (now - t0) / durationMs);
-        // suavizado (easeInOut)
         const e = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
-        const rate = start + (target - start) * e;
-        d.el.playbackRate = rate;
-        useStore.getState().patchDeck(id, { rate });
+        this.setRate(id, start + (target - start) * e);
         if (p < 1) {
           this.rateAnim[id] = requestAnimationFrame(step);
         } else {
@@ -236,7 +366,6 @@ class AudioEngine {
     });
   }
 
-  /** Anima el crossfader de su posicion actual hasta `target` en durationMs. */
   private animateCrossfader(target: number, durationMs: number): Promise<void> {
     return new Promise((resolve) => {
       if (this.mixRaf !== null) cancelAnimationFrame(this.mixRaf);
@@ -244,8 +373,7 @@ class AudioEngine {
       const t0 = performance.now();
       const step = (now: number) => {
         const p = Math.min(1, (now - t0) / durationMs);
-        const x = start + (target - start) * p;
-        this.setCrossfader(x);
+        this.setCrossfader(start + (target - start) * p);
         if (p < 1) {
           this.mixRaf = requestAnimationFrame(step);
         } else {
@@ -259,31 +387,23 @@ class AudioEngine {
 
   // -------- Mezcla inteligente --------
 
-  /**
-   * Comprueba si dos decks se pueden beatmatchear dentro del limite de tempo.
-   * Devuelve el factor de velocidad necesario para el deck que ENTRA, o null.
-   */
   private matchRate(sourceId: DeckId, targetId: DeckId, maxDiff: number): number | null {
     const s = this.deck(sourceId);
     const t = this.deck(targetId);
     if (!s.naturalBpm || !t.naturalBpm) return null;
-    const sourceEffective = s.naturalBpm * s.el.playbackRate;
+    const sourceEffective = s.naturalBpm * s.rate;
     const rate = sourceEffective / t.naturalBpm;
-    if (Math.abs(rate - 1) > maxDiff) return null; // ritmos muy distintos
+    if (Math.abs(rate - 1) > maxDiff) return null;
     return rate;
   }
 
-  /**
-   * Ejecuta la mezcla automatica del deck `sourceId` (el que suena) hacia
-   * `targetId` (el que entra).
-   */
   async autoMix(sourceId: DeckId, targetId: DeckId): Promise<MixResult> {
     this.ensure();
     const st = useStore.getState();
     const { settings } = st;
 
     const t = this.deck(targetId);
-    if (!t.el.src) {
+    if (!t.buffer) {
       return { ok: false, reason: `Carga una cancion en el Deck ${targetId} primero` };
     }
     if (st.autoMixing) {
@@ -294,37 +414,26 @@ class AudioEngine {
     const rate = bothBpm ? this.matchRate(sourceId, targetId, settings.maxTempoDiff) : null;
 
     if (bothBpm && rate === null) {
-      // Ritmos incompatibles: por decision de diseno, NO forzamos.
-      return {
-        ok: false,
-        reason: "Estas dos canciones no combinan (ritmos muy distintos)",
-      };
+      return { ok: false, reason: "Estas dos canciones no combinan (ritmos muy distintos)" };
     }
 
     st.setAutoMixing(true);
     const durationMs = settings.transitionSec * 1000;
     const targetX = targetId === "B" ? 1 : 0;
 
-    // Arrancar el deck que entra.
-    if (rate !== null) {
-      t.el.playbackRate = 1; // arranca en su tempo natural...
-    }
+    if (rate !== null) this.setRate(targetId, 1); // arranca en su tempo natural
     await this.play(targetId);
 
-    // Ajustar el tempo del que entra de forma GRADUAL (no un salto brusco).
     const promises: Promise<void>[] = [];
     if (rate !== null) {
       const alignMs = Math.min(2500, durationMs * 0.4);
       promises.push(this.animateRate(targetId, rate, alignMs));
     }
-    // Cruzar los volumenes durante toda la transicion.
     promises.push(this.animateCrossfader(targetX, durationMs));
     await Promise.all(promises);
 
-    // Terminada la transicion: apagar el deck anterior.
     this.pause(sourceId);
 
-    // Opcional: la cancion nueva vuelve poco a poco a su tempo natural.
     if (rate !== null && settings.returnToNatural) {
       await this.animateRate(targetId, 1, 4000);
     }
@@ -333,7 +442,6 @@ class AudioEngine {
     return { ok: true };
   }
 
-  /** Cancela una mezcla en curso (deja todo donde este). */
   cancelMix(): void {
     if (this.mixRaf !== null) cancelAnimationFrame(this.mixRaf);
     this.mixRaf = null;

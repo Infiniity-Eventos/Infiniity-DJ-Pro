@@ -1,0 +1,8 @@
+# El Containerfile solo instala herramientas, no copia el proyecto (este se
+# monta al compilar). Excluimos lo pesado para que 'podman build' no pierda
+# minutos empaquetando gigas de objetos compilados.
+src-tauri/target
+src-tauri/target-mint
+node_modules
+dist
+.git

@@ -1,14 +1,28 @@
 import { useMemo } from "react";
 import { engine } from "../audio/AudioEngine";
 import { useStore, type DeckId } from "../state/store";
-import { analyzeBpm, fileUrl, type TrackInfo } from "../lib/tauri";
+import { analyzeBpm, type TrackInfo } from "../lib/tauri";
 import { fmtTime } from "../lib/format";
+
+// Icono de arrastre: una imagen precargada (SVG). Usar una <img> lista de
+// antemano es lo mas compatible con WebKitGTK; asi al arrastrar se ve solo una
+// nota musical morada, no un "fantasma" de toda la interfaz.
+const DRAG_ICON = new Image();
+DRAG_ICON.src =
+  "data:image/svg+xml;utf8," +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="46" height="46">' +
+      '<circle cx="23" cy="23" r="21" fill="#7c3aed" stroke="#c084fc" stroke-width="2"/>' +
+      '<text x="23" y="32" font-size="24" text-anchor="middle" fill="#ffffff">♪</text>' +
+      "</svg>"
+  );
 
 export function TrackList() {
   const library = useStore((s) => s.library);
   const search = useStore((s) => s.search);
   const setSearch = useStore((s) => s.setSearch);
   const selectedFolder = useStore((s) => s.selectedFolder);
+  const highlightTrack = useStore((s) => s.highlightTrack);
   const analyzing = useStore((s) => s.analyzing);
   const setAnalyzing = useStore((s) => s.setAnalyzing);
   const setLibrary = useStore((s) => s.setLibrary);
@@ -26,8 +40,22 @@ export function TrackList() {
   }, [library, search, selectedFolder]);
 
   const loadToDeck = (deckId: DeckId, t: TrackInfo) => {
-    engine.load(deckId, fileUrl(t.path), t.bpm, t.name, t.path);
-    showToast(`Cargada en Deck ${deckId}: ${t.name}`);
+    const doLoad = () => {
+      void engine.load(deckId, t.path, t.bpm, t.name);
+      showToast(`Cargando en Deck ${deckId}: ${t.name}`);
+    };
+    // Aviso de seguridad: no cortar por accidente una cancion que esta sonando.
+    const target = useStore.getState().decks[deckId];
+    if (target.isPlaying) {
+      useStore
+        .getState()
+        .askConfirm(
+          `⚠️ El Deck ${deckId} está SONANDO ("${target.trackName}"). ¿Reemplazarla por "${t.name}"?`,
+          doLoad
+        );
+    } else {
+      doLoad();
+    }
   };
 
   const updateTrackBpm = (path: string, bpm: number | null, duration: number | null) => {
@@ -96,9 +124,18 @@ export function TrackList() {
         {tracks.map((t) => (
           <div
             key={t.path}
-            className="track-row"
+            className={`track-row ${t.path === highlightTrack ? "just-downloaded" : ""}`}
             draggable
-            onDragStart={(e) => e.dataTransfer.setData("text/plain", t.path)}
+            onDragStart={(e) => {
+              e.dataTransfer.setData("text/plain", t.path);
+              e.dataTransfer.effectAllowed = "copy";
+              // Imagen de arrastre: solo un icono de musica (imagen precargada).
+              try {
+                e.dataTransfer.setDragImage(DRAG_ICON, 23, 23);
+              } catch {
+                /* algunos motores no lo soportan; no pasa nada */
+              }
+            }}
             onDoubleClick={() => loadToDeck("A", t)}
           >
             <span className="t-name" title={t.name}>

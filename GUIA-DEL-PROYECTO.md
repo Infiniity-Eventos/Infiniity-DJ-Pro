@@ -1,246 +1,251 @@
 # 📘 Guía del proyecto — Infiniity DJ
 
-> Documento de traspaso para trabajar en local. Escrito en lenguaje simple.
-> Última actualización: julio 2026.
+> Documento de traspaso y contexto. Escrito en lenguaje simple.
+> **Última actualización: 2026-07-20 · Versión actual: 0.1.6**
+> Rama de trabajo: `claude/infiniity-dj-analysis-iuxvby`
+
+> 🟢 **Para una IA/conversación nueva:** lee este documento completo antes de tocar nada.
+> Contiene hallazgos duros (WebKitGTK, audio, rendimiento) que costó descubrir y que
+> NO se deben re-investigar. Empieza por la sección 2 (hallazgos críticos).
 
 ---
 
 ## 1. ¿Qué es esto?
 
-**Infiniity DJ** es un programa de escritorio para **Linux** (Mint y Fedora) que sirve
-para mezclar música en eventos en vivo (bodas, quinces, fiestas). Está pensado para
-que lo use el personal de Infiniity Eventos **sin experiencia en DJ**, en portátiles
-de **gama baja**, sin que se trabe ni se caiga a mitad de una fiesta.
+**Infiniity DJ** es un programa de escritorio para **Linux** (Mint y Fedora), hecho con
+**Tauri (React + TypeScript por delante, Rust por detrás)**. Sirve para mezclar música en
+eventos en vivo. Lo usa personal **sin experiencia de DJ**, en portátiles de **gama baja**.
 
-Es un tipo "mini Virtual DJ", pero simple, liviano y con la estética morada de Infiniity.
-
-**Lo más importante del proyecto (en orden):**
-1. Que nunca se trabe ni se caiga en un evento.
-2. Que sea rápido y liviano.
-3. Que sea muy fácil de usar.
-4. Que se vea profesional (glassmorphism morado).
-5. Mezcla inteligente por ritmo (BPM).
-6. Que funcione la controladora DDJ-200 al conectarla.
+**Prioridades (en orden, no negociables):**
+1. **Que NUNCA se trabe ni se caiga en un evento.** (La #1 absoluta.)
+2. **Que la música NUNCA se pause por nada** (ni por abrir un cuadro de diálogo).
+3. Que sea rápido y liviano en equipos flojos.
+4. Que sea muy fácil de usar.
+5. Que se vea profesional (glassmorphism morado).
+6. Mezcla inteligente por BPM. 7. Controladora DDJ-200.
 
 ---
 
-## 2. Cómo lo abro en mi computador (paso a paso)
+## 2. ⚠️ HALLAZGOS CRÍTICOS (leer sí o sí)
 
-### Paso 1 — Instalar las herramientas base (una sola vez)
+Todo esto se descubrió a fuerza de bugs. No repetir el camino.
 
-Necesitas **Node.js** y **Rust**.
-
-- Node.js: https://nodejs.org (versión 18 o más nueva).
-- Rust: abre una terminal y pega:
-  ```bash
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-  ```
-  (dale Enter a la opción por defecto). Luego cierra y abre la terminal.
-
-### Paso 2 — Instalar las librerías del sistema (una sola vez)
-
-**En Linux Mint / Ubuntu:**
+### 2.1 Lanzar la app en dev (Fedora + Wayland + NVIDIA)
+La PC de desarrollo es Fedora 44, GNOME/Wayland, **NVIDIA RTX 5060**. Hay que lanzar SIEMPRE:
 ```bash
-sudo apt update
-sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file \
-  libssl-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libasound2-dev
+WEBKIT_DISABLE_DMABUF_RENDERER=1 npm run tauri dev
 ```
+Sin ese flag, la ventana se cae con *"Error 71 dispatching to Wayland display"* (bug clásico
+NVIDIA+Wayland+WebKitGTK). Ese flag apaga la GPU → render por software → CPU alto en dev; es
+un **artefacto de la NVIDIA**, no un problema real de la app.
 
-**En Fedora:**
-```bash
-sudo dnf install webkit2gtk4.1-devel openssl-devel gtk3-devel librsvg2-devel \
-  libappindicator-gtk3-devel alsa-lib-devel
-sudo dnf group install "C Development Tools and Libraries"
-```
+### 2.2 El audio NO usa `<audio>` ni el protocolo asset
+En Linux/WebKitGTK el audio HTML5 es frágil:
+- `createMediaElementSource` **NO funciona** → daba "operation not supported".
+- El protocolo `asset://` de Tauri (`convertFileSrc`) **no lo lee** el reproductor → MediaError 4.
+- Reproducir/buscar dentro de un Blob con `<audio>` **falla** (seek roto, sonaba desordenado).
 
-### Paso 3 — Bajar el proyecto
+**Solución actual (en `src/audio/AudioEngine.ts`):** comando Rust `read_media` devuelve los
+bytes → `ctx.decodeAudioData` → se reproduce con **`AudioBufferSourceNode` + GainNodes**
+(eso sí lo soporta WebKitGTK). Da reproducción sin saltos, seek preciso y beatmatch por
+`playbackRate`. **Costo: ~80-170 MB RAM por canción decodificada** (máx 2 decks). No volver a
+intentar `<audio>`/asset para audio.
 
-```bash
-git clone <la-URL-de-tu-repositorio>
-cd Infiniity-DJ-Pro
-git checkout claude/infiniity-dj-analysis-iuxvby
-```
+### 2.3 NADA de diálogos nativos (pausan la música)
+`window.prompt`, `window.confirm`, `window.alert` en WebKitGTK **BLOQUEAN el proceso y PAUSAN
+el audio**. Prohibidos. Ya se reemplazaron por modales propios de React:
+`ConfirmModal.tsx` y `PromptModal.tsx` (usar `askConfirm` / `askPrompt` del store).
 
-### Paso 4 — Instalar dependencias del proyecto (una sola vez)
+### 2.4 Empaquetado: solo `.deb` (el AppImage falla)
+`npm run tauri build -- --bundles deb` → genera `.deb` (~2.3 MB). El **AppImage FALLA**
+("failed to run linuxdeploy", tema de FUSE en el entorno). Para eventos se usa el `.deb`.
+Ojo: el `.deb` declara `depends: []`, así que en el equipo destino hay que instalar a mano
+las deps de runtime (ver sección 4).
 
-```bash
-npm install
-```
+### 2.5 RENDIMIENTO — el tema abierto más importante 🔴
+Medido en el portátil objetivo real (**Intel i5-6300U, 2015, 4 hilos, 7.6 GB, Mint 22.1**):
+- Reposo: ~450 MB, **~3% CPU** ✅
+- Pausado (canciones cargadas): ~700 MB, **~17% CPU** ✅ (la RAM es normal, sobra)
+- **REPRODUCIENDO: ~147-190% CPU** 🔴 (demasiado alto)
 
-### Paso 5 — Probar la app
+Se intentó bajarlo quitando animaciones (disco giratorio, puntito, barra a 4fps en vez de
+rAF) y **casi no bajó** (de ~190% a ~147%). **Conclusión provisional:** el costo NO son las
+animaciones sino, muy probablemente, que **WebKitGTK redibuja la ventana continuamente
+mientras suena audio, por software** (sin aceleración GPU, también en el Intel del portátil).
 
-```bash
-npm run tauri dev
-```
-Se abre la app. La primera vez tarda un poco (compila el "motor"); después es rápido.
+**PRUEBA PENDIENTE (define la estrategia):** reproducir una canción y **minimizar/ocultar la
+ventana** ~20s; el diagnóstico ahora anota `ventana:visible|OCULTA`. Si oculta el CPU BAJA →
+es repintado (hay plan: reducir repintados). Si sigue igual → es el audio (otra estrategia).
 
-### Paso 6 — Generar el instalable (cuando esté listo para repartir)
-
-```bash
-npm run tauri build
-```
-Los archivos quedan en `src-tauri/target/release/bundle/`:
-- `appimage/*.AppImage` → sirve en casi cualquier Linux (Mint y Fedora). Se le da permiso
-  y se abre:
-  ```bash
-  chmod +x Infiniity*.AppImage && ./Infiniity*.AppImage
-  ```
-- `deb/*.deb` → para instalar en Mint/Ubuntu con doble clic.
-
-> Para generar solo uno: `npm run tauri build -- --bundles deb` (o `appimage`).
-> El AppImage baja un archivito de internet la **primera vez** que compilas (solo esa vez).
+> Nota tranquilizadora: 147% en 4 hilos = ~37% del total → **le sobra CPU, NO se traba y la
+> música suena fluida.** Pero se quiere exprimir más. En equipos potentes/con GPU esto no pasa.
 
 ---
 
-## 3. Cómo está organizado el proyecto (mapa simple)
+## 3. Cómo correr en DESARROLLO
 
-El programa tiene dos "mitades":
+Requisitos ya instalados en la PC de dev (Fedora): Node 22, Rust (rustup, `~/.cargo/env`),
+libs de sistema (webkit2gtk4.1-devel, gtk3, alsa), gcc/make, gstreamer con códecs MP3.
 
-- **La cara (frontend):** lo que ves y tocas. Está en la carpeta `src/` (hecho en React).
-- **El cerebro (backend):** lo que hace el trabajo pesado (leer archivos, analizar ritmo,
-  hablar con la controladora). Está en `src-tauri/src/` (hecho en Rust).
-
+```bash
+cd "Infiniity Dj Pro"
+WEBKIT_DISABLE_DMABUF_RENDERER=1 npm run tauri dev
 ```
-Infiniity-DJ-Pro/
-│
-├── src/                         ← LA CARA (lo visual)
-│   ├── App.tsx                  Arma toda la pantalla.
-│   ├── components/              Las piezas visuales:
-│   │   ├── TopBar.tsx           Barra de arriba (carpeta, tema, DDJ-200, cerrar).
-│   │   ├── DeckPanel.tsx        Cada bandeja (Deck A y Deck B).
-│   │   ├── Mixer.tsx            El botón MEZCLAR, el crossfader y el volumen general.
-│   │   ├── FolderTree.tsx       El explorador de carpetas de la izquierda.
-│   │   ├── TrackList.tsx        La lista de canciones y el buscador.
-│   │   ├── Vinyl.tsx            El disco giratorio.
-│   │   ├── ProgressBar.tsx      La barra de progreso de cada canción.
-│   │   └── Welcome.tsx          La pantalla inicial para elegir la carpeta.
-│   ├── audio/
-│   │   └── AudioEngine.ts       ⭐ El motor de sonido (mezcla, volúmenes, beatmatch).
-│   ├── state/store.ts           La "memoria" de la app (qué está sonando, etc.).
-│   ├── lib/                     Ayudas (hablar con el cerebro, formatos, etc.).
-│   ├── hooks/useMidi.ts         Traduce los botones de la DDJ-200 a acciones.
-│   └── styles/theme.css         ⭐ LOS COLORES MORADOS (aquí se cambian).
-│
-├── src-tauri/                   ← EL CEREBRO (el trabajo pesado)
-│   ├── src/
-│   │   ├── lib.rs               Conecta todo y expone los "comandos".
-│   │   ├── library.rs           Leer/mover carpetas y canciones.
-│   │   ├── bpm.rs               ⭐ Detecta el ritmo (BPM) de las canciones.
-│   │   ├── cache.rs             Guarda el BPM para no repetir el análisis.
-│   │   ├── midi.rs              Conexión con la controladora.
-│   │   └── ddj200.rs            ⭐ EL MAPEO DE LA DDJ-200 (aquí se afina).
-│   ├── icons/                   ⭐ EL LOGO/ÍCONO de la app.
-│   └── tauri.conf.json          Configuración general (pantalla completa, etc.).
-│
-├── README.md                    Instrucciones cortas.
-└── GUIA-DEL-PROYECTO.md         Este documento.
-```
-
-Los ⭐ son los archivos que probablemente vas a querer cambiar.
+Dentro de la app hay un botón **🔄** (solo en dev) para recargar rápido y limpiar estado.
 
 ---
 
-## 4. Qué está TERMINADO ✅
+## 4. Cómo se DISTRIBUYE y ACTUALIZA (flujo real actual)
 
-Todo esto ya funciona y está probado que compila:
+Se reparte por **Syncthing** + un script instalador. NO hay auto-updater todavía.
 
-- **Dos bandejas (Deck A y B):** cargar canción, reproducir/pausar, volumen, barra de
-  progreso (se puede hacer clic para saltar), botones de adelantar/retroceder.
-- **Crossfader** central para mezclar entre las dos, con volumen parejo.
-- **Volumen general** (master).
-- **Mezcla inteligente (botón MEZCLAR):**
-  - Iguala el ritmo de la canción que entra **poco a poco** (no un salto brusco).
-  - Cruza los volúmenes suave durante la transición (8 segundos, ajustable).
-  - Si las dos canciones tienen ritmos muy distintos (más de ~8%), **avisa que no combinan**
-    en lugar de forzar algo que suene feo.
-  - Al terminar, la canción nueva vuelve poco a poco a su ritmo natural.
-- **Análisis de ritmo (BPM):**
-  - Lo hace el cerebro en segundo plano (no traba la pantalla).
-  - Se guarda para siempre: **cada canción se analiza una sola vez**.
-  - Botón "Analizar todo" y opción de corregir el BPM a mano (clic en el número del BPM).
-- **Explorador de carpetas por género** en la izquierda.
-  - **Arrastrar una canción a otra carpeta la mueve de verdad** en el disco.
-  - Crea sola la carpeta **"Sin clasificar"**.
-  - Botón para crear carpetas nuevas.
-- **Buscador** de canciones por nombre y **tiempo restante** de cada tema.
-- **Estética morada glassmorphism** con **modo claro y oscuro** (botón de sol/luna).
-- **Disco giratorio** (provisional, hecho con código).
-- **Abre en pantalla completa** con botones de minimizar / pantalla completa / salir.
-- **Controladora DDJ-200** conectada por MIDI nativo, con el mapeo grabado en el código.
-- **Empaquetado** configurado para AppImage y .deb (probado: el .deb se genera, 2.2 MB).
+**Carpeta compartida por Syncthing:** `/home/zevenoficial07/Música/Infiniity Dj Pro`
+(contiene el `.deb`, `instalar.sh` y `LEEME.txt`). ID del dispositivo (PC dev):
+`2ZCEMB4-Z3Z2M6O-ZH6T6WJ-A7M5QXU-PAMPMTA-GQG4H7D-TRH5JZD-HAVETQV`.
+Syncthing está instalado en `~/.local/bin/syncthing` (Web UI: http://127.0.0.1:8384).
+
+**Para sacar una actualización a TODOS los equipos:**
+1. **Subir el número de versión** en 3 archivos: `package.json`, `src-tauri/tauri.conf.json`,
+   `src-tauri/Cargo.toml`. ⚠️ SIN subir versión, apt cree que ya la tiene y NO actualiza.
+2. Compilar: `npm run tauri build -- --bundles deb`
+3. Reemplazar el `.deb` viejo por el nuevo en la carpeta compartida de Syncthing.
+   (Rescan por API: `curl -s -X POST -H "X-API-Key: <key>" "http://127.0.0.1:8384/rest/db/scan?folder=infiniity-musica"`; la key está en `~/.local/state/syncthing/config.xml`.)
+4. En cada portátil: correr `bash instalar.sh` (agarra el `.deb` más nuevo y actualiza).
+
+**La versión se ve DENTRO de la app** (arriba, junto al logo: "v0.1.6"). Sirve para confirmar
+que actualizó.
+
+**Deps de runtime en el portátil (una vez, las mete `instalar.sh`):**
+```bash
+sudo apt install -y libwebkit2gtk-4.1-0 gstreamer1.0-plugins-good \
+  gstreamer1.0-plugins-bad gstreamer1.0-libav ffmpeg
+```
+> Posible incompatibilidad de glibc si el Mint fuera muy viejo (build en Fedora 44). El Mint
+> 22.1 del portátil funcionó bien.
 
 ---
 
-## 5. Qué FALTA ⏳ (en orden de prioridad)
+## 5. Qué está TERMINADO ✅ (incluye lo de hoy)
 
-### 🔴 1. Probar la controladora DDJ-200 (lo único que necesita hardware)
-El código de la controladora está completo, pero los números exactos de cada botón/perilla
-**se pusieron con la información conocida del modelo y falta confirmarlos con la unidad real.**
+- **Motor de audio reescrito** con AudioBuffer (ver 2.2): reproducir/pausar, volumen, seek
+  (barra y botones ⏮⏭ funcionan), beatmatch por playbackRate.
+- **Auto-nivelación de volumen** (RMS): iguala la sonoridad entre canciones al cargarlas
+  (para que no suene una durísima y otra bajita). En `AudioEngine.computeNormGain`.
+- **Crossfader corte lineal:** en el centro AMBOS al 100%; hacia un lado apaga el opuesto.
+  **Doble clic** vuelve al centro.
+- **Cargar canción:** doble clic, botones A/B, o **arrastrar al deck** (con icono de nota).
+  **Aviso** si vas a reemplazar una canción que está SONANDO (modal propio, no bloquea audio).
+- **Editar BPM** y **crear carpeta**: con modal propio (`PromptModal`), NO pausan la música.
+- **Buscador + descarga de YouTube** (dentro de la app, botón "⬇️ YouTube"):
+  - Busca **sin API key** (usa yt-dlp). Resultados con miniatura.
+  - Descarga en **SEGUNDO PLANO** (sigues mezclando), con indicador abajo-derecha y
+    **prioridad baja (`nice`)** para no quitarle CPU a la música.
+  - Al terminar: va a "Sin clasificar" y la canción nueva **titila**.
+  - Si falla (429 de YouTube, etc.): queda con botón **🔄 Reintentar** (no se pierde).
+  - Herramientas: **yt-dlp** (`~/.local/bin`), **deno** (`~/.deno/bin`, motor JS que YouTube
+    ahora exige) y **ffmpeg**. Si faltan, la app las instala solas (botón "Instalar").
+- **Modo bajo consumo ⚡** (botón arriba): quita desenfoque y detiene el disco.
+  **Se auto-activa en equipos de ≤4 hilos** (como el i5 del portátil).
+- **Monitor de recursos** (chip abajo-izq: RAM · CPU) + **diagnóstico** que graba a
+  `~/.local/share/com.infiniityeventos.dj/diagnostico-rendimiento.csv` (clic en el chip abre
+  la carpeta). Anota versión, actividad, modo ⚡ y si la ventana está visible.
+- **Visual:** iconos SVG de transporte, tarjetas de vidrio, filas de canciones pulidas,
+  paleta morado→azul→rosa (estilo referencia "LUMINA"). Modo claro/oscuro.
+- **Versión visible** dentro de la app.
+- Análisis de BPM (Rust, en segundo plano, cacheado), explorador de carpetas, arrastrar entre
+  carpetas, "Sin clasificar" automática, buscador local, botón MEZCLAR (transición auto).
+- Empaquetado `.deb` + distribución por Syncthing con `instalar.sh`.
 
-**Cómo se prueba (cuando tengas la DDJ-200 en la empresa):**
-1. Conecta la DDJ-200 por USB.
-2. Abre la app y dale al botón "DDJ-200" arriba a la derecha (debe ponerse verde).
-3. Prueba play, volumen, crossfader, jog.
-4. Si algún control hace algo distinto a lo esperado, se ajusta **un solo archivo**:
-   `src-tauri/src/ddj200.rs` (está todo comentado y ordenado para eso).
+---
 
-> Nota: en Linux, a veces hay que dar permiso al usuario para usar dispositivos MIDI/USB.
-> Si no la detecta, avísame y te paso el comando exacto según tu distribución.
+## 6. Qué FALTA / PRÓXIMOS PASOS ⏳
 
-### 🟡 2. Reemplazar los elementos visuales provisionales
-Todo esto es temporal hasta que pases los definitivos:
+### 🔴 1. RESOLVER el CPU al reproducir (lo más importante)
+Ver 2.5. **Siguiente acción concreta:** leer el próximo `diagnostico-rendimiento.csv` del
+portátil con la prueba de **ventana minimizada/oculta**.
+- Si oculta baja el CPU → reducir repintados durante la reproducción (investigar por qué
+  WebKit repinta; probar quitar más cosas de la vista mientras suena).
+- Si no baja → es el audio; considerar simplificar el grafo o aceptar el costo (igual no
+  se traba).
 
-| Qué | Dónde se cambia |
+### 🔴 2. Probar la controladora DDJ-200 (necesita el hardware)
+El código está en `src-tauri/src/ddj200.rs` (mapeo con datos conocidos del modelo, falta
+confirmar con la unidad real). Conectar por USB → botón "DDJ-200" arriba → probar controles.
+
+### 🟡 3. Reemplazar visuales provisionales (cuando lleguen del cliente)
+| Qué | Dónde |
 |---|---|
-| **Colores morados** | `src/styles/theme.css` (las variables `--purple-...` arriba del archivo) |
-| **Logo / ícono** de la app | poner un PNG grande y correr `npm run tauri icon ruta-del-logo.png` |
-| **Disco giratorio** | `src/components/vinyl.css` |
+| Colores morados exactos | `src/styles/theme.css` (variables `--purple-*` y el degradado del body) |
+| Logo / ícono | PNG grande + `npm run tauri icon ruta.png` |
+| Disco giratorio (arte real) | `src/components/vinyl.css` |
 
-### 🟢 3. Mejoras opcionales para más adelante (si las quieres)
-Estas NO están hechas; las dejamos para una segunda etapa para no sobrecargar la v1:
-- Cola / lista de "próximas canciones".
-- Que suene sola la siguiente cuando termine una (auto-play).
-- Que las descargas de YouTube entren solas a "Sin clasificar" (lo dejamos para después).
-- Sincronizar la carpeta de música entre computadores (con Syncthing).
-- Mini waveform (onda de la canción) — solo si no afecta el rendimiento.
-
----
-
-## 6. Cómo cambiar las cosas más comunes
-
-- **Duración de la transición al mezclar:** ya es ajustable dentro de la app (8 segundos por
-  defecto). El valor por defecto y el límite de compatibilidad (~8%) están en
-  `src/state/store.ts` (busca `defaultSettings`).
-- **Colores:** `src/styles/theme.css`.
-- **Textos de la interfaz:** están dentro de cada componente en `src/components/`.
-- **Rango de ritmos que detecta (70–180 BPM):** `src-tauri/src/bpm.rs` (arriba del archivo).
+### 🟢 4. Mejoras opcionales / ideas
+- **Visor de ondas (waveform)**: se acordó hacerlo ESTÁTICO (precalculado del AudioBuffer al
+  cargar, casi gratis), NO un analizador en vivo (ese sí consume). Quedó pendiente.
+- Cola de "próximas canciones" + auto-play de la siguiente.
+- Auto-updater de Tauri (para no depender de correr `instalar.sh` a mano). Requiere firmar
+  y hostear las actualizaciones.
+- **Legal:** descargar de YouTube para uso comercial es zona gris (decisión del cliente).
 
 ---
 
-## 7. Si algo sale mal (problemas comunes)
+## 7. Mapa del proyecto (archivos nuevos marcados)
 
-- **"No se encontró la DDJ-200":** revisa que esté conectada por USB antes de darle al botón.
-  En Linux puede necesitar permisos; avísame.
-- **La app no reproduce una canción:** confirma que sea MP3 o WAV y que esté **dentro** de la
-  carpeta de música que elegiste (por diseño, solo se ve la música de esa carpeta).
-- **El BPM salió mal en una canción:** dale clic al número del BPM en la bandeja y escríbelo a
-  mano; queda guardado para siempre.
-- **Quiero volver a analizar todo desde cero:** borra el archivo de caché en
-  `~/.local/share/com.infiniityeventos.dj/bpm_cache.json`.
-- **Al compilar el AppImage da un error de descarga:** necesitas internet la primera vez.
-  Alternativa: genera solo el `.deb` con `npm run tauri build -- --bundles deb`.
+```
+src/
+├── App.tsx                      Arma la pantalla + listeners globales.
+├── components/
+│   ├── TopBar.tsx               Barra: carpeta, ⬇️YouTube, DDJ-200, ⚡, tema, versión, 🔄(dev).
+│   ├── DeckPanel.tsx            Cada bandeja (drop de canción, editar BPM).
+│   ├── Mixer.tsx                MEZCLAR, crossfader (corte lineal + doble clic), master.
+│   ├── FolderTree.tsx           Carpetas (crear con PromptModal).
+│   ├── TrackList.tsx            Lista + titileo de la recién descargada.
+│   ├── Vinyl.tsx / vinyl.css    Disco (provisional). En ⚡ no gira.
+│   ├── ProgressBar.tsx          Barra (setInterval 4fps, NO rAF — por rendimiento).
+│   ├── Icons.tsx                🆕 Iconos SVG de transporte.
+│   ├── ConfirmModal.tsx         🆕 Aviso propio (reemplaza window.confirm).
+│   ├── PromptModal.tsx          🆕 Pedir dato propio (reemplaza window.prompt).
+│   ├── StatsMonitor.tsx         🆕 Chip RAM/CPU + graba diagnóstico.
+│   ├── DownloadModal.tsx        🆕 Buscador de YouTube.
+│   └── DownloadIndicator.tsx    🆕 Descargas en 2do plano + reintento.
+├── audio/AudioEngine.ts         ⭐ Motor con AudioBuffer (ver 2.2) + auto-nivelación.
+├── lib/
+│   ├── tauri.ts                 Puente con Rust (read_media, ytdl_*, system_stats, etc.).
+│   ├── downloads.ts             🆕 Orquesta descargas en 2do plano + reintento.
+│   └── library.ts, format.ts    Ayudas.
+├── state/store.ts               Estado global (zustand) + auto-⚡ en equipos flojos.
+└── styles/theme.css, global.css ⭐ Colores y estilos. Incluye modo ⚡.
+
+src-tauri/src/
+├── lib.rs                       Registra comandos.
+├── library.rs                   Leer/mover carpetas y canciones.
+├── bpm.rs / cache.rs            Análisis de BPM (rango 70–180) + caché.
+├── midi.rs / ddj200.rs          ⭐ Controladora DDJ-200 (falta probar con hardware).
+├── downloader.rs                🆕 yt-dlp: buscar, descargar (nice), instalar tools.
+└── sysmon.rs                    🆕 Monitor RAM/CPU (lee /proc) + diagnóstico a CSV.
+```
 
 ---
 
-## 8. Cómo seguimos trabajando juntos
+## 8. Problemas comunes / recordatorios
 
-- Todo el trabajo va en la rama **`claude/infiniity-dj-analysis-iuxvby`**.
-- Cuando quieras que retome, cuéntame qué probaste y qué sentiste al usarlo, y/o pásame:
-  1. Los **colores morados exactos** (o una imagen de referencia).
-  2. El **logo** de Infiniity.
-  3. El resultado de la **prueba de la DDJ-200** (qué control hizo qué).
-- Con eso afino los detalles finales y dejamos la v1 lista para tus eventos.
+- **La app no reproduce:** debe ser MP3/WAV dentro de la carpeta elegida. Si da "formato no
+  soportado", revisar que `read_media` + decodeAudioData estén bien (ver 2.2).
+- **YouTube da 429 (Too Many Requests):** es límite temporal de YouTube por muchas peticiones
+  seguidas. Esperar 1-2 min. La descarga fallida queda con botón Reintentar.
+- **BPM mal en una canción:** clic en el número del BPM → escribirlo (usa PromptModal, no pausa).
+- **Re-analizar BPM desde cero:** borrar `~/.local/share/com.infiniityeventos.dj/bpm_cache.json`.
+- **Confirmar qué versión corre:** mirar el número junto al logo dentro de la app.
+- **Herramientas de YouTube ya instaladas en la PC dev:** yt-dlp, deno, ffmpeg (no reinstalar).
 
 ---
+
+## 9. Estado al cerrar el 2026-07-20
+
+- App en **v0.1.6**, funcionando: audio, mezcla, crossfader, auto-nivelación, buscador+descarga
+  de YouTube en 2do plano con reintento, modales sin pausar audio, monitor+diagnóstico, ⚡.
+- **Pendiente inmediato:** el usuario va a hacer la **prueba de CPU con la ventana minimizada**
+  (v0.1.6 ya lo anota) y enviar el CSV. Con eso se decide cómo bajar el ~147% de reproducción.
+- Sin cambios subidos a git remoto ni desplegados fuera de la carpeta Syncthing.
 
 Hecho con cariño para Infiniity Eventos 💜
