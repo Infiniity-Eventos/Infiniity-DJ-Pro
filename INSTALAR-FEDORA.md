@@ -157,28 +157,26 @@ Ahí **no hace falta ni Rust, ni Node, ni compilar nada**. El AppImage trae todo
 
 ---
 
-## 📨 Mensaje listo para reenviar
+## 📨 Para alguien que no sabe de Linux
 
-Si quien va a instalar no es técnico, mándale **este texto tal cual**:
+Mándale la guía paso a paso **[GUIA-FACIL.md](GUIA-FACIL.md)**: está escrita sin
+tecnicismos, con lo que hay que copiar, cuánto tarda, y qué hacer si sale cada error.
 
-> **Para instalar Infiniity DJ en la computadora con Fedora:**
->
-> 1. Abre la terminal (tecla de Windows → escribe "terminal" → Enter).
-> 2. Copia y pega este bloque completo, y dale Enter:
->
-> ```
-> sudo dnf install -y git && git clone https://github.com/Infiniity-Eventos/Infiniity-DJ-Pro.git && cd Infiniity-DJ-Pro && git checkout claude/fedora-44-installation-qkv6pm && chmod +x scripts/instalar-fedora.sh && ./scripts/instalar-fedora.sh
-> ```
->
-> 3. Te va a pedir la clave de la computadora: escríbela (no se ve mientras escribes, es
->    normal) y dale Enter.
-> 4. Espera. Tarda entre 5 y 15 minutos y va a salir mucho texto: es normal.
-> 5. Cuando diga **"LISTO. Infiniity DJ quedó instalado"**, busca **Infiniity DJ** en el
->    menú de aplicaciones y ábrelo.
-> 6. La primera vez te pide elegir la **carpeta de la música**. Elige la carpeta donde
->    están los MP3.
->
-> Si sale algún error, sácale una foto a la pantalla y mándala.
+Versión corta del mismo comando (es el que usa esa guía):
+
+```bash
+cd ~ && \
+rm -rf ~/infiniity-dj-instalador && \
+sudo dnf install -y git && \
+git clone https://github.com/Infiniity-Eventos/Infiniity-DJ-Pro.git ~/infiniity-dj-instalador && \
+cd ~/infiniity-dj-instalador && \
+git checkout claude/fedora-44-installation-qkv6pm && \
+chmod +x scripts/instalar-fedora.sh && \
+./scripts/instalar-fedora.sh
+```
+
+Se puede volver a pegar las veces que haga falta: borra la copia anterior y empieza de
+cero sin dañar nada (la música nunca se toca).
 
 ---
 

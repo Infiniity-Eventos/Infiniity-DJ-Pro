@@ -57,7 +57,8 @@ compilar e instalar en el menú):
 chmod +x scripts/instalar-fedora.sh
 ./scripts/instalar-fedora.sh
 ```
-Paso a paso y solución de problemas: **[INSTALAR-FEDORA.md](INSTALAR-FEDORA.md)**.
+- Paso a paso y solución de problemas: **[INSTALAR-FEDORA.md](INSTALAR-FEDORA.md)**.
+- Guía para alguien que **no sabe nada de Linux**: **[GUIA-FACIL.md](GUIA-FACIL.md)**.
 
 Si prefieres hacerlo a mano:
 ```bash
