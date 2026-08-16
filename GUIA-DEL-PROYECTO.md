@@ -46,11 +46,17 @@ sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file \
   libssl-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libasound2-dev
 ```
 
-**En Fedora:**
+**En Fedora (40 – 44):** hay un instalador que hace todo solo (librerías, Node, Rust,
+compilar y dejar la app en el menú). Ver **[INSTALAR-FEDORA.md](INSTALAR-FEDORA.md)**:
 ```bash
-sudo dnf install webkit2gtk4.1-devel openssl-devel gtk3-devel librsvg2-devel \
-  libappindicator-gtk3-devel alsa-lib-devel
-sudo dnf group install "C Development Tools and Libraries"
+./scripts/instalar-fedora.sh
+```
+
+A mano sería así:
+```bash
+sudo dnf group install -y c-development development-tools
+sudo dnf install -y webkit2gtk4.1-devel openssl-devel gtk3-devel librsvg2-devel \
+  libappindicator-gtk3-devel alsa-lib-devel curl wget file patchelf fuse fuse-libs
 ```
 
 ### Paso 3 — Bajar el proyecto

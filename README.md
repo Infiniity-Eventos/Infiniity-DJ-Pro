@@ -51,11 +51,19 @@ sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file \
   libssl-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libasound2-dev
 ```
 
-**Fedora:**
+**Fedora (40 – 44):** usa el instalador automático, que hace todo (librerías, Node, Rust,
+compilar e instalar en el menú):
 ```bash
-sudo dnf install webkit2gtk4.1-devel openssl-devel gtk3-devel librsvg2-devel \
-  libappindicator-gtk3-devel alsa-lib-devel
-sudo dnf group install "C Development Tools and Libraries"
+chmod +x scripts/instalar-fedora.sh
+./scripts/instalar-fedora.sh
+```
+Paso a paso y solución de problemas: **[INSTALAR-FEDORA.md](INSTALAR-FEDORA.md)**.
+
+Si prefieres hacerlo a mano:
+```bash
+sudo dnf group install -y c-development development-tools
+sudo dnf install -y webkit2gtk4.1-devel openssl-devel gtk3-devel librsvg2-devel \
+  libappindicator-gtk3-devel alsa-lib-devel curl wget file patchelf fuse fuse-libs
 ```
 
 ---
