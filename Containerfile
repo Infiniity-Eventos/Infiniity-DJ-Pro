@@ -12,6 +12,15 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Dependencias de Tauri v2 en Linux + herramientas para armar el AppImage.
+#
+# OJO CON LOS PAQUETES gstreamer1.0-*: NO son opcionales.
+# WebKit decodifica el audio con GStreamer. El empaquetador solo mete dentro del
+# AppImage los complementos que encuentre instalados AQUI; si faltan, el paquete
+# sale con el nucleo de GStreamer pero sin un solo decodificador. El sintoma es
+# enganoso: la cancion carga y dice "listo", pero queda con duracion 0:00 y al
+# darle play no pasa nada, sin ningun error. Y no se puede arreglar quitando el
+# GStreamer empaquetado, porque el del sistema exige una GLib mas nueva que la
+# que viaja dentro.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       build-essential \
       curl \
@@ -28,6 +37,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libxdo-dev \
       libasound2-dev \
       patchelf \
+      gstreamer1.0-plugins-base \
+      gstreamer1.0-plugins-good \
+      gstreamer1.0-libav \
+      gstreamer1.0-pulseaudio \
+      gstreamer1.0-alsa \
       fuse \
       desktop-file-utils \
       python3 \
