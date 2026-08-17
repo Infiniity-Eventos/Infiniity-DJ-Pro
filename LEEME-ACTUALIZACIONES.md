@@ -85,6 +85,32 @@ llame diciendo que el programa no abre.
 - La dirección que consultan las PC es el `latest.json` del último release:
   `https://github.com/Infiniity-Eventos/Infiniity-DJ-Pro/releases/latest/download/latest.json`
 
+## ⚠️ Si publicas una version que no abre, esa PC queda atrapada
+
+El aviso de actualizacion vive DENTRO del programa. Si una version no logra
+dibujarse en algun equipo, ahi no se puede mostrar ningun aviso: esa PC se
+queda clavada en la version rota para siempre, aunque publiques diez arreglos.
+
+**La red de seguridad es reinstalar**, que baja siempre la ultima version:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Infiniity-Eventos/Infiniity-DJ-Pro/actualizaciones-automaticas/instalar-en-pc-nueva.sh -o /tmp/i.sh && bash /tmp/i.sh
+```
+
+Guarda ese comando a mano (en notas de WhatsApp, por ejemplo). Es la solucion
+universal para cualquier PC trabada, y evita tener que ir hasta el equipo.
+
+Por eso conviene, antes de publicar algo grande, probar el AppImage en un
+equipo distinto al tuyo. Lo que funciona en tu maquina puede morir en otra por
+la tarjeta de video (nos paso: ver el historial de la v0.2.1).
+
+### Al mandar comandos por WhatsApp
+
+WhatsApp **se come los asteriscos** (los usa para poner negrita). Un comando con
+`*` llega roto y la persona ejecuta algo distinto de lo que creias, sin que
+ninguno de los dos se entere. Escribe los nombres de archivo completos en vez
+de usar comodines.
+
 ## Si algo falla
 
 | Síntoma | Causa casi siempre |
@@ -93,3 +119,5 @@ llame diciendo que el programa no abre.
 | "Signature verification failed" | Se publicó firmado con otra llave |
 | El AppImage no abre en Mint | Falta `libfuse2`, o se compiló fuera del contenedor |
 | `publicar.sh` dice que ya existe | Ya publicaste ese número; usa el siguiente |
+| Pantalla negra al abrir, con `EGL_BAD_PARAMETER` | El paquete se llevó librerías de video adentro. Lo resuelve `arreglar-appimage.sh`; si vuelve a pasar, revisa que ese script siga corriendo en `publicar.sh` |
+| El descargador dice "no se pudo instalar" | Las herramientas del sistema heredaron las librerías del AppImage. Lo resuelve `clean_command()` en `downloader.rs` |
