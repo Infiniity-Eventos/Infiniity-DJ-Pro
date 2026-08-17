@@ -253,13 +253,28 @@ class AudioEngine {
   async play(id: DeckId): Promise<void> {
     const d = this.deck(id);
     if (!d.buffer || d.playing) return;
-    if (this.ctx?.state === "suspended") {
+    // Arrancar el motor de sonido si esta dormido.
+    //
+    // Antes, si esto fallaba se ignoraba el error y se seguia como si nada:
+    // la app se marcaba "reproduciendo" pero no sonaba y el tiempo no avanzaba,
+    // asi que parecia que el boton de play no hacia nada. Si el motor no
+    // arranca hay que DECIRLO, no disimular.
+    if (this.ctx && this.ctx.state !== "running") {
       try {
         await this.ctx.resume();
-      } catch {
-        /* ignorar */
+      } catch (err) {
+        console.error("[AudioEngine.play] no se pudo reanudar el audio", err);
       }
     }
+    if (this.ctx && this.ctx.state !== "running") {
+      useStore
+        .getState()
+        .showToast(
+          `No se pudo iniciar el sonido (motor «${this.ctx.state}»). Revisa la salida de audio del equipo.`
+        );
+      return;
+    }
+
     this.startFrom(id, d.offset);
     useStore.getState().patchDeck(id, { isPlaying: true });
   }
