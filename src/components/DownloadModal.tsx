@@ -27,6 +27,9 @@ export function DownloadModal({ onClose }: { onClose: () => void }) {
   const [searching, setSearching] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [installProgress, setInstallProgress] = useState<YtdlProgress | null>(null);
+  // El error se queda FIJO en pantalla (no en un aviso que se desvanece):
+  // si la instalación falla hay que poder leerlo con calma o fotografiarlo.
+  const [installError, setInstallError] = useState("");
 
   useEffect(() => {
     ytdlTools().then(setTools).catch(() => setTools(null));
@@ -43,12 +46,13 @@ export function DownloadModal({ onClose }: { onClose: () => void }) {
   const install = async () => {
     setInstalling(true);
     setInstallProgress(null);
+    setInstallError("");
     try {
       const t = await ytdlInstall();
       setTools(t);
       showToast(t.ready ? "Descargador listo ✅" : "Instalado (revisa ffmpeg)");
     } catch (e) {
-      showToast(`No se pudo instalar: ${e}`);
+      setInstallError(String(e));
     } finally {
       setInstalling(false);
       setInstallProgress(null);
@@ -114,12 +118,18 @@ export function DownloadModal({ onClose }: { onClose: () => void }) {
             {installing && installProgress && (
               <ProgressBarDL percent={installProgress.percent} message={installProgress.message} />
             )}
+            {installError && (
+              <div className="dl-error">
+                <b>No se pudo instalar</b>
+                <div className="dl-error-msg">{installError}</div>
+              </div>
+            )}
             <div className="modal-actions" style={{ marginTop: 16 }}>
               <button className="btn" onClick={onClose} disabled={installing}>
                 Cerrar
               </button>
               <button className="btn btn-accent" onClick={install} disabled={installing}>
-                {installing ? "Instalando..." : "Instalar"}
+                {installing ? "Instalando..." : installError ? "Reintentar" : "Instalar"}
               </button>
             </div>
           </div>

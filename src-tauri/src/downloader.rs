@@ -352,21 +352,78 @@ fn set_executable(path: &Path) {
     }
 }
 
+/// Ejecuta un paso de la instalacion y, si falla, explica POR QUE.
+///
+/// Antes esto devolvia un "No se pudo descargar" a secas y quedabamos a
+/// ciegas: no se distinguia si faltaba el programa, si no habia internet o si
+/// el disco estaba lleno. Ahora se devuelve la causa real para poder
+/// arreglarla sin adivinar.
+fn run_step(mut cmd: Command, programa: &str, que_hace: &str) -> Result<(), String> {
+    let salida = match cmd.output() {
+        Ok(o) => o,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Err(format!(
+                "Falta el programa «{programa}», que el sistema necesita para {que_hace}. \
+                 Instálalo con:  sudo dnf install {programa}   (en Fedora)  \
+                 o  sudo apt install {programa}   (en Linux Mint/Ubuntu)."
+            ));
+        }
+        Err(e) => return Err(format!("No se pudo ejecutar «{programa}»: {e}")),
+    };
+
+    if salida.status.success() {
+        return Ok(());
+    }
+
+    // curl usa codigos propios; los mas comunes merecen un mensaje claro.
+    let codigo = salida.status.code().unwrap_or(-1);
+    let detalle = String::from_utf8_lossy(&salida.stderr);
+    let detalle = detalle.trim();
+
+    let pista = match (programa, codigo) {
+        ("curl", 6) => " Parece que no hay internet (no se pudo resolver el servidor).",
+        ("curl", 7) => " No se pudo conectar al servidor. Revisa tu internet.",
+        ("curl", 22) => " El servidor rechazó la descarga (quizá GitHub está caído).",
+        ("curl", 23) => " No se pudo guardar el archivo (¿disco lleno o sin permisos?).",
+        ("curl", 28) => " Se agotó el tiempo de espera. Internet muy lento o caído.",
+        _ => "",
+    };
+
+    Err(format!(
+        "Falló {que_hace} (código {codigo}).{pista}{}",
+        if detalle.is_empty() {
+            String::new()
+        } else {
+            format!(" Detalle: {detalle}")
+        }
+    ))
+}
+
 fn do_install(app: &AppHandle) -> Result<Tools, String> {
     let bin = app_bin_dir(app);
     emit_progress(app, "__install__", 0.0, "descargando", "Instalando descargador...");
 
+    // Comprobar que se puede escribir donde vamos a instalar, antes de bajar
+    // 110 MB para nada.
+    if let Err(e) = std::fs::create_dir_all(&bin) {
+        return Err(format!(
+            "No se pudo crear la carpeta de instalación ({}): {e}",
+            bin.display()
+        ));
+    }
+
     // yt-dlp (binario standalone, no necesita Python en el equipo destino).
+    // Sin "-s" a proposito: con -s curl se calla justamente el error que
+    // necesitamos leer cuando algo va mal. Se usa -S para que muestre el
+    // motivo pero sin la barra de progreso.
     let ytdlp_path = bin.join("yt-dlp");
     if !ytdlp_path.is_file() {
-        let ok = clean_command("curl")
-            .args(["-L", "-s", YTDLP_URL, "-o"])
-            .arg(&ytdlp_path)
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false);
-        if !ok || !ytdlp_path.is_file() {
-            return Err("No se pudo descargar yt-dlp".to_string());
+        let mut cmd = clean_command("curl");
+        cmd.args(["-L", "-f", "-sS", YTDLP_URL, "-o"]).arg(&ytdlp_path);
+        run_step(cmd, "curl", "la descarga de yt-dlp")?;
+
+        if !ytdlp_path.is_file() {
+            return Err("La descarga de yt-dlp terminó pero el archivo no quedó guardado.".to_string());
         }
         set_executable(&ytdlp_path);
     }
@@ -377,27 +434,23 @@ fn do_install(app: &AppHandle) -> Result<Tools, String> {
     let deno_path = bin.join("deno");
     if !deno_path.is_file() {
         let zip = bin.join("deno.zip");
-        let ok = clean_command("curl")
-            .args(["-L", "-s", DENO_URL, "-o"])
-            .arg(&zip)
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false);
-        if !ok || !zip.is_file() {
-            return Err("No se pudo descargar Deno".to_string());
+
+        let mut cmd = clean_command("curl");
+        cmd.args(["-L", "-f", "-sS", DENO_URL, "-o"]).arg(&zip);
+        run_step(cmd, "curl", "la descarga de Deno")?;
+
+        if !zip.is_file() {
+            return Err("La descarga de Deno terminó pero el archivo no quedó guardado.".to_string());
         }
-        let unz = clean_command("python3")
-            .arg("-m")
-            .arg("zipfile")
-            .arg("-e")
-            .arg(&zip)
-            .arg(&bin)
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false);
+
+        let mut cmd = clean_command("python3");
+        cmd.arg("-m").arg("zipfile").arg("-e").arg(&zip).arg(&bin);
+        let resultado = run_step(cmd, "python3", "descomprimir Deno");
         let _ = std::fs::remove_file(&zip);
-        if !unz || !deno_path.is_file() {
-            return Err("No se pudo descomprimir Deno".to_string());
+        resultado?;
+
+        if !deno_path.is_file() {
+            return Err("Deno se descomprimió pero no apareció el programa esperado.".to_string());
         }
         set_executable(&deno_path);
     }
