@@ -57,8 +57,25 @@ fi
 VERSION="$(basename "$URL" | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+' | head -1)"
 echo "→ Bajando Infiniity DJ ${VERSION:-(ultima)}..."
 mkdir -p "$DESTINO"
-curl -fL --progress-bar "$URL" -o "$DESTINO/Infiniity-DJ.AppImage"
-chmod +x "$DESTINO/Infiniity-DJ.AppImage"
+
+# Se baja a un archivo aparte y luego se reemplaza de un solo movimiento.
+# POR QUE: si el programa esta ABIERTO, Linux no deja escribir encima de su
+# archivo y curl falla con "El fichero de texto esta ocupado" (error 23).
+# Reemplazar con 'mv' si funciona aunque este abierto: la copia vieja sigue
+# viva hasta que la persona cierre el programa.
+# Ademas, si la descarga se corta a medias, no deja el programa destrozado.
+NUEVO="$DESTINO/.Infiniity-DJ.AppImage.descargando"
+trap 'rm -f "$NUEVO"' EXIT
+curl -fL --progress-bar "$URL" -o "$NUEVO"
+chmod +x "$NUEVO"
+
+# Avisar si estaba abierto: el cambio no se ve hasta cerrarlo y volver a abrir.
+ESTABA_ABIERTO=no
+if pgrep -f "Infiniity-DJ.AppImage" >/dev/null 2>&1; then
+  ESTABA_ABIERTO=si
+fi
+
+mv -f "$NUEVO" "$DESTINO/Infiniity-DJ.AppImage"
 
 # --------------------------------------------------- 3. icono y menu de inicio
 echo "→ Agregandolo al menu..."
@@ -84,7 +101,15 @@ EOF
 update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
 
 echo
-echo "✅ Listo. Busca 'Infiniity DJ' en el menu de aplicaciones."
+echo "✅ Listo. Quedo instalada la version ${VERSION:-mas reciente}."
+if [[ "$ESTABA_ABIERTO" == "si" ]]; then
+  echo
+  echo "⚠️  IMPORTANTE: el programa estaba ABIERTO mientras se instalaba."
+  echo "    La ventana que tienes abierta sigue siendo la version vieja."
+  echo "    CIERRALA y vuelve a abrir 'Infiniity DJ' desde el menu."
+else
+  echo "   Busca 'Infiniity DJ' en el menu de aplicaciones."
+fi
 echo
 echo "   Cuando haya una version nueva, el programa te avisa solo al abrirlo"
 echo "   y te pregunta si quieres actualizar. No hace falta volver a instalar."
