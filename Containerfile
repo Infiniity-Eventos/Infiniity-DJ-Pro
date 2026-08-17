@@ -44,4 +44,10 @@ ENV RUSTUP_HOME=/usr/local/rustup \
     PATH=/usr/local/cargo/bin:$PATH
 RUN curl -fsSL https://sh.rustup.rs | sh -s -- -y --no-modify-path --default-toolchain stable
 
+# appimagetool: hace falta para volver a empaquetar el AppImage despues de
+# quitarle las librerias graficas (ver arreglar-appimage.sh).
+RUN curl -fsSL -o /usr/local/bin/appimagetool \
+      https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage \
+    && chmod +x /usr/local/bin/appimagetool
+
 WORKDIR /app

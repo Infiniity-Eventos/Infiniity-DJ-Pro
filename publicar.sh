@@ -112,7 +112,7 @@ podman run --rm \
   -e TAURI_SIGNING_PRIVATE_KEY_PASSWORD="" \
   -w /app \
   "$IMAGEN" \
-  bash -c "npm install --no-audit --no-fund && npx tauri build --bundles appimage"
+  bash -c "npm install --no-audit --no-fund && npx tauri build --bundles appimage && bash /app/arreglar-appimage.sh"
 
 # --------------------------------------------------- 3. localizar los archivos
 echo "→ [3/4] Buscando el paquete firmado..."
