@@ -121,3 +121,28 @@ de usar comodines.
 | `publicar.sh` dice que ya existe | Ya publicaste ese número; usa el siguiente |
 | Pantalla negra al abrir, con `EGL_BAD_PARAMETER` | El paquete se llevó librerías de video adentro. Lo resuelve `arreglar-appimage.sh`; si vuelve a pasar, revisa que ese script siga corriendo en `publicar.sh` |
 | El descargador dice "no se pudo instalar" | Las herramientas del sistema heredaron las librerías del AppImage. Lo resuelve `clean_command()` en `downloader.rs` |
+
+## ⚠️ Cuidado con los emojis de color
+
+En Fedora 44, mostrar el emoji de fiesta estrellaba el proceso que dibuja la
+ventana y la dejaba **en blanco**:
+
+```
+colrv1_configure_skpaint(...) Assertion '__n < this->size()' failed
+```
+
+Causa: el AppImage lleva dentro su propio WebKit (Ubuntu 22.04, 85 MB), más
+viejo que la fuente `Noto-COLRv1.ttf` del sistema. Al pintar glifos de color con
+degradados se sale de rango y aborta.
+
+Los símbolos simples (⬆ ✅ ⚠ ⬇ 🌙 📁) funcionan bien; los emojis elaborados con
+degradados, no. **Ante la duda, texto.**
+
+> Se intentó la solución de fondo —quitar el WebKit empaquetado para usar el del
+> sistema— y NO funciona: el WebKit de Fedora choca entonces con el GStreamer
+> viejo que también viaja dentro. Habría que ir arrancando media docena de
+> librerías, con riesgo de romper los equipos con Mint. Queda pendiente.
+
+**Lo peor de este fallo:** el aviso que se dibuja es el de la versión INSTALADA,
+así que un equipo con una versión que se estrella al mostrar el aviso no puede
+actualizarse solo. Hay que reinstalar por comando una vez.

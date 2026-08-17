@@ -138,7 +138,16 @@ export function UpdateModal() {
 
         {update && (
           <>
-            <div className="dl-title">🎉 Hay una versión nueva</div>
+            {/* SIN EMOJIS DE COLOR AQUI. El de fiesta que habia antes ESTRELLABA la
+                app entera al mostrar este aviso, en Fedora 44:
+                  colrv1_configure_skpaint(...) Assertion '__n < this->size()'
+                Es un fallo del motor de dibujo empaquetado (WebKit de Ubuntu
+                22.04, mas viejo que la fuente Noto-COLRv1 del sistema) al
+                pintar glifos de color con degradados. La ventana quedaba en
+                blanco y no habia forma de actualizar.
+                Los simbolos simples (⬆ ✅ ⚠) si funcionan; los emojis
+                elaborados no. Ante la duda, texto. */}
+            <div className="dl-title">Hay una versión nueva</div>
             <div className="modal-msg">
               Infiniity DJ <b>{update.version}</b> ya está disponible.
               <br />

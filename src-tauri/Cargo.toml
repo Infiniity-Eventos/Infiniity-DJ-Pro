@@ -1,6 +1,6 @@
 [package]
 name = "infiniity-dj"
-version = "0.2.8"
+version = "0.3.0"
 description = "Infiniity DJ - Mezclador de musica liviano para eventos"
 authors = ["Infiniity Eventos"]
 edition = "2021"
