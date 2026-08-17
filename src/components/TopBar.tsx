@@ -8,6 +8,7 @@ import {
   quitApp,
 } from "../lib/tauri";
 import { reloadLibrary } from "../lib/library";
+import { EVENTO_BUSCAR_ACTUALIZACION } from "./UpdateModal";
 
 export function TopBar() {
   const theme = useStore((s) => s.theme);
@@ -85,6 +86,19 @@ export function TopBar() {
         title="Cambiar tema claro/oscuro"
       >
         {theme === "dark" ? "☀️" : "🌙"}
+      </button>
+
+      {/* Buscar actualizacion a mano. Existe porque si el aviso automatico no
+          aparece, sin esto no hay forma de saber si es que no hay version
+          nueva o es que la busqueda esta fallando. */}
+      <button
+        className="btn no-drag"
+        onClick={() =>
+          window.dispatchEvent(new CustomEvent(EVENTO_BUSCAR_ACTUALIZACION))
+        }
+        title="Buscar actualizacion"
+      >
+        ⬆️
       </button>
 
       {/* Boton de recarga: SOLO en desarrollo (no aparece en la app final). */}
