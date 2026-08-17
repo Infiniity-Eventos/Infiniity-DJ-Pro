@@ -295,6 +295,24 @@ fn do_download(app: &AppHandle, url: &str, dest_folder: &str, id: &str) -> Resul
         .spawn()
         .map_err(|e| format!("No se pudo iniciar yt-dlp: {e}"))?;
 
+    // Los mensajes de error se leen EN OTRO HILO, a la vez que el avance.
+    //
+    // POR QUE ES IMPRESCINDIBLE: la tuberia de mensajes de error tiene un
+    // limite (unos 64 KB). Si se llena, yt-dlp se queda congelado esperando
+    // poder escribir; como no termina, nosotros nunca llegamos a leerla, y como
+    // no la leemos, el nunca se destraba. Los dos esperandose para siempre.
+    // Eso dejaba la descarga clavada en 0% sin ningun error, y solo pasaba
+    // dentro del programa: en una terminal los mensajes van a la pantalla, que
+    // nunca se llena, por eso ahi funcionaba.
+    let stderr = child.stderr.take();
+    let hilo_errores = std::thread::spawn(move || {
+        let mut texto = String::new();
+        if let Some(mut s) = stderr {
+            let _ = s.read_to_string(&mut texto);
+        }
+        texto
+    });
+
     let mut final_path: Option<String> = None;
     if let Some(stdout) = child.stdout.take() {
         let reader = BufReader::new(stdout);
@@ -319,11 +337,9 @@ fn do_download(app: &AppHandle, url: &str, dest_folder: &str, id: &str) -> Resul
     }
 
     let status = child.wait().map_err(|e| e.to_string())?;
+    let errbuf = hilo_errores.join().unwrap_or_default();
+
     if !status.success() {
-        let mut errbuf = String::new();
-        if let Some(mut s) = child.stderr.take() {
-            let _ = s.read_to_string(&mut errbuf);
-        }
         emit_progress(app, id, 0.0, "error", "No se pudo descargar");
         return Err(friendly_error(&errbuf));
     }
@@ -503,6 +519,56 @@ fn do_install(app: &AppHandle) -> Result<Tools, String> {
 
 #[cfg(test)]
 mod pruebas {
+    /// Reproduce el bloqueo que dejaba las descargas clavadas en 0%.
+    ///
+    /// Se lanza un proceso que escupe MUCHOS mensajes de error (bastante mas
+    /// que los 64 KB que aguanta la tuberia). Leyendo los errores solo al final
+    /// -como se hacia antes- esto se quedaria colgado para siempre. Leyendolos
+    /// en otro hilo a la vez, termina.
+    #[test]
+    fn muchos_mensajes_de_error_no_cuelgan_la_descarga() {
+        use std::io::{BufRead, BufReader, Read};
+        use std::process::{Command, Stdio};
+
+        let mut hijo = Command::new("bash")
+            .arg("-c")
+            // ~300 KB por la salida de errores, y unas lineas por la normal.
+            .arg("for i in $(seq 1 5000); do echo 'aviso de prueba de yt-dlp' >&2; done; \
+                  echo '[download] 50.0% of 1MiB'; echo '/tmp/x.mp3'")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("no se pudo lanzar el proceso de prueba");
+
+        // La clave: drenar los errores EN PARALELO.
+        let stderr = hijo.stderr.take();
+        let hilo = std::thread::spawn(move || {
+            let mut t = String::new();
+            if let Some(mut s) = stderr {
+                let _ = s.read_to_string(&mut t);
+            }
+            t
+        });
+
+        let mut lineas = 0;
+        if let Some(stdout) = hijo.stdout.take() {
+            for _ in BufReader::new(stdout).lines().map_while(Result::ok) {
+                lineas += 1;
+            }
+        }
+
+        let estado = hijo.wait().expect("el proceso no termino");
+        let errores = hilo.join().expect("el hilo de errores fallo");
+
+        assert!(estado.success());
+        assert_eq!(lineas, 2, "no se leyo la salida normal");
+        assert!(
+            errores.len() > 64 * 1024,
+            "la prueba no genero suficientes mensajes ({} bytes); no probaria nada",
+            errores.len()
+        );
+    }
+
     /// Comprueba que la descarga funciona SIN depender del almacen de
     /// certificados del equipo. Se fuerza una ruta invalida en las variables
     /// que usan las herramientas del sistema: si el motor propio dependiera de
