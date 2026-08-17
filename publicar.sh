@@ -80,6 +80,22 @@ sed -i "0,/^version = \".*\"/s//version = \"$VERSION\"/" src-tauri/Cargo.toml
 echo "→ [2/4] Preparando el entorno Ubuntu 22.04 (la 1a vez tarda varios minutos)..."
 podman build -t "$IMAGEN" -f Containerfile . >/dev/null
 
+# Limpiar el empaquetado anterior. IMPRESCINDIBLE: el .AppDir que deja el
+# plugin de GTK trae carpetas con otro uid que NI ROOT puede borrar desde
+# dentro del contenedor. Sin esta limpieza, la 1a publicacion funciona y la
+# 2a (y todas las demas) fallan con "Permission denied (os error 13)".
+# 'podman unshare' entra al espacio de usuarios donde si tenemos permiso.
+echo "→ [2/4] Limpiando el empaquetado anterior..."
+RUTA_VOL="$(podman volume inspect infiniity-target-mint --format '{{.Mountpoint}}' 2>/dev/null || true)"
+if [[ -n "$RUTA_VOL" && -d "$RUTA_VOL/release/bundle" ]]; then
+  podman unshare rm -rf "$RUTA_VOL/release/bundle" || {
+    echo "❌ No se pudo limpiar el empaquetado anterior en:"
+    echo "   $RUTA_VOL/release/bundle"
+    echo "   Prueba a mano:  podman unshare rm -rf \"$RUTA_VOL/release/bundle\""
+    exit 1
+  }
+fi
+
 echo "→ [2/4] Compilando para Linux Mint..."
 # Volumenes con nombre para que la 2a vez compile rapido:
 #   - cargo-cache: las dependencias de Rust ya bajadas
@@ -127,9 +143,30 @@ if [[ -z "$FIRMA" ]]; then
 fi
 
 # ------------------------------------------------------------ 4. subir a GitHub
-echo "→ [4/4] Subiendo a GitHub..."
-NOMBRE_APPIMAGE="$(basename "$APPIMAGE")"
-URL="https://github.com/$REPO/releases/download/v$VERSION/$(printf '%s' "$NOMBRE_APPIMAGE" | sed 's/ /%20/g')"
+# Se sube en DOS pasos a proposito:
+#   1) el AppImage
+#   2) el latest.json, ya sabiendo la direccion REAL del AppImage
+# Motivo: GitHub RENOMBRA los archivos al subirlos (los espacios se convierten
+# en puntos: "Infiniity DJ_0.2.0.AppImage" -> "Infiniity.DJ_0.2.0.AppImage").
+# Si adivinamos la direccion, el latest.json apunta a un archivo que no existe,
+# el actualizador recibe un 404 y NINGUNA PC puede actualizarse... pero el
+# script igual dice "publicado con exito". Por eso se pregunta, no se adivina.
+echo "→ [4/4] Subiendo el programa a GitHub..."
+gh release create "v$VERSION" \
+  -R "$REPO" \
+  --title "Infiniity DJ v$VERSION" \
+  --notes "$NOTAS" \
+  "$APPIMAGE"
+
+echo "→ [4/4] Consultando la direccion real del archivo..."
+URL="$(gh release view "v$VERSION" -R "$REPO" --json assets \
+  --jq '.assets[] | select(.name | endswith(".AppImage")) | .url' | head -1)"
+
+if [[ -z "$URL" ]]; then
+  echo "❌ El AppImage no aparece en el release. Revisa:"
+  echo "   https://github.com/$REPO/releases/tag/v$VERSION"
+  exit 1
+fi
 
 cat > "$TMP/latest.json" <<EOF
 {
@@ -145,12 +182,18 @@ cat > "$TMP/latest.json" <<EOF
 }
 EOF
 
-gh release create "v$VERSION" \
-  -R "$REPO" \
-  --title "Infiniity DJ v$VERSION" \
-  --notes "$NOTAS" \
-  "$APPIMAGE" \
-  "$TMP/latest.json"
+echo "→ [4/4] Subiendo el aviso de actualizacion..."
+gh release upload "v$VERSION" -R "$REPO" "$TMP/latest.json" --clobber
+
+# Comprobacion final: que la direccion publicada se pueda descargar de verdad.
+echo "→ Comprobando que la descarga funcione..."
+CODIGO="$(curl -sIL -o /dev/null -w '%{http_code}' "$URL")"
+if [[ "$CODIGO" != "200" ]]; then
+  echo "❌ La direccion publicada responde HTTP $CODIGO en vez de 200."
+  echo "   Las PC no podrian actualizarse. Direccion: $URL"
+  exit 1
+fi
+echo "   ✅ Descarga verificada (HTTP 200)"
 
 echo
 echo "════════════════════════════════════════════"
