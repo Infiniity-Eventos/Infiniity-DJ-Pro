@@ -25,7 +25,7 @@ echo "════════════════════════�
 # la persona abre el equivocado y cree que las actualizaciones no sirven.
 # Los datos (biblioteca, BPM analizados) NO se tocan: viven en la carpeta
 # del usuario y los dos usan el mismo identificador.
-if dpkg -l infiniity-dj 2>/dev/null | grep -q "^ii"; then
+if command -v dpkg >/dev/null 2>&1 && dpkg -l infiniity-dj 2>/dev/null | grep -q "^ii"; then
   VIEJA="$(dpkg-query -W -f='${Version}' infiniity-dj 2>/dev/null || echo "?")"
   echo "→ Encontre una version vieja instalada (la $VIEJA), de las pruebas."
   echo "  Esa no se puede actualizar sola, asi que la quito para que no quede"
@@ -35,11 +35,30 @@ if dpkg -l infiniity-dj 2>/dev/null | grep -q "^ii"; then
 fi
 
 # ------------------------------------------------------------ 1. requisitos
-# Mint 21+/Ubuntu 22.04+ ya NO traen libfuse2, y sin eso ningun AppImage abre.
+# Mint 21+/Ubuntu 22.04+ ya NO traen libfuse2, y Fedora tampoco lo instala de
+# fabrica. Sin esa libreria NINGUN AppImage abre.
+# El paquete se llama distinto en cada sistema, de ahi la deteccion.
 if ! ldconfig -p 2>/dev/null | grep -q "libfuse.so.2"; then
   echo "→ Falta un componente del sistema (libfuse2). Te va a pedir tu contraseña."
-  sudo apt-get update
-  sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64
+  if command -v apt-get >/dev/null 2>&1; then
+    sudo apt-get update
+    sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64
+  elif command -v dnf >/dev/null 2>&1; then
+    sudo dnf install -y fuse-libs
+  elif command -v pacman >/dev/null 2>&1; then
+    sudo pacman -S --noconfirm fuse2
+  else
+    echo "⚠️  No reconozco el gestor de paquetes de este sistema."
+    echo "    Instala 'libfuse2' (o 'fuse-libs' en Fedora) a mano y vuelve a correr esto."
+    exit 1
+  fi
+
+  # Comprobar que de verdad quedo: sin esto el programa no abriria y el
+  # instalador estaria diciendo "listo" en falso.
+  if ! ldconfig -p 2>/dev/null | grep -q "libfuse.so.2"; then
+    echo "❌ No se pudo instalar libfuse2. El programa no podria abrir."
+    exit 1
+  fi
 fi
 
 # ------------------------------------------------------- 2. bajar el programa

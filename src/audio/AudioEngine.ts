@@ -21,6 +21,34 @@
 import { useStore, type DeckId } from "../state/store";
 import { readMediaBytes } from "../lib/tauri";
 
+/**
+ * Le pone un limite de tiempo a una promesa.
+ *
+ * POR QUE: en un equipo de prueba, cargar una cancion recien descargada dejaba
+ * el deck "cargando" para SIEMPRE. No fallaba (habria salido el aviso de
+ * error): simplemente nunca terminaba. Un deck colgado sin explicacion, en
+ * pleno evento, es lo peor que puede pasar. Con esto, al menos, se entera de
+ * que algo se atasco y puede probar otra cancion.
+ */
+function conLimite<T>(promesa: Promise<T>, ms: number, que: string): Promise<T> {
+  return new Promise<T>((resolver, rechazar) => {
+    const t = window.setTimeout(
+      () => rechazar(new Error(`${que} se quedó bloqueado tras ${Math.round(ms / 1000)}s`)),
+      ms
+    );
+    promesa.then(
+      (v) => {
+        window.clearTimeout(t);
+        resolver(v);
+      },
+      (e) => {
+        window.clearTimeout(t);
+        rechazar(e);
+      }
+    );
+  });
+}
+
 interface Deck {
   buffer: AudioBuffer | null;
   source: AudioBufferSourceNode | null;
@@ -158,11 +186,11 @@ class AudioEngine {
 
     let bytes: ArrayBuffer;
     try {
-      bytes = await readMediaBytes(path);
+      bytes = await conLimite(readMediaBytes(path), 30000, "leer el archivo");
     } catch (err) {
       if (d.loadToken === token) {
         patchDeck(id, { loading: false });
-        useStore.getState().showToast(`No se pudo leer: ${trackName}`);
+        useStore.getState().showToast(`No se pudo leer: ${trackName} (${err})`);
       }
       console.error("[AudioEngine.load] read_media fallo", err);
       return;
@@ -171,11 +199,11 @@ class AudioEngine {
 
     let buffer: AudioBuffer;
     try {
-      buffer = await this.ctx!.decodeAudioData(bytes);
+      buffer = await conLimite(this.ctx!.decodeAudioData(bytes), 60000, "decodificar el audio");
     } catch (err) {
       if (d.loadToken === token) {
         patchDeck(id, { loading: false });
-        useStore.getState().showToast(`No se pudo decodificar: ${trackName}`);
+        useStore.getState().showToast(`No se pudo decodificar: ${trackName} (${err})`);
       }
       console.error("[AudioEngine.load] decodeAudioData fallo", err);
       return;
