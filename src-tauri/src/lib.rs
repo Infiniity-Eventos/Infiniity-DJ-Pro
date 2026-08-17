@@ -86,7 +86,9 @@ fn system_stats(
 fn diag_reveal(app: tauri::AppHandle) -> Result<(), String> {
     let path = sysmon::diag_path(&app);
     let dir = path.parent().unwrap_or(&path);
-    std::process::Command::new("xdg-open")
+    // Entorno limpio: dentro del AppImage, xdg-open heredaria las librerias del
+    // paquete y fallaria al lanzar el explorador de archivos del sistema.
+    downloader::clean_command("xdg-open")
         .arg(dir)
         .spawn()
         .map_err(|e| format!("No se pudo abrir la carpeta: {e}"))?;

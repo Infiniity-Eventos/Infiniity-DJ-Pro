@@ -104,7 +104,11 @@ export function DownloadModal({ onClose }: { onClose: () => void }) {
             </ul>
             {ffmpegMissing && (
               <div className="dl-warn">
-                ⚠️ Falta <b>ffmpeg</b>: <code>sudo apt install ffmpeg</code>
+                ⚠️ Falta <b>ffmpeg</b>, que convierte a MP3. Instálalo según tu sistema:
+                <br />
+                Linux Mint / Ubuntu: <code>sudo apt install ffmpeg</code>
+                <br />
+                Fedora: <code>sudo dnf install ffmpeg-free</code>
               </div>
             )}
             {installing && installProgress && (
@@ -125,7 +129,11 @@ export function DownloadModal({ onClose }: { onClose: () => void }) {
           <div className="dl-section">
             {ffmpegMissing && (
               <div className="dl-warn">
-                ⚠️ Falta <b>ffmpeg</b>: <code>sudo apt install ffmpeg</code>
+                ⚠️ Falta <b>ffmpeg</b>, que convierte a MP3. Instálalo según tu sistema:
+                <br />
+                Linux Mint / Ubuntu: <code>sudo apt install ffmpeg</code>
+                <br />
+                Fedora: <code>sudo dnf install ffmpeg-free</code>
               </div>
             )}
             <div className="dl-search-row">

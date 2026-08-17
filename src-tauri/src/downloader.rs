@@ -35,6 +35,40 @@ struct Progress {
     message: String,
 }
 
+/// Lanza un programa del sistema con el entorno LIMPIO.
+///
+/// POR QUE ESTO ES OBLIGATORIO: dentro de un AppImage se inyectan variables
+/// que apuntan a las librerias de Ubuntu que viajan en el paquete. Si se las
+/// heredamos a los programas del sistema, se rompen antes de arrancar:
+///   - python3 -> "Failed to import encodings module" (PYTHONHOME apunta
+///     dentro del AppImage, donde no existe la biblioteca estandar)
+///   - curl    -> "symbol lookup error ... nghttp2" (mezcla el libcurl del
+///     sistema con las librerias viejas del paquete)
+/// Sin esta limpieza, instalar el descargador falla siempre en los equipos que
+/// usan el AppImage, y ademas yt-dlp y ffmpeg tampoco correrian.
+///
+/// Nota: afecta SOLO a los procesos que lanzamos; la app sigue usando sus
+/// propias librerias para dibujarse.
+pub fn clean_command(program: &str) -> Command {
+    let mut cmd = Command::new(program);
+    for var in [
+        "LD_LIBRARY_PATH",
+        "LD_PRELOAD",
+        "PYTHONHOME",
+        "PYTHONPATH",
+        "GTK_DATA_PREFIX",
+        "GTK_EXE_PREFIX",
+        "GTK_PATH",
+        "GTK_IM_MODULE_FILE",
+        "GDK_PIXBUF_MODULE_FILE",
+        "GIO_EXTRA_MODULES",
+        "GSETTINGS_SCHEMA_DIR",
+    ] {
+        cmd.env_remove(var);
+    }
+    cmd
+}
+
 /// Carpeta gestionada por la app donde guardamos las herramientas descargadas.
 fn app_bin_dir(app: &AppHandle) -> PathBuf {
     let dir = app
@@ -122,7 +156,7 @@ fn do_search(app: &AppHandle, query: &str) -> Result<Vec<SearchResult>, String> 
     }
     let search = format!("ytsearch12:{q}");
 
-    let mut cmd = Command::new(&ytdlp);
+    let mut cmd = clean_command(&ytdlp);
     cmd.args([
         "--flat-playlist",
         "--no-warnings",
@@ -226,7 +260,7 @@ fn do_download(app: &AppHandle, url: &str, dest_folder: &str, id: &str) -> Resul
     let js_runtime = format!("deno:{deno}");
 
     // Prioridad BAJA (nice) para que descargar no le quite CPU a la mezcla en vivo.
-    let mut child = Command::new("nice")
+    let mut child = clean_command("nice")
         .arg("-n")
         .arg("15")
         .arg(&ytdlp)
@@ -325,7 +359,7 @@ fn do_install(app: &AppHandle) -> Result<Tools, String> {
     // yt-dlp (binario standalone, no necesita Python en el equipo destino).
     let ytdlp_path = bin.join("yt-dlp");
     if !ytdlp_path.is_file() {
-        let ok = Command::new("curl")
+        let ok = clean_command("curl")
             .args(["-L", "-s", YTDLP_URL, "-o"])
             .arg(&ytdlp_path)
             .status()
@@ -343,7 +377,7 @@ fn do_install(app: &AppHandle) -> Result<Tools, String> {
     let deno_path = bin.join("deno");
     if !deno_path.is_file() {
         let zip = bin.join("deno.zip");
-        let ok = Command::new("curl")
+        let ok = clean_command("curl")
             .args(["-L", "-s", DENO_URL, "-o"])
             .arg(&zip)
             .status()
@@ -352,7 +386,7 @@ fn do_install(app: &AppHandle) -> Result<Tools, String> {
         if !ok || !zip.is_file() {
             return Err("No se pudo descargar Deno".to_string());
         }
-        let unz = Command::new("python3")
+        let unz = clean_command("python3")
             .arg("-m")
             .arg("zipfile")
             .arg("-e")
