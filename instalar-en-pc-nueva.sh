@@ -18,6 +18,22 @@ echo "════════════════════════�
 echo "  Instalando Infiniity DJ"
 echo "════════════════════════════════════════════"
 
+# -------------------------------------------- 0. quitar la version vieja (.deb)
+# Las primeras pruebas se instalaron como paquete .deb. Tauri NO sabe
+# auto-actualizar un .deb (solo AppImage), asi que si se queda instalado
+# aparecen DOS "Infiniity DJ" en el menu y el viejo nunca se actualiza:
+# la persona abre el equivocado y cree que las actualizaciones no sirven.
+# Los datos (biblioteca, BPM analizados) NO se tocan: viven en la carpeta
+# del usuario y los dos usan el mismo identificador.
+if dpkg -l infiniity-dj 2>/dev/null | grep -q "^ii"; then
+  VIEJA="$(dpkg-query -W -f='${Version}' infiniity-dj 2>/dev/null || echo "?")"
+  echo "→ Encontre una version vieja instalada (la $VIEJA), de las pruebas."
+  echo "  Esa no se puede actualizar sola, asi que la quito para que no quede"
+  echo "  duplicada en el menu. Tu musica y tus ajustes NO se pierden."
+  echo "  Te va a pedir tu contraseña."
+  sudo apt-get remove -y infiniity-dj
+fi
+
 # ------------------------------------------------------------ 1. requisitos
 # Mint 21+/Ubuntu 22.04+ ya NO traen libfuse2, y sin eso ningun AppImage abre.
 if ! ldconfig -p 2>/dev/null | grep -q "libfuse.so.2"; then
