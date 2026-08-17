@@ -2,7 +2,7 @@
   "name": "infiniity-dj",
   "productName": "Infiniity DJ",
   "private": true,
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Mezclador de música liviano para eventos - Infiniity Eventos",
   "type": "module",
   "scripts": {

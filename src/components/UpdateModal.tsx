@@ -2,6 +2,16 @@ import { useCallback, useEffect, useState } from "react";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { getVersion } from "@tauri-apps/api/app";
+import { CopyButton } from "./CopyButton";
+
+/**
+ * Arma un mensaje completo para pegar por WhatsApp. Se incluye la version y
+ * el paso que fallo porque el error suelto, sin contexto, no alcanza para
+ * diagnosticar nada del otro lado.
+ */
+function textoParaEnviar(paso: string, version: string, error: string): string {
+  return `Infiniity DJ ${version || "(versión desconocida)"}\nFalló al ${paso}:\n${error}`;
+}
 
 /**
  * Actualizaciones.
@@ -167,6 +177,9 @@ export function UpdateModal() {
             <div className="dl-title">No se pudo buscar la actualización</div>
             <div className="dl-error">
               <div className="dl-error-msg">{error}</div>
+              <div className="dl-error-acciones">
+                <CopyButton texto={textoParaEnviar("buscar actualización", version, error)} />
+              </div>
             </div>
             <div className="modal-actions" style={{ marginTop: 16 }}>
               <button className="btn" onClick={cerrar}>
@@ -179,7 +192,14 @@ export function UpdateModal() {
           </>
         )}
 
-        {error && update && <div className="dl-error"><div className="dl-error-msg">{error}</div></div>}
+        {error && update && (
+          <div className="dl-error">
+            <div className="dl-error-msg">{error}</div>
+            <div className="dl-error-acciones">
+              <CopyButton texto={textoParaEnviar("instalar actualización", version, error)} />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

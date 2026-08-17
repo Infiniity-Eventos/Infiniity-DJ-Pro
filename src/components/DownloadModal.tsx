@@ -11,6 +11,7 @@ import {
 } from "../lib/tauri";
 import { startDownload, nextDownloadId } from "../lib/downloads";
 import { fmtTime } from "../lib/format";
+import { CopyButton } from "./CopyButton";
 
 const isUrl = (s: string) => /youtu\.?be|youtube\.com|^https?:\/\//i.test(s);
 
@@ -122,6 +123,11 @@ export function DownloadModal({ onClose }: { onClose: () => void }) {
               <div className="dl-error">
                 <b>No se pudo instalar</b>
                 <div className="dl-error-msg">{installError}</div>
+                <div className="dl-error-acciones">
+                  <CopyButton
+                    texto={`Infiniity DJ - falló la instalación del descargador:\n${installError}`}
+                  />
+                </div>
               </div>
             )}
             <div className="modal-actions" style={{ marginTop: 16 }}>
