@@ -352,51 +352,109 @@ fn set_executable(path: &Path) {
     }
 }
 
-/// Ejecuta un paso de la instalacion y, si falla, explica POR QUE.
-///
-/// Antes esto devolvia un "No se pudo descargar" a secas y quedabamos a
-/// ciegas: no se distinguia si faltaba el programa, si no habia internet o si
-/// el disco estaba lleno. Ahora se devuelve la causa real para poder
-/// arreglarla sin adivinar.
-fn run_step(mut cmd: Command, programa: &str, que_hace: &str) -> Result<(), String> {
-    let salida = match cmd.output() {
-        Ok(o) => o,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            return Err(format!(
-                "Falta el programa «{programa}», que el sistema necesita para {que_hace}. \
-                 Instálalo con:  sudo dnf install {programa}   (en Fedora)  \
-                 o  sudo apt install {programa}   (en Linux Mint/Ubuntu)."
-            ));
-        }
-        Err(e) => return Err(format!("No se pudo ejecutar «{programa}»: {e}")),
-    };
+/// Traduce un fallo de red a algo que se entienda sin ser tecnico.
+fn explicar_red(e: &reqwest::Error, que_hace: &str) -> String {
+    if e.is_timeout() {
+        return format!("Falló {que_hace}: se agotó el tiempo de espera. Internet muy lento o caído.");
+    }
+    if e.is_connect() {
+        return format!(
+            "Falló {que_hace}: no se pudo conectar. Revisa tu conexión a internet."
+        );
+    }
+    if let Some(estado) = e.status() {
+        return format!("Falló {que_hace}: el servidor respondió {estado}. Puede que GitHub esté caído.");
+    }
+    format!("Falló {que_hace}: {e}")
+}
 
-    if salida.status.success() {
-        return Ok(());
+/// Descarga un archivo mostrando el avance.
+///
+/// Se descarga con el motor propio del programa, NO con curl. Antes se usaba
+/// curl del sistema y la instalacion fallaba en unos equipos si y en otros no:
+/// en una Fedora ajena daba "curl (77) error adding trust anchors", es decir
+/// que el almacen de certificados del equipo estaba roto. Este motor lleva sus
+/// propios certificados dentro, asi que no depende del estado del sistema.
+fn descargar(
+    app: &AppHandle,
+    url: &str,
+    destino: &Path,
+    que_hace: &str,
+    desde: f64,
+    hasta: f64,
+) -> Result<(), String> {
+    let cliente = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(900))
+        .build()
+        .map_err(|e| format!("No se pudo preparar la descarga: {e}"))?;
+
+    let mut resp = cliente
+        .get(url)
+        .send()
+        .map_err(|e| explicar_red(&e, que_hace))?;
+
+    if !resp.status().is_success() {
+        return Err(format!(
+            "Falló {que_hace}: el servidor respondió {}.",
+            resp.status()
+        ));
     }
 
-    // curl usa codigos propios; los mas comunes merecen un mensaje claro.
-    let codigo = salida.status.code().unwrap_or(-1);
-    let detalle = String::from_utf8_lossy(&salida.stderr);
-    let detalle = detalle.trim();
+    let total = resp.content_length().unwrap_or(0);
+    let mut archivo = std::fs::File::create(destino)
+        .map_err(|e| format!("No se pudo guardar el archivo ({}): {e}", destino.display()))?;
 
-    let pista = match (programa, codigo) {
-        ("curl", 6) => " Parece que no hay internet (no se pudo resolver el servidor).",
-        ("curl", 7) => " No se pudo conectar al servidor. Revisa tu internet.",
-        ("curl", 22) => " El servidor rechazó la descarga (quizá GitHub está caído).",
-        ("curl", 23) => " No se pudo guardar el archivo (¿disco lleno o sin permisos?).",
-        ("curl", 28) => " Se agotó el tiempo de espera. Internet muy lento o caído.",
-        _ => "",
-    };
-
-    Err(format!(
-        "Falló {que_hace} (código {codigo}).{pista}{}",
-        if detalle.is_empty() {
-            String::new()
-        } else {
-            format!(" Detalle: {detalle}")
+    // Copia por trozos para poder ir informando el avance.
+    let mut buffer = [0u8; 64 * 1024];
+    let mut bajado: u64 = 0;
+    loop {
+        let n = std::io::Read::read(&mut resp, &mut buffer)
+            .map_err(|e| format!("Se cortó {que_hace}: {e}"))?;
+        if n == 0 {
+            break;
         }
-    ))
+        std::io::Write::write_all(&mut archivo, &buffer[..n])
+            .map_err(|e| format!("No se pudo escribir en el disco (¿lleno?): {e}"))?;
+        bajado += n as u64;
+        if total > 0 {
+            let pct = desde + (bajado as f64 / total as f64) * (hasta - desde);
+            emit_progress(app, "__install__", pct, "descargando", que_hace);
+        }
+    }
+
+    Ok(())
+}
+
+/// Descomprime un .zip. Antes se llamaba a python3, que dentro del AppImage
+/// ni siquiera arrancaba.
+fn descomprimir(zip_path: &Path, destino: &Path) -> Result<(), String> {
+    let archivo = std::fs::File::open(zip_path)
+        .map_err(|e| format!("No se pudo abrir el archivo comprimido: {e}"))?;
+    let mut zip = zip::ZipArchive::new(archivo)
+        .map_err(|e| format!("El archivo comprimido está dañado: {e}"))?;
+
+    for i in 0..zip.len() {
+        let mut entrada = zip
+            .by_index(i)
+            .map_err(|e| format!("No se pudo leer el comprimido: {e}"))?;
+        // enclosed_name() descarta rutas maliciosas tipo "../../algo".
+        let Some(nombre) = entrada.enclosed_name() else {
+            continue;
+        };
+        let salida = destino.join(nombre);
+        if entrada.is_dir() {
+            let _ = std::fs::create_dir_all(&salida);
+            continue;
+        }
+        if let Some(padre) = salida.parent() {
+            let _ = std::fs::create_dir_all(padre);
+        }
+        let mut f = std::fs::File::create(&salida)
+            .map_err(|e| format!("No se pudo escribir {}: {e}", salida.display()))?;
+        std::io::copy(&mut entrada, &mut f)
+            .map_err(|e| format!("No se pudo descomprimir {}: {e}", salida.display()))?;
+    }
+    Ok(())
 }
 
 fn do_install(app: &AppHandle) -> Result<Tools, String> {
@@ -413,40 +471,24 @@ fn do_install(app: &AppHandle) -> Result<Tools, String> {
     }
 
     // yt-dlp (binario standalone, no necesita Python en el equipo destino).
-    // Sin "-s" a proposito: con -s curl se calla justamente el error que
-    // necesitamos leer cuando algo va mal. Se usa -S para que muestre el
-    // motivo pero sin la barra de progreso.
     let ytdlp_path = bin.join("yt-dlp");
     if !ytdlp_path.is_file() {
-        let mut cmd = clean_command("curl");
-        cmd.args(["-L", "-f", "-sS", YTDLP_URL, "-o"]).arg(&ytdlp_path);
-        run_step(cmd, "curl", "la descarga de yt-dlp")?;
-
+        descargar(app, YTDLP_URL, &ytdlp_path, "la descarga de yt-dlp", 0.0, 45.0)?;
         if !ytdlp_path.is_file() {
             return Err("La descarga de yt-dlp terminó pero el archivo no quedó guardado.".to_string());
         }
         set_executable(&ytdlp_path);
     }
 
-    emit_progress(app, "__install__", 50.0, "descargando", "Instalando motor JS (Deno)...");
-
-    // deno (viene en .zip; lo extraemos con python3, que casi siempre esta).
+    // deno (viene en .zip).
     let deno_path = bin.join("deno");
     if !deno_path.is_file() {
-        let zip = bin.join("deno.zip");
+        let zip_path = bin.join("deno.zip");
+        descargar(app, DENO_URL, &zip_path, "la descarga de Deno", 45.0, 90.0)?;
 
-        let mut cmd = clean_command("curl");
-        cmd.args(["-L", "-f", "-sS", DENO_URL, "-o"]).arg(&zip);
-        run_step(cmd, "curl", "la descarga de Deno")?;
-
-        if !zip.is_file() {
-            return Err("La descarga de Deno terminó pero el archivo no quedó guardado.".to_string());
-        }
-
-        let mut cmd = clean_command("python3");
-        cmd.arg("-m").arg("zipfile").arg("-e").arg(&zip).arg(&bin);
-        let resultado = run_step(cmd, "python3", "descomprimir Deno");
-        let _ = std::fs::remove_file(&zip);
+        emit_progress(app, "__install__", 92.0, "descargando", "Descomprimiendo...");
+        let resultado = descomprimir(&zip_path, &bin);
+        let _ = std::fs::remove_file(&zip_path);
         resultado?;
 
         if !deno_path.is_file() {
@@ -457,4 +499,32 @@ fn do_install(app: &AppHandle) -> Result<Tools, String> {
 
     emit_progress(app, "__install__", 100.0, "listo", "Descargador instalado");
     Ok(resolve_tools(app))
+}
+
+#[cfg(test)]
+mod pruebas {
+    /// Comprueba que la descarga funciona SIN depender del almacen de
+    /// certificados del equipo. Se fuerza una ruta invalida en las variables
+    /// que usan las herramientas del sistema: si el motor propio dependiera de
+    /// ellas, esto fallaria igual que le fallo a curl en la Fedora de prueba.
+    #[test]
+    fn descarga_sin_depender_de_los_certificados_del_sistema() {
+        std::env::set_var("SSL_CERT_FILE", "/ruta/que/no/existe.crt");
+        std::env::set_var("SSL_CERT_DIR", "/ruta/que/no/existe");
+        std::env::set_var("CURL_CA_BUNDLE", "/ruta/que/no/existe.crt");
+
+        let cliente = reqwest::blocking::Client::builder()
+            .timeout(std::time::Duration::from_secs(60))
+            .build()
+            .expect("no se pudo crear el cliente");
+
+        let resp = cliente
+            .get("https://raw.githubusercontent.com/yt-dlp/yt-dlp/master/README.md")
+            .send()
+            .expect("la descarga por HTTPS fallo con los certificados propios");
+
+        assert!(resp.status().is_success(), "estado: {}", resp.status());
+        let cuerpo = resp.text().expect("no se pudo leer la respuesta");
+        assert!(!cuerpo.is_empty(), "la respuesta llego vacia");
+    }
 }

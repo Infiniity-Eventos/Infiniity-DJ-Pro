@@ -1,6 +1,6 @@
 [package]
 name = "infiniity-dj"
-version = "0.2.5"
+version = "0.2.6"
 description = "Infiniity DJ - Mezclador de musica liviano para eventos"
 authors = ["Infiniity Eventos"]
 edition = "2021"
@@ -33,6 +33,22 @@ midir = "0.10"
 # version nueva. `process` es para reiniciar la app despues de actualizar.
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+
+# Descarga e instalacion del descargador SIN depender de curl ni python3.
+#
+# POR QUE: usando los del sistema, la instalacion fallaba en equipos ajenos y
+# de formas distintas segun la maquina (curl error 77 por el almacen de
+# certificados roto, python3 roto por las variables del AppImage...). Con esto
+# el programa se basta solo.
+#
+# "webpki-roots" es la clave: lleva sus PROPIOS certificados raiz dentro del
+# programa, asi que no importa si el almacen del equipo esta roto.
+reqwest = { version = "0.12", default-features = false, features = [
+    "blocking",
+    "rustls-tls-webpki-roots",
+] }
+# Descomprimir el .zip de Deno sin llamar a python3.
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [features]
 # por defecto vacio
