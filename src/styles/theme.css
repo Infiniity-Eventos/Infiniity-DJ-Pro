@@ -71,15 +71,19 @@
   --slider-track: rgba(124, 58, 237, 0.18);
 }
 
-/* Fondo vibrante (morado -> azul -> rosa) con "orbes" suaves. Opaco y estatico
-   (background-attachment: fixed) => se pinta una sola vez, muy liviano. */
+/* Fondo vibrante (morado -> azul -> rosa) con "orbes" suaves.
+ *
+ * OJO: NO poner background-attachment: fixed. Se creia que "se pinta una sola
+ * vez"; es al reves: con fondo fijo, WebKit tiene que repintar los cuatro
+ * degradados enteros en CADA cuadro mientras se desplaza la lista de canciones
+ * (medido: un nucleo al 100% sostenido dibujando por software). El body nunca
+ * se desplaza (overflow: hidden), asi que el fixed no aportaba nada. */
 body {
   background:
     radial-gradient(1200px 800px at 8% -5%, #6f5bc4, transparent 55%),
     radial-gradient(1000px 750px at 105% 6%, #5488cf, transparent 55%),
     radial-gradient(900px 760px at 96% 108%, #c98bc0, transparent 52%),
     linear-gradient(150deg, #4a3a8c, #3f5aa0);
-  background-attachment: fixed;
   color: var(--text-1);
 }
 
@@ -105,12 +109,27 @@ body {
   --glass-bg: rgba(255, 255, 255, 0.17);
   --glass-bg-strong: rgba(255, 255, 255, 0.3);
 }
+/* Dibujando por software (sin GPU) no hay composicion: cada tic de la rueda en
+   la lista de canciones REPINTA la zona entera desde el fondo. Medido en este
+   repo (rueda a 5 tics/s, un nucleo): 69% con todo -> 40% con fondo plano y sin
+   sombras. Lo caro por pixel son los degradados radiales y las sombras
+   desenfocadas; el desenfoque de vidrio ya estaba quitado aqui. */
+:root[data-lowpower="1"] body {
+  background: var(--bg-0);
+}
 :root[data-lowpower="1"] .glass {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
 }
 :root[data-lowpower="1"] .progress .fill {
   box-shadow: none;
+}
+/* La lista de canciones OPACA: si el panel deja ver el fondo, cada cuadro del
+   desplazamiento obliga a mezclar filas + vidrio + degradado. Opaco, WebKit
+   solo mueve pixeles ya pintados. */
+:root[data-lowpower="1"] .tracklist {
+  background: var(--bg-2);
 }
 
 /* Botones */
