@@ -1,6 +1,7 @@
 //! Punto central del backend de Infiniity DJ.
 //! Registra los comandos que el frontend (React) puede llamar.
 
+mod arranque;
 mod bpm;
 mod cache;
 mod ddj200;
@@ -79,6 +80,19 @@ fn system_stats(
     };
     sysmon::log_sample(&app, &stats, &note);
     Ok(stats)
+}
+
+/// Como esta dibujando el motor web (GPU o software) y por que. El frontend lo
+/// usa para activar solo el modo bajo consumo cuando se dibuja por software.
+#[tauri::command]
+fn modo_dibujo() -> arranque::ModoDibujo {
+    arranque::modo_dibujo()
+}
+
+/// La interfaz ya se pinto: el arranque salio bien (ver arranque.rs).
+#[tauri::command]
+fn interfaz_lista() {
+    arranque::interfaz_lista();
 }
 
 /// Abre la carpeta donde queda el archivo de diagnostico (para enviarlo).
@@ -200,50 +214,14 @@ fn toggle_fullscreen(window: tauri::Window) -> Result<bool, String> {
 
 // ---------------------------------------------------------------------------
 
-/// Esconde las fuentes de emojis DE COLOR del sistema antes de abrir la ventana.
-///
-/// POR QUE: el WebKit que viaja en el AppImage (Ubuntu 22.04) revienta al pintar
-/// emojis de una fuente COLRv1 (`colrv1_configure_skpaint ... Assertion failed`)
-/// y la ventana queda en blanco. Fedora 44 paso "Noto Color Emoji" a COLRv1 en
-/// septiembre de 2026 y desde ese dia la app se caia AL ABRIR, porque la barra de
-/// arriba ya trae 📁 🌙 🔄. Cualquier distro que actualice su fuente caeria igual.
-///
-/// Con esto fontconfig carga la configuracion normal del equipo y solo descarta
-/// las fuentes de color; los emojis salen de la fuente monocroma (la incluida en
-/// el programa, ver "Emoji Seguro" en global.css), que no pasa por ese codigo.
-#[cfg(target_os = "linux")]
-fn ocultar_fuentes_emoji_color() {
-    const SISTEMA: &str = "/etc/fonts/fonts.conf";
-    if std::env::var_os("FONTCONFIG_FILE").is_some() || !std::path::Path::new(SISTEMA).exists() {
-        return;
-    }
-    let base = std::env::var_os("XDG_CACHE_HOME")
-        .map(std::path::PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".cache")))
-        .unwrap_or_else(std::env::temp_dir);
-    let dir = base.join("infiniity-dj");
-    let ruta = dir.join("fonts.conf");
-    let conf = format!(
-        "<?xml version=\"1.0\"?>\n<!DOCTYPE fontconfig SYSTEM \"fonts.dtd\">\n<fontconfig>\n  \
-         <include ignore_missing=\"yes\">{SISTEMA}</include>\n  \
-         <selectfont><rejectfont><pattern><patelt name=\"color\"><bool>true</bool></patelt></pattern></rejectfont></selectfont>\n\
-         </fontconfig>\n"
-    );
-    match std::fs::create_dir_all(&dir).and_then(|_| std::fs::write(&ruta, conf)) {
-        Ok(()) => std::env::set_var("FONTCONFIG_FILE", &ruta),
-        // Todavia no hay ventana donde mostrarlo: queda en la terminal / journalctl.
-        Err(e) => eprintln!(
-            "AVISO: no se pudo escribir {} ({e}). Los emojis de color pueden tumbar la ventana.",
-            ruta.display()
-        ),
-    }
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Antes de que GTK/WebKit arranquen: leen FONTCONFIG_FILE una sola vez.
+    // Antes de que GTK/WebKit arranquen: leen las variables una sola vez.
     #[cfg(target_os = "linux")]
-    ocultar_fuentes_emoji_color();
+    {
+        arranque::ocultar_fuentes_emoji_color();
+        arranque::decidir_modo_dibujo();
+    }
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -265,6 +243,8 @@ pub fn run() {
             if let Ok(mut c) = app.state::<AppState>().cache.lock() {
                 *c = loaded;
             }
+            #[cfg(target_os = "linux")]
+            arranque::vigilar_motor_web(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -275,6 +255,8 @@ pub fn run() {
             read_media,
             system_stats,
             diag_reveal,
+            modo_dibujo,
+            interfaz_lista,
             downloader::ytdl_tools,
             downloader::ytdl_search,
             downloader::ytdl_download,

@@ -106,12 +106,16 @@ TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 ENCONTRADO="$(find "$TMP" -name "*.png" -path "*128*" 2>/dev/null | head -1)"
 [[ -n "$ENCONTRADO" ]] && cp "$ENCONTRADO" "$ICONO"
 
+# OJO: antes el Exec llevaba "env WEBKIT_DISABLE_DMABUF_RENDERER=1". Esa variable
+# hace falta solo con NVIDIA; en los portatiles Intel prohibia la tarjeta grafica
+# y la CPU se iba al 186% reproduciendo. Ahora la decide el propio programa
+# (src-tauri/src/arranque.rs). NO volver a ponerla aqui.
 cat > "$ESCRITORIO" <<EOF
 [Desktop Entry]
 Type=Application
 Name=Infiniity DJ
 Comment=Mezclador de musica para eventos
-Exec=env WEBKIT_DISABLE_DMABUF_RENDERER=1 "$DESTINO/Infiniity-DJ.AppImage"
+Exec="$DESTINO/Infiniity-DJ.AppImage"
 Icon=${ENCONTRADO:+infiniity-dj}
 Terminal=false
 Categories=Audio;Music;AudioVideo;

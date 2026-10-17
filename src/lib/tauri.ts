@@ -108,6 +108,15 @@ export interface SystemStats {
 export const systemStats = (note: string) => invoke<SystemStats>("system_stats", { note });
 export const diagReveal = () => invoke<void>("diag_reveal").catch(() => {});
 
+// --- Arranque (ver src-tauri/src/arranque.rs) ---
+export interface ModoDibujo {
+  software: boolean; // true = el motor web dibuja con la CPU, sin tarjeta grafica
+  motivo: string; // "gpu" | "nvidia" | "gpu-prohibida" | "gpu-fallo-al-abrir" | ...
+}
+export const modoDibujo = () => invoke<ModoDibujo>("modo_dibujo");
+/** Avisa que la interfaz ya se pinto: el arranque con GPU salio bien. */
+export const interfazLista = () => invoke<void>("interfaz_lista");
+
 // --- BPM ---
 export const analyzeBpm = (path: string) => invoke<TrackMeta>("analyze_bpm", { path });
 export const setManualBpm = (path: string, bpm: number) =>

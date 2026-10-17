@@ -50,6 +50,11 @@ reqwest = { version = "0.12", default-features = false, features = [
 # Descomprimir el .zip de Deno sin llamar a python3.
 zip = { version = "2", default-features = false, features = ["deflate"] }
 
+# Para enterarnos cuando el proceso que dibuja se cae (ver arranque.rs). Misma
+# version y features que usa Tauri por dentro; no agrega nada al paquete.
+[target.'cfg(target_os = "linux")'.dependencies]
+webkit2gtk = { version = "2.0", features = ["v2_40"] }
+
 [features]
 # por defecto vacio
 

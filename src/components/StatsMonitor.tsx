@@ -21,8 +21,11 @@ export function StatsMonitor() {
         const playing = (decks.A.isPlaying ? 1 : 0) + (decks.B.isPlaying ? 1 : 0);
         const loaded = (decks.A.trackPath ? 1 : 0) + (decks.B.trackPath ? 1 : 0);
         const modo = s0.lowPower ? "BAJO-CONSUMO-ON" : "modo-normal";
+        const dibujo = s0.modoDibujo
+          ? `${s0.modoDibujo.software ? "software" : "gpu"}(${s0.modoDibujo.motivo})`
+          : "?";
         const ventana = document.visibilityState === "hidden" ? "OCULTA" : "visible";
-        const note = `v${__APP_VERSION__} | ${playing} sonando, ${loaded} cargadas, ${modo}, ventana:${ventana}`;
+        const note = `v${__APP_VERSION__} | ${playing} sonando, ${loaded} cargadas, ${modo}, dibujo:${dibujo}, ventana:${ventana}`;
         const s = await systemStats(note);
         if (alive) setStats(s);
       } catch {

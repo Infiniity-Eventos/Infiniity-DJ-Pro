@@ -42,6 +42,10 @@ export interface Settings {
 interface AppStore {
   theme: Theme;
   lowPower: boolean;
+  /** true = nadie lo eligio a mano; lo decide el programa segun el equipo. */
+  lowPowerAuto: boolean;
+  /** Como dibuja el motor web este arranque (null hasta que Rust responda). */
+  modoDibujo: { software: boolean; motivo: string } | null;
   musicRoot: string | null;
   decks: Record<DeckId, DeckInfo>;
   crossfader: number; // 0 = A, 1 = B
@@ -64,6 +68,9 @@ interface AppStore {
 
   setTheme: (t: Theme) => void;
   setLowPower: (v: boolean) => void;
+  /** Valor decidido por el programa; solo aplica si el usuario nunca eligio. */
+  setLowPowerAuto: (v: boolean) => void;
+  setModoDibujo: (m: { software: boolean; motivo: string }) => void;
   setMusicRoot: (p: string | null) => void;
   patchDeck: (id: DeckId, patch: Partial<DeckInfo>) => void;
   setCrossfader: (v: number) => void;
@@ -106,6 +113,7 @@ const LS_KEY = "infiniity-dj-prefs";
 interface Persisted {
   theme: Theme;
   lowPower: boolean;
+  lowPowerAuto: boolean;
   musicRoot: string | null;
   settings: Settings;
   masterVolume: number;
@@ -119,7 +127,10 @@ const defaultSettings: Settings = {
 
 // Equipo "flojo": pocos hilos de CPU (portátiles de gama baja). En esos casos
 // arrancamos en modo bajo consumo para que NUNCA se trabe en un evento.
-function weakMachineDefault(): boolean {
+// Es solo el valor de arranque: en cuanto Rust dice si se dibuja por software
+// (App.tsx), eso manda. Dibujar por software con desenfoque y disco giratorio
+// es lo que de verdad castiga la CPU, tenga los hilos que tenga.
+export function weakMachineDefault(): boolean {
   try {
     return typeof navigator !== "undefined" && (navigator.hardwareConcurrency ?? 8) <= 4;
   } catch {
@@ -135,8 +146,10 @@ function loadPrefs(): Persisted {
       const p = JSON.parse(raw) as Partial<Persisted>;
       return {
         theme: p.theme ?? "dark",
-        // Si el usuario nunca lo eligió, decidimos según el equipo.
-        lowPower: p.lowPower ?? autoLow,
+        // Si el usuario nunca lo eligió, decidimos según el equipo. Antes esta
+        // bandera no existia: lo guardado era automatico, asi que se recalcula.
+        lowPowerAuto: p.lowPowerAuto ?? true,
+        lowPower: p.lowPowerAuto === false ? (p.lowPower ?? autoLow) : autoLow,
         musicRoot: p.musicRoot ?? null,
         settings: { ...defaultSettings, ...(p.settings ?? {}) },
         masterVolume: p.masterVolume ?? 1,
@@ -145,13 +158,21 @@ function loadPrefs(): Persisted {
   } catch {
     /* ignorar */
   }
-  return { theme: "dark", lowPower: autoLow, musicRoot: null, settings: defaultSettings, masterVolume: 1 };
+  return {
+    theme: "dark",
+    lowPower: autoLow,
+    lowPowerAuto: true,
+    musicRoot: null,
+    settings: defaultSettings,
+    masterVolume: 1,
+  };
 }
 
 function savePrefs(s: AppStore) {
   const p: Persisted = {
     theme: s.theme,
     lowPower: s.lowPower,
+    lowPowerAuto: s.lowPowerAuto,
     musicRoot: s.musicRoot,
     settings: s.settings,
     masterVolume: s.masterVolume,
@@ -168,6 +189,8 @@ const initial = loadPrefs();
 export const useStore = create<AppStore>((set, get) => ({
   theme: initial.theme,
   lowPower: initial.lowPower,
+  lowPowerAuto: initial.lowPowerAuto,
+  modoDibujo: null,
   musicRoot: initial.musicRoot,
   decks: { A: emptyDeck(), B: emptyDeck() },
   crossfader: 0.5,
@@ -193,9 +216,16 @@ export const useStore = create<AppStore>((set, get) => ({
     savePrefs(get());
   },
   setLowPower: (v) => {
+    // Lo toco el usuario: desde ahora manda el, no el programa.
+    set({ lowPower: v, lowPowerAuto: false });
+    savePrefs(get());
+  },
+  setLowPowerAuto: (v) => {
+    if (!get().lowPowerAuto) return;
     set({ lowPower: v });
     savePrefs(get());
   },
+  setModoDibujo: (m) => set({ modoDibujo: m }),
   setMusicRoot: (p) => {
     set({ musicRoot: p });
     savePrefs(get());

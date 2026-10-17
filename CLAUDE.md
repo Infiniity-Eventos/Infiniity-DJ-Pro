@@ -11,7 +11,13 @@ WEBKIT_DISABLE_DMABUF_RENDERER=1 npx tauri dev
 ```
 
 Esa variable es **obligatoria** en Fedora/Wayland; sin ella la ventana se cae al
-abrir.
+abrir. Desde la 0.3.6 el programa la pone solo cuando detecta NVIDIA
+(`src-tauri/src/arranque.rs`), así que en desarrollo sobra, pero no estorba.
+
+**No la pongas en los accesos directos de las demás PC**: en los portátiles
+Intel prohíbe la tarjeta gráfica y la CPU se va al 186 % reproduciendo. El
+programa decide GPU/software por sí mismo y, si la GPU falla al abrir, se
+reinicia por software y lo recuerda (`~/.cache/infiniity-dj/gpu-prohibida`).
 
 ## Publicar una versión para las demás PC
 

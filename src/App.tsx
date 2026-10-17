@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useStore } from "./state/store";
+import { useStore, weakMachineDefault } from "./state/store";
 import { reloadLibrary } from "./lib/library";
 import { useMidi } from "./hooks/useMidi";
 import { TopBar } from "./components/TopBar";
@@ -14,7 +14,7 @@ import { StatsMonitor } from "./components/StatsMonitor";
 import { DownloadModal } from "./components/DownloadModal";
 import { DownloadIndicator } from "./components/DownloadIndicator";
 import { UpdateModal } from "./components/UpdateModal";
-import { onYtdlProgress } from "./lib/tauri";
+import { onYtdlProgress, modoDibujo, interfazLista, isTauri } from "./lib/tauri";
 
 export default function App() {
   const theme = useStore((s) => s.theme);
@@ -33,6 +33,30 @@ export default function App() {
   useEffect(() => {
     document.documentElement.setAttribute("data-lowpower", lowPower ? "1" : "0");
   }, [lowPower]);
+
+  // Arranque: preguntar a Rust como se esta dibujando (ver arranque.rs).
+  // - Por software -> bajo consumo automatico (salvo que el usuario lo eligiera).
+  // - Avisar que la interfaz ya se pinto, para que el arranque con GPU quede
+  //   como "salio bien". Se espera un poco: el fallo de GPU puede llegar en los
+  //   primeros cuadros, no en el primero.
+  useEffect(() => {
+    if (!isTauri()) return;
+    const st = useStore.getState();
+    modoDibujo()
+      .then((m) => {
+        st.setModoDibujo(m);
+        st.setLowPowerAuto(m.software || weakMachineDefault());
+      })
+      .catch((err) => {
+        console.error("[App] no se pudo saber el modo de dibujo", err);
+        st.showToast(`No se pudo saber el modo de dibujo (${err}); se asume bajo consumo.`);
+        st.setLowPowerAuto(true);
+      });
+    const t = window.setTimeout(() => {
+      interfazLista().catch((err) => console.error("[App] interfaz_lista fallo", err));
+    }, 2500);
+    return () => window.clearTimeout(t);
+  }, []);
 
   // Progreso de descargas en segundo plano -> estado global (para el indicador).
   useEffect(() => {

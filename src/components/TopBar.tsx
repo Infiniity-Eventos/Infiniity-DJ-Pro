@@ -15,6 +15,7 @@ export function TopBar() {
   const setTheme = useStore((s) => s.setTheme);
   const lowPower = useStore((s) => s.lowPower);
   const setLowPower = useStore((s) => s.setLowPower);
+  const lowPowerAuto = useStore((s) => s.lowPowerAuto);
   const musicRoot = useStore((s) => s.musicRoot);
   const setMusicRoot = useStore((s) => s.setMusicRoot);
   const midiConnected = useStore((s) => s.midiConnected);
@@ -75,7 +76,7 @@ export function TopBar() {
       <button
         className={`btn no-drag ${lowPower ? "lowpower-on" : ""}`}
         onClick={() => setLowPower(!lowPower)}
-        title={lowPower ? "Modo bajo consumo: ACTIVADO" : "Modo bajo consumo: desactivado"}
+        title={`Modo bajo consumo: ${lowPower ? "ACTIVADO" : "desactivado"}${lowPowerAuto ? " (automatico)" : ""}`}
       >
         ⚡
       </button>

@@ -1639,6 +1639,7 @@ dependencies = [
  "tauri-plugin-process",
  "tauri-plugin-updater",
  "walkdir",
+ "webkit2gtk",
  "zip 2.4.2",
 ]
 
