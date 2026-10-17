@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { engine } from "../audio/AudioEngine";
 import { useStore } from "../state/store";
 
@@ -7,6 +8,18 @@ export function Mixer() {
   const autoMixing = useStore((s) => s.autoMixing);
   const decks = useStore((s) => s.decks);
   const showToast = useStore((s) => s.showToast);
+
+  // El slider vertical va girado: su ANCHO tiene que ser el ALTO de la columna.
+  const trackRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = trackRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      el.style.setProperty("--largo", `${el.clientHeight}px`);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const canMix = !!decks.A.trackPath && !!decks.B.trackPath;
 
@@ -56,20 +69,23 @@ export function Mixer() {
         />
       </div>
 
-      <div className="master-block">
-        <div className="crossfader-labels">
-          <span>Volumen general</span>
-          <span>{Math.round(masterVolume * 100)}%</span>
+      {/* Vertical a proposito: arriba = mas volumen, y no se confunde con el
+          crossfader, que es horizontal. */}
+      <div className="master-block" title="Volumen general">
+        <span className="master-value">{Math.round(masterVolume * 100)}%</span>
+        <div className="master-track" ref={trackRef}>
+          <input
+            className="vol-slider master-slider"
+            type="range"
+            min={0}
+            max={1}
+            step={0.01}
+            value={masterVolume}
+            onChange={(e) => engine.setMasterVolume(parseFloat(e.target.value))}
+            aria-label="Volumen general"
+          />
         </div>
-        <input
-          className="vol-slider"
-          type="range"
-          min={0}
-          max={1}
-          step={0.01}
-          value={masterVolume}
-          onChange={(e) => engine.setMasterVolume(parseFloat(e.target.value))}
-        />
+        <span className="master-label">VOL</span>
       </div>
     </div>
   );

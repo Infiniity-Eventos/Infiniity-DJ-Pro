@@ -272,12 +272,20 @@ input[type="range"]::-webkit-slider-thumb {
 
 /* ---------------- Mezclador central ---------------- */
 .mixer {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto 1fr auto;
   padding: 16px;
-  gap: 14px;
+  column-gap: 14px;
+  row-gap: 14px;
+}
+.mixer .mix-btn {
+  grid-column: 1;
+  grid-row: 1;
+}
+.mixer .crossfader-block {
+  grid-column: 1;
+  grid-row: 3;
 }
 .mix-btn {
   width: 100%;
@@ -305,10 +313,43 @@ input[type="range"]::-webkit-slider-thumb {
   color: var(--text-2);
   margin-bottom: 6px;
 }
+/* Volumen general VERTICAL, en su propia columna a la derecha.
+ * Se gira con transform y no con writing-mode: el slider vertical nativo no
+ * existe en el WebKit viejo que traen algunas PC (Mint/Ubuntu 22.04). */
 .master-block {
-  width: 100%;
+  grid-column: 2;
+  grid-row: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 40px;
   font-size: 11px;
   color: var(--text-dim);
+}
+.master-value {
+  font-size: 12px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+.master-track {
+  position: relative;
+  flex: 1 1 auto;
+  width: 24px;
+  min-height: 120px;
+}
+.master-slider {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  /* El ancho del slider es el alto de la columna (--largo lo mide Mixer.tsx);
+   * al girarlo -90deg queda de pie, con el minimo abajo. */
+  width: var(--largo, 140px);
+  transform: translate(-50%, -50%) rotate(-90deg);
+}
+.master-label {
+  font-weight: 700;
+  letter-spacing: 1px;
 }
 
 /* ---------------- Biblioteca ---------------- */
@@ -843,29 +884,37 @@ input[type="range"]::-webkit-slider-thumb {
   margin-top: 9px;
 }
 
-/* ---------------- Emojis seguros en nombres de canciones ----------------
+/* ---------------- Emojis seguros en TODA la interfaz ----------------
  *
  * POR QUE EXISTE ESTO: el motor de dibujo que viaja dentro del AppImage
- * (WebKit de Ubuntu 22.04) ESTRELLA la app al pintar emojis de color con
- * degradados, si el sistema tiene una fuente moderna tipo COLRv1:
+ * (WebKit de Ubuntu 22.04) ESTRELLA la app al pintar emojis de una fuente de
+ * color COLRv1:
  *     colrv1_configure_skpaint(...) Assertion '__n < this->size()' failed
- * La ventana queda en blanco y hay que reinstalar.
+ * La ventana queda en blanco.
  *
- * Los titulos de YouTube vienen llenos de emojis, asi que descargar una
- * cancion con uno de esos en el nombre tumbaria el programa EN PLENO EVENTO.
+ * Primero se creyo que bastaba con los nombres de canciones (titulos de
+ * YouTube) y que los emojis propios (📁 🌙 🔄) eran "simples". No: en Fedora 44
+ * la fuente del sistema paso a COLRv1 y la app se caia AL ABRIR por la barra de
+ * arriba. Ademas la fuente segura iba al FINAL de la lista, detras de
+ * sans-serif, asi que nunca se usaba.
  *
- * Solucion: para los textos que vienen de fuera (nombres de canciones), usar
- * una fuente de emojis MONOCROMA que viaja dentro del programa. Al no ser de
- * color, no pasa por el codigo que revienta, y da igual que fuentes tenga el
- * equipo.
- *
- * Los emojis de la propia interfaz (⬇ ☀ 🌙 📁) NO se tocan: son simbolos
- * simples, estan comprobados y asi se conserva el aspecto.
+ * La defensa principal esta en Rust (ocultar_fuentes_emoji_color en lib.rs:
+ * el programa no ve las fuentes de color del sistema). Esto es la segunda capa
+ * y hace que los emojis se vean IGUAL en todas las PC: fuente MONOCROMA
+ * incluida en el programa, PRIMERA en la lista, y con unicode-range para que
+ * solo atienda emojis y simbolos (letras y numeros siguen con la fuente normal).
+ * font-display: block -> nunca se pinta un primer cuadro con otra fuente.
  */
 @font-face {
   font-family: "Emoji Seguro";
   src: url("/NotoEmoji-Regular.ttf") format("truetype");
-  font-display: swap;
+  font-display: block;
+  unicode-range: U+00A9, U+00AE, U+200D, U+203C, U+2049, U+20E3, U+2122, U+2139,
+    U+2194-2BFF, U+3030, U+303D, U+3297, U+3299, U+FE0F, U+1F000-1FAFF;
+}
+
+body {
+  font-family: "Emoji Seguro", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", sans-serif;
 }
 
 .track-row .t-name,
@@ -873,5 +922,5 @@ input[type="range"]::-webkit-slider-thumb {
 .dl-result-title,
 .dl-indicator-title,
 .job-title {
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif, "Emoji Seguro";
+  font-family: "Emoji Seguro", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
