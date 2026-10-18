@@ -35,14 +35,18 @@ export function TrackList() {
     if (!library) return [];
     const q = search.trim().toLowerCase();
     return library.tracks.filter((t) => {
+      // Con texto en el buscador se busca en TODA la biblioteca (todos los
+      // generos y artistas), no solo en la carpeta/artista seleccionado.
+      if (q) {
+        return (
+          t.name.toLowerCase().includes(q) ||
+          (t.title ?? "").toLowerCase().includes(q) ||
+          (t.artist ?? "").toLowerCase().includes(q)
+        );
+      }
       const inFolder = !selectedFolder || t.folder.startsWith(selectedFolder);
       const ofArtist = !selectedArtist || (t.artist ?? "") === selectedArtist;
-      const matches =
-        !q ||
-        t.name.toLowerCase().includes(q) ||
-        (t.title ?? "").toLowerCase().includes(q) ||
-        (t.artist ?? "").toLowerCase().includes(q);
-      return inFolder && ofArtist && matches;
+      return inFolder && ofArtist;
     });
   }, [library, search, selectedFolder, selectedArtist]);
 
@@ -125,7 +129,7 @@ export function TrackList() {
     <div className="glass tracklist">
       <div className="search-bar">
         <input
-          placeholder="Buscar cancion por nombre..."
+          placeholder="Buscar en toda la biblioteca (cancion o artista)..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
