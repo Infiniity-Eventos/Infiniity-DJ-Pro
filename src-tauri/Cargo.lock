@@ -1641,7 +1641,7 @@ dependencies = [
 
 [[package]]
 name = "infiniity-dj"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "flate2",
  "lzma-rs",
