@@ -64,7 +64,17 @@ la ignoran… Sync NO la ignora: es pequeña, no importa).
    python3 -I .claude/skills/Organizar_Canciones/scripts/aplicar.py "$BIB/.organizar/plan-<fecha>.json" --biblioteca "$BIB"
    ```
    Convierte a MP3 lo que no lo sea, escribe etiquetas (borra carátula, firma los campos vacíos),
-   ReplayGain, BPM si falta, renombra y mueve. Las ya firmadas se saltan.
+   ReplayGain, BPM si falta y **copia** la versión organizada a su carpeta; la original queda en
+   "Sin clasificar" **a propósito** (fase 1): así las PC del equipo arman la copia nueva a partir
+   de la vieja sin volver a bajar ~5 MB por canción. Las ya firmadas se saltan.
+   **Fase 2 — limpiar**: cuando el panel Sync (o `--sync-cli estado`) muestre a las PC del equipo
+   conectadas al 100 %, borra las originales:
+   ```bash
+   python3 -I .claude/skills/Organizar_Canciones/scripts/aplicar.py /dev/null --biblioteca "$BIB" --limpiar
+   ```
+   Si no están al 100 % todavía, díselo al usuario: puede limpiar más tarde con
+   "/Organizar_Canciones limpiar" (solo corre esa orden). Mientras tanto cada canción se ve dos
+   veces (en Sin clasificar y en su género): es normal.
 4. **Dudosas y repetidas** (D19): genera la página y ábrela:
    ```bash
    python3 -I .claude/skills/Organizar_Canciones/scripts/revision.py "$BIB/.organizar/candidatos-<fecha>.json" --salida "$BIB/.organizar/Revision-<fecha>.html" && xdg-open "$BIB/.organizar/Revision-<fecha>.html"
@@ -78,7 +88,7 @@ la ignoran… Sync NO la ignora: es pequeña, no importa).
    propón crear la carpeta; si el usuario dice sí, crea la carpeta, mueve esas canciones, reescribe
    `TCON` y quita `INFINIITY_GENERO_SUGERIDO` (usa `aplicar.py --forzar` con un plan de esas
    canciones y el género nuevo), y bórralas de `en_espera` en `estado.json`.
-6. **Resumen final** en el chat: cuántas organizadas por carpeta, cuántas quedaron en Sin clasificar
+6. **Resumen final** en el chat (y si quedaron originales por borrar, decirlo): cuántas organizadas por carpeta, cuántas quedaron en Sin clasificar
    y por qué, repetidas resueltas, carpetas nuevas, y recordar que Sync reenviará los archivos.
    Luego, en la app, "Actualizar lista" muestra todo con BPM y artista (la app lee las etiquetas).
 

@@ -15,6 +15,11 @@ plan.json = lista de objetos:
 Para un mix:  "mix": true, "genero": "Merengue"  -> se nombra "Mix Infiniity Merengue NN".
 
 Idempotente: una cancion ya firmada (TXXX:INFINIITY_ORGANIZADA) se salta salvo --forzar.
+
+DOS FASES (para que las PC del equipo no vuelvan a bajar todo): la cancion
+organizada se COPIA a su carpeta y la original queda en "Sin clasificar"
+hasta que `--limpiar` la borre (cuando las PC ya tienen la copia nueva).
+Syncthing arma la copia nueva a partir de la vieja si esta sigue ahi.
 """
 import argparse
 import json
@@ -127,8 +132,33 @@ def main():
     ap.add_argument("--biblioteca", required=True)
     ap.add_argument("--simular", action="store_true")
     ap.add_argument("--forzar", action="store_true", help="reorganizar aunque ya este firmada")
+    ap.add_argument("--mover", action="store_true", help="mover en vez de copiar (sin fase de limpieza)")
+    ap.add_argument("--limpiar", action="store_true", help="borrar los originales de las canciones ya copiadas (fase 2)")
     a = ap.parse_args()
     bib = Path(a.biblioteca)
+    if a.limpiar:
+        estado = leer_estado(bib)
+        pendientes = estado.get("originales_por_borrar", [])
+        borrados, quedan = 0, []
+        for par in pendientes:
+            orig, copia = Path(par["original"]), Path(par["copia"])
+            if not orig.is_file():
+                continue  # ya no esta
+            if not copia.is_file():
+                quedan.append(par)  # la copia no existe: no borrar nada
+                print(f"  AVISO: falta la copia {copia.name}; se conserva la original")
+                continue
+            if a.simular:
+                print(f"  borraria: {orig.name}")
+                quedan.append(par)
+                continue
+            orig.unlink()
+            borrados += 1
+        if not a.simular:
+            estado["originales_por_borrar"] = quedan
+            guardar_estado(bib, estado)
+        print(f"Originales borradas de Sin clasificar: {borrados} · pendientes: {len(quedan)}")
+        return
     plan = json.loads(Path(a.plan).read_text(encoding="utf-8"))
     estado = leer_estado(bib)
     hechas, saltadas, errores = 0, 0, []
@@ -160,7 +190,6 @@ def main():
                 c = {**c, "titulo": titulo, "artistas": artistas}
             gain = None if a.simular else replaygain_db(mp3)
             bpm = c.get("bpm") or (None if a.simular else bpm_local(mp3))
-            escribir_etiquetas(mp3, c, gain, bpm, estado, a.simular)
             nuevo = nombre_archivo(c["titulo"], c["artistas"])
             destino_dir = bib / genero
             destino = destino_dir / nuevo
@@ -168,10 +197,21 @@ def main():
             while destino.exists() and destino != mp3:
                 destino = destino_dir / (Path(nuevo).stem + f" ({i}).mp3")
                 i += 1
-            print(f"  -> {genero}/{destino.name}")
-            if not a.simular:
+            print(f"  -> {genero}/{destino.name}" + ("" if a.mover else "  (copia; la original se borra con --limpiar)"))
+            if a.simular:
+                escribir_etiquetas(mp3, c, gain, bpm, estado, True)
+            else:
                 destino_dir.mkdir(exist_ok=True)
-                shutil.move(str(mp3), str(destino))
+                if a.mover:
+                    shutil.move(str(mp3), str(destino))
+                else:
+                    # Fase 1: la ORIGINAL queda intacta en Sin clasificar (Syncthing
+                    # la usa de base en las otras PC); se etiqueta la COPIA.
+                    tmp = destino_dir / (".copiando-" + destino.name)
+                    shutil.copy2(str(mp3), str(tmp))
+                    tmp.rename(destino)
+                    estado.setdefault("originales_por_borrar", []).append({"original": str(mp3), "copia": str(destino)})
+                escribir_etiquetas(destino, c, gain, bpm, estado, False)
             if genero == COMODIN and c.get("genero_sugerido"):
                 espera = estado.setdefault("en_espera", {}).setdefault(c["genero_sugerido"], [])
                 if str(destino) not in espera:
