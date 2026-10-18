@@ -22,6 +22,11 @@ export interface TrackInfo {
   bpm: number | null;
   duration: number | null;
   bpm_manual: boolean;
+  // Etiquetas ID3 (las escribe la skill /Organizar_Canciones)
+  title: string | null;
+  artist: string | null;
+  genre: string | null;
+  gain_db: number | null; // ReplayGain en dB
 }
 
 export interface FolderNode {

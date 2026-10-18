@@ -23,6 +23,7 @@ export function TrackList() {
   const search = useStore((s) => s.search);
   const setSearch = useStore((s) => s.setSearch);
   const selectedFolder = useStore((s) => s.selectedFolder);
+  const selectedArtist = useStore((s) => s.selectedArtist);
   const highlightTrack = useStore((s) => s.highlightTrack);
   const analyzing = useStore((s) => s.analyzing);
   const setAnalyzing = useStore((s) => s.setAnalyzing);
@@ -35,14 +36,19 @@ export function TrackList() {
     const q = search.trim().toLowerCase();
     return library.tracks.filter((t) => {
       const inFolder = !selectedFolder || t.folder.startsWith(selectedFolder);
-      const matches = !q || t.name.toLowerCase().includes(q);
-      return inFolder && matches;
+      const ofArtist = !selectedArtist || (t.artist ?? "") === selectedArtist;
+      const matches =
+        !q ||
+        t.name.toLowerCase().includes(q) ||
+        (t.title ?? "").toLowerCase().includes(q) ||
+        (t.artist ?? "").toLowerCase().includes(q);
+      return inFolder && ofArtist && matches;
     });
-  }, [library, search, selectedFolder]);
+  }, [library, search, selectedFolder, selectedArtist]);
 
   const loadToDeck = (deckId: DeckId, t: TrackInfo) => {
     const doLoad = () => {
-      void engine.load(deckId, t.path, t.bpm, t.name);
+      void engine.load(deckId, t.path, t.bpm, t.name, t.gain_db);
       showToast(`Cargando en Deck ${deckId}: ${t.name}`);
     };
     // Aviso de seguridad: no cortar por accidente una cancion que esta sonando.
@@ -158,7 +164,8 @@ export function TrackList() {
             onDoubleClick={() => loadToDeck("A", t)}
           >
             <span className="t-name" title={t.name}>
-              {t.name}
+              {t.title ?? t.name}
+              {t.artist && <span className="t-artist"> · {t.artist}</span>}
             </span>
             <span
               className={`t-bpm ${t.bpm === null ? "unknown" : ""}`}

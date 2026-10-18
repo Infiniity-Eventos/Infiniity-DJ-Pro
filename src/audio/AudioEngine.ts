@@ -172,7 +172,13 @@ class AudioEngine {
 
   // -------- Carga --------
 
-  async load(id: DeckId, path: string, naturalBpm: number | null, trackName: string): Promise<void> {
+  async load(
+    id: DeckId,
+    path: string,
+    naturalBpm: number | null,
+    trackName: string,
+    gainDb: number | null = null
+  ): Promise<void> {
     this.ensure();
     const d = this.deck(id);
     this.cancelRateAnim(id);
@@ -223,7 +229,12 @@ class AudioEngine {
 
     d.buffer = buffer;
     d.offset = 0;
-    d.normGain.gain.value = this.computeNormGain(buffer);
+    // Si la cancion trae ReplayGain (lo escribe la skill), se usa directo:
+    // suena pareja desde el primer segundo. Si no, se mide como antes.
+    d.normGain.gain.value =
+      gainDb !== null && Number.isFinite(gainDb)
+        ? clamp(Math.pow(10, gainDb / 20), 0.25, 4)
+        : this.computeNormGain(buffer);
     patchDeck(id, { duration: buffer.duration, loading: false });
   }
 

@@ -18,6 +18,51 @@ pub struct TrackInfo {
     pub bpm: Option<f32>,
     pub duration: Option<f32>,
     pub bpm_manual: bool,
+    // --- Etiquetas ID3 (las escribe la skill /Organizar_Canciones) ---
+    pub title: Option<String>,  // TIT2
+    pub artist: Option<String>, // TPE1 ("Artista x Colab1 x Colab2")
+    pub genre: Option<String>,  // TCON
+    pub gain_db: Option<f32>,   // TXXX:REPLAYGAIN_TRACK_GAIN, en dB
+}
+
+/// Lo que la app necesita de las etiquetas de un MP3. Solo lee la cabecera:
+/// rapido incluso con cientos de canciones. Un archivo sin etiquetas (o un WAV)
+/// devuelve todo None.
+struct Etiquetas {
+    title: Option<String>,
+    artist: Option<String>,
+    genre: Option<String>,
+    bpm: Option<f32>,
+    gain_db: Option<f32>,
+}
+
+fn leer_etiquetas(p: &Path) -> Etiquetas {
+    let vacio = Etiquetas { title: None, artist: None, genre: None, bpm: None, gain_db: None };
+    let Ok(tag) = id3::Tag::read_from_path(p) else { return vacio };
+    use id3::TagLike;
+    let limpio = |s: Option<&str>| {
+        s.map(|x| x.trim_matches(|c: char| c == '\0' || c.is_whitespace()))
+            .filter(|x| !x.is_empty())
+            .map(str::to_string)
+    };
+    let bpm = tag
+        .get("TBPM")
+        .and_then(|f| f.content().text())
+        .and_then(|t| t.trim().parse::<f32>().ok())
+        .filter(|b| *b > 0.0);
+    // ReplayGain va como texto "-6.20 dB" en un TXXX.
+    let gain_db = tag
+        .extended_texts()
+        .find(|e| e.description.eq_ignore_ascii_case("REPLAYGAIN_TRACK_GAIN"))
+        // mutagen deja un NUL al final del texto ("-6.20 dB\0"): fuera.
+        .and_then(|e| e.value.trim_matches(|c: char| c == '\0' || c.is_whitespace()).trim_end_matches("dB").trim().parse::<f32>().ok());
+    Etiquetas {
+        title: limpio(tag.title()),
+        artist: limpio(tag.artist()),
+        genre: limpio(tag.genre_parsed().as_deref()),
+        bpm,
+        gain_db,
+    }
 }
 
 #[derive(Serialize)]
@@ -140,6 +185,7 @@ pub fn read_library(root: &str, cache: &mut Cache) -> Result<LibraryData, String
             .get(&key)
             .or_else(|| crate::cache::clave_relativa(root_path, p, size).and_then(|r| cache.get_relativa(&r)))
             .unwrap_or_default();
+        let et = leer_etiquetas(p);
 
         tracks.push(TrackInfo {
             name: p
@@ -160,9 +206,14 @@ pub fn read_library(root: &str, cache: &mut Cache) -> Result<LibraryData, String
             ext,
             size,
             modified,
-            bpm: cached.bpm,
+            // BPM: lo corregido a mano manda; si no, la etiqueta; si no, el cache.
+            bpm: if cached.manual { cached.bpm } else { et.bpm.or(cached.bpm) },
             duration: cached.duration,
             bpm_manual: cached.manual,
+            title: et.title,
+            artist: et.artist,
+            genre: et.genre,
+            gain_db: et.gain_db,
         });
     }
 

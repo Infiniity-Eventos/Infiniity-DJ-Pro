@@ -1,19 +1,28 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useStore } from "../state/store";
 import type { FolderNode } from "../lib/tauri";
-import { createFolder, moveTrack } from "../lib/tauri";
+import { moveTrack } from "../lib/tauri";
 import { reloadLibrary } from "../lib/library";
 
-function FolderRow({ node, depth }: { node: FolderNode; depth: number }) {
+/**
+ * Panel izquierdo con DOS modos:
+ * - GÉNEROS: las carpetas de la biblioteca, planas (una por género), con
+ *   "Sin clasificar" de primera para tenerla a mano. Se puede soltar una
+ *   cancion encima para moverla (solo en el PC original).
+ * - ARTISTAS: la lista de artistas que sale de la etiqueta de cada cancion
+ *   (la escribe la skill /Organizar_Canciones, uniforme). Clic = todas las
+ *   canciones de ese artista.
+ * Sin "Nueva carpeta": las carpetas las crea la skill al organizar.
+ */
+const SIN_CLASIFICAR = "Sin clasificar";
+
+function FilaCarpeta({ node }: { node: FolderNode }) {
   const selectedFolder = useStore((s) => s.selectedFolder);
   const setSelectedFolder = useStore((s) => s.setSelectedFolder);
   const showToast = useStore((s) => s.showToast);
-  const [open, setOpen] = useState(depth < 1);
-  const [dropping, setDropping] = useState(false);
-
-  const active = selectedFolder === node.path;
-
   const modoEquipo = useStore((s) => s.sync?.rol === "equipo");
+  const [dropping, setDropping] = useState(false);
+  const active = selectedFolder === node.path;
 
   const onDrop = async (e: React.DragEvent) => {
     e.preventDefault();
@@ -36,49 +45,20 @@ function FolderRow({ node, depth }: { node: FolderNode; depth: number }) {
   };
 
   return (
-    <div className="folder-node">
-      <div
-        className={`folder-row ${active ? "active" : ""} ${dropping ? "drop-target" : ""}`}
-        onClick={() => setSelectedFolder(node.path)}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDropping(true);
-        }}
-        onDragLeave={() => setDropping(false)}
-        onDrop={onDrop}
-      >
-        {node.children.length > 0 ? (
-          <span
-            style={{ width: 14, cursor: "pointer" }}
-            onClick={(e) => {
-              e.stopPropagation();
-              setOpen(!open);
-            }}
-          >
-            {open ? "▾" : "▸"}
-          </span>
-        ) : (
-          <span style={{ width: 14 }} />
-        )}
-        <span>{depth === 0 ? "🎵" : "📁"}</span>
-        <span
-          style={{
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {node.name}
-        </span>
-        <span className="count">{node.track_count > 0 ? node.track_count : ""}</span>
-      </div>
-      {open && node.children.length > 0 && (
-        <div className="folder-children">
-          {node.children.map((c) => (
-            <FolderRow key={c.path} node={c} depth={depth + 1} />
-          ))}
-        </div>
-      )}
+    <div
+      className={`folder-row ${active ? "active" : ""} ${dropping ? "drop-target" : ""}`}
+      onClick={() => setSelectedFolder(node.path)}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDropping(true);
+      }}
+      onDragLeave={() => setDropping(false)}
+      onDrop={onDrop}
+      title={node.path}
+    >
+      <span>{node.name === SIN_CLASIFICAR ? "📥" : "📁"}</span>
+      <span className="folder-name">{node.name}</span>
+      <span className="count">{node.track_count}</span>
     </div>
   );
 }
@@ -87,41 +67,85 @@ export function FolderTree() {
   const library = useStore((s) => s.library);
   const selectedFolder = useStore((s) => s.selectedFolder);
   const setSelectedFolder = useStore((s) => s.setSelectedFolder);
-  const showToast = useStore((s) => s.showToast);
-  const modoEquipo = useStore((s) => s.sync?.rol === "equipo");
+  const selectedArtist = useStore((s) => s.selectedArtist);
+  const setSelectedArtist = useStore((s) => s.setSelectedArtist);
+  const vista = useStore((s) => s.vistaCarpetas);
+  const setVista = useStore((s) => s.setVistaCarpetas);
 
-  const newFolder = () => {
-    const parent = selectedFolder ?? library?.root;
-    if (!parent) return;
-    // Cuadro propio (NO window.prompt) para no bloquear el audio.
-    useStore.getState().askPrompt("Nombre de la nueva carpeta (ej: Merengue)", "", async (name) => {
-      if (!name.trim()) return;
-      try {
-        await createFolder(parent, name.trim());
-        await reloadLibrary();
-        showToast(`Carpeta "${name.trim()}" creada`);
-      } catch (err) {
-        showToast(err instanceof Error ? err.message : "No se pudo crear");
-      }
-    });
-  };
+  // Carpetas de primer nivel: "Sin clasificar" primero, el resto por nombre.
+  const carpetas = useMemo(() => {
+    const hijos = library?.tree.children ?? [];
+    const sin = hijos.filter((n) => n.name === SIN_CLASIFICAR);
+    const resto = hijos
+      .filter((n) => n.name !== SIN_CLASIFICAR)
+      .sort((a, b) => a.name.localeCompare(b.name, "es"));
+    return [...sin, ...resto];
+  }, [library]);
+
+  // Artistas desde la etiqueta; sin etiqueta = "Sin artista" (lo que la skill no ha organizado).
+  const artistas = useMemo(() => {
+    const conteo = new Map<string, number>();
+    for (const t of library?.tracks ?? []) {
+      const a = t.artist ?? "";
+      conteo.set(a, (conteo.get(a) ?? 0) + 1);
+    }
+    const lista = [...conteo.entries()]
+      .filter(([a]) => a !== "")
+      .sort((x, y) => x[0].localeCompare(y[0], "es"));
+    const sin = conteo.get("") ?? 0;
+    return { lista, sin };
+  }, [library]);
+
+  const total = library?.tracks.length ?? 0;
+  const todasActiva = vista === "generos" ? selectedFolder === null : selectedArtist === null;
 
   return (
     <div className="glass folder-tree">
-      <h3>Carpetas</h3>
-      <div
-        className={`folder-row ${selectedFolder === null ? "active" : ""}`}
-        onClick={() => setSelectedFolder(null)}
-      >
-        <span style={{ width: 14 }} />
-        <span>🗂️</span>
-        <span>Todas las canciones</span>
-      </div>
-      {library && <FolderRow node={library.tree} depth={0} />}
-      {!modoEquipo && (
-        <button className="btn" style={{ marginTop: 10, width: "100%" }} onClick={newFolder}>
-          ＋ Nueva carpeta
+      <div className="folder-tabs">
+        <button className={`btn folder-tab ${vista === "generos" ? "active" : ""}`} onClick={() => setVista("generos")}>
+          Géneros
         </button>
+        <button className={`btn folder-tab ${vista === "artistas" ? "active" : ""}`} onClick={() => setVista("artistas")}>
+          Artistas
+        </button>
+      </div>
+
+      <div
+        className={`folder-row ${todasActiva ? "active" : ""}`}
+        onClick={() => (vista === "generos" ? setSelectedFolder(null) : setSelectedArtist(null))}
+      >
+        <span>🗂️</span>
+        <span className="folder-name">Todas las canciones</span>
+        <span className="count">{total}</span>
+      </div>
+
+      {vista === "generos" && carpetas.map((n) => <FilaCarpeta key={n.path} node={n} />)}
+
+      {vista === "artistas" && (
+        <>
+          {artistas.lista.map(([a, n]) => (
+            <div
+              key={a}
+              className={`folder-row ${selectedArtist === a ? "active" : ""}`}
+              onClick={() => setSelectedArtist(a)}
+              title={a}
+            >
+              <span>🎤</span>
+              <span className="folder-name">{a}</span>
+              <span className="count">{n}</span>
+            </div>
+          ))}
+          {artistas.sin > 0 && (
+            <div className="folder-row sync-dim" title="Canciones que la skill todavía no ha organizado">
+              <span>❔</span>
+              <span className="folder-name">Sin artista (sin organizar)</span>
+              <span className="count">{artistas.sin}</span>
+            </div>
+          )}
+          {artistas.lista.length === 0 && (
+            <div className="folder-hint">Aquí aparecen los artistas cuando la skill /Organizar_Canciones organiza las canciones.</div>
+          )}
+        </>
       )}
     </div>
   );

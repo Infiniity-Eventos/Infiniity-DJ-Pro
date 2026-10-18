@@ -349,8 +349,30 @@ pub fn run() {
                     for n in &l.tree.children {
                         println!("  {} -> {}", n.name, n.track_count);
                     }
+                    for t in l.tracks.iter().take(3) {
+                        println!(
+                            "  · {} | titulo={:?} artista={:?} genero={:?} bpm={:?} gain={:?}",
+                            t.file_name, t.title, t.artist, t.genre, t.bpm, t.gain_db
+                        );
+                    }
                 }
                 Err(e) => println!("ERROR: {e}"),
+            }
+            std::process::exit(0);
+        }
+    }
+    // `infiniity-dj --bpm-cli <archivo>`: BPM y duracion desde la terminal (lo
+    // usa la skill /Organizar_Canciones cuando internet no da el BPM).
+    {
+        let args: Vec<String> = std::env::args().collect();
+        if let Some(i) = args.iter().position(|a| a == "--bpm-cli") {
+            let ruta = args.get(i + 1).cloned().unwrap_or_default();
+            match bpm::analyze(&ruta) {
+                Ok(r) => println!("{{\"bpm\": {:.1}, \"duration\": {:.1}}}", r.bpm, r.duration),
+                Err(e) => {
+                    eprintln!("ERROR: {e}");
+                    std::process::exit(1);
+                }
             }
             std::process::exit(0);
         }

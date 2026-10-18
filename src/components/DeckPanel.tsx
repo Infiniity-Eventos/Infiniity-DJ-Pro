@@ -24,7 +24,7 @@ export function DeckPanel({ deckId }: { deckId: DeckId }) {
     const t = library.tracks.find((x) => x.path === path);
     if (!t) return;
     const doLoad = () => {
-      void engine.load(deckId, t.path, t.bpm, t.name);
+      void engine.load(deckId, t.path, t.bpm, t.name, t.gain_db);
       showToast(`Cargando en Deck ${deckId}: ${t.name}`);
     };
     // Aviso de seguridad: no cortar por accidente una cancion que esta sonando.

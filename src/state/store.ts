@@ -55,6 +55,8 @@ interface AppStore {
   libraryLoading: boolean;
   search: string;
   selectedFolder: string | null;
+  selectedArtist: string | null; // filtro por artista (modo Artistas del panel)
+  vistaCarpetas: "generos" | "artistas";
   settings: Settings;
   midiConnected: boolean;
   midiPort: string | null;
@@ -84,6 +86,8 @@ interface AppStore {
   setLibraryLoading: (v: boolean) => void;
   setSearch: (s: string) => void;
   setSelectedFolder: (p: string | null) => void;
+  setSelectedArtist: (a: string | null) => void;
+  setVistaCarpetas: (v: "generos" | "artistas") => void;
   setSettings: (s: Partial<Settings>) => void;
   setMidi: (connected: boolean, port: string | null) => void;
   showToast: (msg: string) => void;
@@ -208,6 +212,8 @@ export const useStore = create<AppStore>((set, get) => ({
   libraryLoading: false,
   search: "",
   selectedFolder: null,
+  selectedArtist: null,
+  vistaCarpetas: "generos",
   settings: initial.settings,
   midiConnected: false,
   midiPort: null,
@@ -253,7 +259,10 @@ export const useStore = create<AppStore>((set, get) => ({
   setLibrary: (l) => set({ library: l }),
   setLibraryLoading: (v) => set({ libraryLoading: v }),
   setSearch: (s) => set({ search: s }),
-  setSelectedFolder: (p) => set({ selectedFolder: p }),
+  // Elegir carpeta quita el filtro de artista y viceversa: un filtro a la vez.
+  setSelectedFolder: (p) => set({ selectedFolder: p, selectedArtist: null }),
+  setSelectedArtist: (a) => set({ selectedArtist: a, selectedFolder: null }),
+  setVistaCarpetas: (v) => set({ vistaCarpetas: v }),
   setSettings: (s) => {
     set((st) => ({ settings: { ...st.settings, ...s } }));
     savePrefs(get());

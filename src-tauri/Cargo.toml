@@ -56,6 +56,9 @@ lzma-rs = "0.3"
 tar = "0.4"
 # Descomprimir el .tar.gz de Syncthing (sincronizacion de la biblioteca).
 flate2 = "1"
+# Leer etiquetas ID3 de los MP3 (titulo, artista, genero, BPM, ReplayGain): la
+# skill /Organizar_Canciones las escribe y la app las lee en todas las PC.
+id3 = "1"
 
 # Para enterarnos cuando el proceso que dibuja se cae (ver arranque.rs). Misma
 # version y features que usa Tauri por dentro; no agrega nada al paquete.

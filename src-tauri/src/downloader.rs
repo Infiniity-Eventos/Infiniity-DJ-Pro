@@ -395,6 +395,12 @@ fn descargar_con(
             &js_runtime,
             "--ffmpeg-location",
             &ffmpeg_dir,
+            // Etiquetas de YouTube (titulo, artista si lo sabe) y el id del
+            // video en el comentario: la skill /Organizar_Canciones las toma
+            // como punto de partida y las reemplaza por las de internet.
+            "--embed-metadata",
+            "--parse-metadata",
+            "%(id)s:%(meta_comment)s",
             "-o",
             &out_template,
             "--print",
