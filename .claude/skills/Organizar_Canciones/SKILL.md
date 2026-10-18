@@ -20,7 +20,8 @@ Léela si algo de aquí no cuadra: **la guía manda**.
 ## Catálogo de carpetas (D14) — "colombianizado", muy por encima
 
 `Merengue · Salsa · Salsa Choque · Bachata · Vallenato · Reggaeton · Champeta · Boleros ·
-Viejoteca · Cumbia · Pop · Rock · Electronica · Crossover · Trap · Hora Loca` y la comodín `Otros`.
+Viejoteca · Cumbia · Pop · Rock · Electronica · Crossover · Trap · Hora Loca · Mexicana · Carranga` y la comodín `Otros`.
+(Mexicana y Carranga se crearon el 2026-10-18 al juntar 6 y 4 canciones.)
 
 Reglas de criterio (tú decides cuando el script dice `genero_seguro: false` o `?`):
 - Nada de subgéneros: "Trap Dark", "Trap Soul", "Drill" → **Trap**. "Rap/hip hop" latino → Trap.

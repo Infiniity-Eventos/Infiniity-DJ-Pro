@@ -14,7 +14,7 @@ from pathlib import Path
 CATALOGO = [
     "Merengue", "Salsa", "Salsa Choque", "Bachata", "Vallenato", "Reggaeton",
     "Champeta", "Boleros", "Viejoteca", "Cumbia", "Pop", "Rock", "Electronica",
-    "Crossover", "Trap", "Hora Loca",
+    "Crossover", "Trap", "Hora Loca", "Mexicana", "Carranga",
 ]
 COMODIN = "Otros"           # carpeta comodin (D4): lo que no encaja todavia
 SIN_CLASIFICAR = "Sin clasificar"
@@ -65,6 +65,8 @@ PALABRAS_MINUSCULA = {"de", "del", "la", "las", "el", "los", "y", "e", "a", "en"
 def titulo_bonito(s: str) -> str:
     """Cada Palabra Con Mayuscula Inicial, sin acentos ni simbolos raros (D16).
     Las particulas (de, la, y...) van en minuscula salvo al principio."""
+    # "(feat. X)", "(with X)", "[ft. X]": los colaboradores ya van en el artista.
+    s = re.sub(r"[\(\[]\s*(feat|ft|with|con)\.?\s[^\)\]]*[\)\]]", " ", s, flags=re.IGNORECASE)
     s = sin_acentos(s)
     s = re.sub(r"[^A-Za-z0-9 \-x'&.]", " ", s)
     s = re.sub(r"\s+", " ", s).strip()

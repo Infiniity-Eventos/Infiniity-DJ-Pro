@@ -13,7 +13,7 @@ from pathlib import Path
 
 CATALOGO_OPCIONES = ["Merengue", "Salsa", "Salsa Choque", "Bachata", "Vallenato", "Reggaeton", "Champeta",
                      "Boleros", "Viejoteca", "Cumbia", "Pop", "Rock", "Electronica", "Crossover", "Trap",
-                     "Hora Loca", "Otros", "Dejar en Sin clasificar", "Borrar"]
+                     "Hora Loca", "Mexicana", "Carranga", "Otros", "Dejar en Sin clasificar", "Borrar"]
 
 
 def main():
