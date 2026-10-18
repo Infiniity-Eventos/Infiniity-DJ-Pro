@@ -74,6 +74,12 @@ pub struct SyncConfig {
     pub id_original: String,
     /// Original: carpeta de música compartida (la raíz de la biblioteca).
     pub raiz: String,
+    /// Original: PC quitadas a mano. Aunque traigan el código, no vuelven a entrar.
+    #[serde(default)]
+    pub bloqueados: Vec<String>,
+    /// Equipo: nombre con el que esta PC se presenta ("Portátil Sharon"). Vacío = nombre del equipo.
+    #[serde(default)]
+    pub nombre_pc: String,
 }
 
 static DATOS: OnceLock<PathBuf> = OnceLock::new();
@@ -153,9 +159,12 @@ fn nombre_dispositivo(c: &SyncConfig) -> String {
     let host = std::fs::read_to_string("/etc/hostname")
         .map(|s| s.trim().to_string())
         .unwrap_or_else(|_| "PC".to_string());
+    // El nombre lleva "|" como separador: el que ponga la persona no debe traerlo.
+    let propio = c.nombre_pc.replace('|', "/").trim().to_string();
+    let nombre = if propio.is_empty() { host } else { propio };
     match c.rol {
-        Rol::Original => format!("Infiniity DJ Original|{host}"),
-        _ => format!("Infiniity DJ|{host}|{}", c.secreto),
+        Rol::Original => format!("Infiniity DJ Original|{nombre}"),
+        _ => format!("Infiniity DJ|{nombre}|{}", c.secreto),
     }
 }
 
@@ -327,6 +336,7 @@ fn api_enviar(apikey: &str, metodo: &str, ruta: &str, cuerpo: Option<&serde_json
         "POST" => c.post(format!("{}{ruta}", api())),
         "PUT" => c.put(format!("{}{ruta}", api())),
         "PATCH" => c.patch(format!("{}{ruta}", api())),
+        "DELETE" => c.delete(format!("{}{ruta}", api())),
         _ => return Err(format!("método {metodo} no soportado")),
     };
     let req = match cuerpo {
@@ -590,6 +600,9 @@ pub fn cambiar_secreto() -> Result<String, String> {
         return Err("Esta PC no es el original".to_string());
     }
     c.secreto = aleatorio(8);
+    // Código nuevo = borrón y cuenta nueva: las PC quitadas pueden volver a
+    // entrar SOLO si alguien les da este código nuevo.
+    c.bloqueados.clear();
     guardar_config(&c)?;
     configurar_base(&c)?;
     codigo_actual()
@@ -620,6 +633,12 @@ pub fn aceptar_pendientes() -> Result<usize, String> {
     let mut aceptados = 0;
     for (id, info) in mapa {
         let nombre = info["name"].as_str().unwrap_or("");
+        if c.bloqueados.contains(id) {
+            // Quitada a mano: no entra aunque traiga el código. Se descarta la
+            // solicitud para que no quede pendiente para siempre.
+            let _ = api_enviar(&c.apikey, "DELETE", &format!("/rest/cluster/pending/devices?device={id}"), None);
+            continue;
+        }
         let trae_secreto = nombre.starts_with("Infiniity DJ|") && nombre.ends_with(&format!("|{}", c.secreto));
         if !trae_secreto {
             eprintln!("sync: PC pendiente sin el código correcto ({nombre}); se ignora");
@@ -645,6 +664,53 @@ pub fn aceptar_pendientes() -> Result<usize, String> {
     Ok(aceptados)
 }
 
+/// Original: ponerle nombre a una PC del equipo, para saber cuál es cuál.
+pub fn renombrar_pc(id: &str, nombre: &str) -> Result<(), String> {
+    let c = leer_config();
+    if c.rol != Rol::Original {
+        return Err("Solo el PC original puede renombrar".to_string());
+    }
+    let nombre = nombre.replace('|', "/").trim().to_string();
+    if nombre.is_empty() {
+        return Err("El nombre no puede estar vacío".to_string());
+    }
+    api_enviar(
+        &c.apikey,
+        "PATCH",
+        &format!("/rest/config/devices/{id}"),
+        Some(&serde_json::json!({ "name": nombre })),
+    )
+}
+
+/// Original: saca una PC del grupo. Deja de recibir y de subir, y queda
+/// bloqueada: aunque tenga el código no vuelve a entrar sola. Para readmitirla
+/// hay que darle un código NUEVO (cambiar código la desbloquea).
+pub fn quitar_pc(id: &str) -> Result<(), String> {
+    let mut c = leer_config();
+    if c.rol != Rol::Original {
+        return Err("Solo el PC original puede quitar PC del grupo".to_string());
+    }
+    for carpeta in [CARPETA_BIBLIOTECA, CARPETA_SIN_CLASIFICAR, CARPETA_BPM] {
+        let mut f = api_get(&c.apikey, &format!("/rest/config/folders/{carpeta}"))?;
+        let devs: Vec<serde_json::Value> = f["devices"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|d| d["deviceID"].as_str() != Some(id))
+            .collect();
+        f["devices"] = serde_json::Value::Array(devs);
+        api_enviar(&c.apikey, "PUT", &format!("/rest/config/folders/{carpeta}"), Some(&f))?;
+    }
+    api_enviar(&c.apikey, "DELETE", &format!("/rest/config/devices/{id}"), None)?;
+    if !c.bloqueados.contains(&id.to_string()) {
+        c.bloqueados.push(id.to_string());
+    }
+    guardar_config(&c)?;
+    eprintln!("sync: PC quitada del grupo: {id}");
+    Ok(())
+}
+
 fn compartir_carpeta_con(apikey: &str, carpeta: &str, dispositivo: &str) -> Result<(), String> {
     let mut f = api_get(apikey, &format!("/rest/config/folders/{carpeta}"))?;
     let mut devs = f["devices"].as_array().cloned().unwrap_or_default();
@@ -660,7 +726,7 @@ fn compartir_carpeta_con(apikey: &str, carpeta: &str, dispositivo: &str) -> Resu
 // ---------------------------------------------------------------------------
 
 /// Une esta PC al grupo con el código. Deja todo listo para recibir.
-pub fn unirse(codigo_texto: &str) -> Result<(), String> {
+pub fn unirse(codigo_texto: &str, nombre_pc: &str) -> Result<(), String> {
     let texto = codigo_texto.trim();
     let partes: Vec<&str> = texto.splitn(3, '-').collect();
     if partes.len() != 3 || partes[0] != PREFIJO_CODIGO {
@@ -681,6 +747,7 @@ pub fn unirse(codigo_texto: &str) -> Result<(), String> {
     c.rol = Rol::Equipo;
     c.secreto = secreto.to_string();
     c.id_original = id_original.to_string();
+    c.nombre_pc = nombre_pc.trim().to_string();
     guardar_config(&c)?;
     asegurar_syncthing()?;
     let c = leer_config(); // la clave de la API pudo generarse recién
@@ -846,6 +913,7 @@ pub fn aplicar_velocidad() -> Result<(), String> {
 
 #[derive(Serialize, Clone)]
 pub struct PcConectada {
+    pub id: String,
     pub nombre: String,
     pub conectado: bool,
     pub ultimo_visto: String,
@@ -909,8 +977,13 @@ pub fn estado() -> SyncEstado {
                 .unwrap_or(0.0);
             let nombre = d["name"].as_str().unwrap_or("PC").to_string();
             e.pcs.push(PcConectada {
+                id: id.to_string(),
                 // Sin el secreto, que es privado.
-                nombre: nombre.split('|').nth(1).unwrap_or(&nombre).to_string(),
+                nombre: if nombre.starts_with("Infiniity DJ") {
+                    nombre.split('|').nth(1).unwrap_or(&nombre).to_string()
+                } else {
+                    nombre.clone()
+                },
                 conectado,
                 ultimo_visto: con["at"].as_str().unwrap_or("").to_string(),
                 completado,
@@ -989,7 +1062,7 @@ pub fn correr_cli(args: &[String]) -> ! {
         "estado" => serde_json::to_string_pretty(&estado()).map_err(|e| e.to_string()),
         "crear" => crear_grupo(&arg),
         "codigo" => codigo_actual(),
-        "unirse" => unirse(&arg).map(|_| "unida".to_string()),
+        "unirse" => unirse(&arg, "").map(|_| "unida".to_string()),
         "autorizar" => {
             marcar(Some(true), None, Some(false));
             aplicar_velocidad().map(|_| "autorizado".to_string())
@@ -1003,6 +1076,11 @@ pub fn correr_cli(args: &[String]) -> ! {
             aplicar_velocidad().map(|_| format!("musica={}", arg == "1"))
         }
         "servicio" => instalar_servicio_agente(),
+        "quitar" => quitar_pc(&arg).map(|_| "quitada".to_string()),
+        "renombrar" => match arg.split_once('=') {
+            Some((id, nombre)) => renombrar_pc(id, nombre).map(|_| "renombrada".to_string()),
+            None => Err("uso: renombrar <id>=<nombre>".to_string()),
+        },
         "salir" => salir_del_grupo().map(|_| "fuera".to_string()),
         "log" => Ok(ultimas_lineas_log(40)),
         "parar" => {

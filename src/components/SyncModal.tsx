@@ -6,6 +6,8 @@ import {
   syncCambiarSecreto,
   syncAutorizar,
   syncInstalarServicio,
+  syncQuitarPc,
+  syncRenombrarPc,
   syncSalir,
   syncLog,
 } from "../lib/tauri";
@@ -28,6 +30,7 @@ export function SyncModal() {
   const musicRoot = useStore((s) => s.musicRoot);
   const showToast = useStore((s) => s.showToast);
   const askConfirm = useStore((s) => s.askConfirm);
+  const askPrompt = useStore((s) => s.askPrompt);
 
   const [codigo, setCodigo] = useState("");
   const [ocupado, setOcupado] = useState("");
@@ -139,12 +142,38 @@ export function SyncModal() {
             {sync.pcs.length === 0 && <div className="modal-msg">Ninguna todavía. En cuanto una entre con el código, aparece aquí.</div>}
             <ul className="sync-pcs">
               {sync.pcs.map((p) => (
-                <li key={p.nombre + p.ultimo_visto}>
+                <li key={p.id}>
                   <span className={`midi-dot ${p.conectado ? "on" : "off"}`} />
                   <b>{p.nombre}</b>
                   <span className="sync-dim">
                     {p.conectado ? ` · conectada · tiene el ${Math.round(p.completado)}% de la biblioteca` : " · desconectada"}
                   </span>
+                  <span className="spacer" />
+                  <button
+                    className="btn dl-mini"
+                    disabled={!!ocupado}
+                    title="Ponerle un nombre para saber qué PC es"
+                    onClick={() =>
+                      askPrompt("Nombre para esta PC (ej: Portátil Sharon)", p.nombre, (n) => {
+                        if (n.trim()) void correr("renombrar", () => syncRenombrarPc(p.id, n), "Nombre guardado");
+                      })
+                    }
+                  >
+                    Renombrar
+                  </button>
+                  <button
+                    className="btn dl-mini sync-peligro"
+                    disabled={!!ocupado}
+                    title="Sacarla del grupo: deja de recibir y de subir, y no puede volver a entrar con el código actual"
+                    onClick={() =>
+                      askConfirm(
+                        `¿Quitar a "${p.nombre}" del grupo? Deja de recibir y de subir música, y no podrá volver a entrar con el código actual (solo con uno nuevo).`,
+                        () => void correr("quitar", () => syncQuitarPc(p.id), `${p.nombre} quitada del grupo`)
+                      )
+                    }
+                  >
+                    Quitar
+                  </button>
                 </li>
               ))}
             </ul>

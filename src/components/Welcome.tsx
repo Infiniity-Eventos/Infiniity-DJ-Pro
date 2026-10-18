@@ -11,6 +11,7 @@ import { syncUnirse } from "../lib/tauri";
 export function Welcome() {
   const showToast = useStore((s) => s.showToast);
   const [codigo, setCodigo] = useState("");
+  const [nombre, setNombre] = useState("");
   const [uniendo, setUniendo] = useState(false);
   const [error, setError] = useState("");
 
@@ -20,7 +21,7 @@ export function Welcome() {
     setUniendo(true);
     setError("");
     try {
-      await syncUnirse(c);
+      await syncUnirse(c, nombre);
       // useSync fija la carpeta en cuanto Rust diga que el rol es "equipo".
       showToast("Unida al grupo. Empezando a recibir la biblioteca...");
     } catch (e) {
@@ -37,6 +38,13 @@ export function Welcome() {
         Pega aquí el <b>código</b> que te mandaron desde el PC original. La app crea su carpeta y
         empieza a recibir toda la música sola.
       </p>
+      <input
+        className="dl-input welcome-nombre"
+        placeholder="Nombre de esta PC (ej: Portátil Sharon)"
+        value={nombre}
+        onChange={(e) => setNombre(e.target.value)}
+        maxLength={40}
+      />
       <textarea
         className="dl-input welcome-codigo"
         placeholder="IDJ1-..."
@@ -48,7 +56,7 @@ export function Welcome() {
       <button
         className="btn btn-accent"
         style={{ fontSize: 18, padding: "14px 28px" }}
-        disabled={!codigo.trim() || uniendo}
+        disabled={!codigo.trim() || !nombre.trim() || uniendo}
         onClick={unirse}
       >
         {uniendo ? "Entrando (baja Syncthing, ~11 MB)..." : "🔁 Entrar al grupo con el código"}

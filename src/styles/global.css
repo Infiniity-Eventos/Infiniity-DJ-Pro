@@ -1020,6 +1020,9 @@ body {
 .btn.sync-off {
   opacity: 0.75;
 }
+.welcome-nombre {
+  width: min(560px, 90vw);
+}
 .welcome-codigo {
   width: min(560px, 90vw);
   font-family: ui-monospace, "DejaVu Sans Mono", monospace;

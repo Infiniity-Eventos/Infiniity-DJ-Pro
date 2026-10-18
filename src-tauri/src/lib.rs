@@ -265,8 +265,8 @@ async fn sync_cambiar_secreto() -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn sync_unirse(codigo: String) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || sync::unirse(&codigo))
+async fn sync_unirse(codigo: String, nombre: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || sync::unirse(&codigo, &nombre))
         .await
         .map_err(|e| e.to_string())?
 }
@@ -291,6 +291,20 @@ async fn sync_musica(sonando: bool) -> Result<(), String> {
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn sync_renombrar_pc(id: String, nombre: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || sync::renombrar_pc(&id, &nombre))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn sync_quitar_pc(id: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || sync::quitar_pc(&id))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -384,6 +398,8 @@ pub fn run() {
             sync_autorizar,
             sync_musica,
             sync_instalar_servicio,
+            sync_quitar_pc,
+            sync_renombrar_pc,
             sync_salir,
             sync_log,
             downloader::ytdl_tools,
