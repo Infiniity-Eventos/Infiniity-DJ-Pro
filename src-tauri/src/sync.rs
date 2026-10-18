@@ -481,7 +481,9 @@ fn mi_id(apikey: &str) -> Result<String, String> {
 /// clasificar" de la carpeta Biblioteca, porque se comparte aparte con otras reglas.
 fn escribir_stignore(raiz: &Path) -> Result<(), String> {
     std::fs::create_dir_all(raiz).map_err(|e| e.to_string())?;
-    std::fs::write(raiz.join(".stignore"), format!("/{SIN_CLASIFICAR}\n"))
+    // "/.organizar": carpeta de trabajo de la skill /Organizar_Canciones (planes,
+    // paginas de revision): solo tiene sentido en el PC original.
+    std::fs::write(raiz.join(".stignore"), format!("/{SIN_CLASIFICAR}\n/.organizar\n"))
         .map_err(|e| format!("No se pudo escribir .stignore: {e}"))
 }
 
