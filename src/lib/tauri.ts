@@ -205,6 +205,9 @@ export async function pickAudioFiles(): Promise<string[]> {
   if (Array.isArray(res)) return res.filter((r): r is string => typeof r === "string");
   return typeof res === "string" ? [res] : [];
 }
+/** Copia una carpeta entera (con o sin su estructura de subcarpetas). Devuelve [copiadas, saltadas]. */
+export const importFolder = (src: string, dest: string, conservarEstructura: boolean) =>
+  invoke<[number, number]>("import_folder", { src, dest, conservarEstructura });
 /** Copia canciones del computador a `dest` (Sin clasificar). Devuelve [copiadas, saltadas]. */
 export const importTracks = (paths: string[], dest: string) =>
   invoke<[number, number]>("import_tracks", { paths, dest });

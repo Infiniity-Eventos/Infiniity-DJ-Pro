@@ -254,6 +254,61 @@ pub fn import_tracks(paths: &[String], dest: &str) -> Result<(usize, usize), Str
     Ok((copiadas, saltadas))
 }
 
+/// Copia una carpeta entera del computador a la biblioteca.
+/// - `conservar_estructura` = true (PC original): se copian las subcarpetas tal
+///   cual bajo `dest` (meter ~/Música entera y que queden los generos).
+/// - false (PC del equipo): todas las canciones, de todos los niveles, caen
+///   planas en `dest` ("Sin clasificar"): ellos no crean carpetas.
+/// Se salta lo oculto, lo que no es audio y lo que ya existe. Si la carpeta
+/// elegida esta DENTRO de la biblioteca, no se hace nada (se copiaria sobre si misma).
+pub fn import_folder(src: &str, dest: &str, conservar_estructura: bool) -> Result<(usize, usize), String> {
+    let src_dir = Path::new(src);
+    let dest_dir = Path::new(dest);
+    if !src_dir.is_dir() {
+        return Err("Esa carpeta no existe".to_string());
+    }
+    if src_dir.starts_with(dest_dir) || dest_dir.starts_with(src_dir) {
+        return Err("Esa carpeta ya es parte de la biblioteca (o la contiene)".to_string());
+    }
+    let mut copiadas = 0;
+    let mut saltadas = 0;
+    for entry in walkdir::WalkDir::new(src_dir)
+        .follow_links(false)
+        .into_iter()
+        .filter_entry(|e| e.depth() == 0 || !es_oculto(e.path()))
+        .filter_map(|e| e.ok())
+    {
+        let p = entry.path();
+        if !p.is_file() {
+            continue;
+        }
+        if is_audio(p).is_none() {
+            saltadas += 1;
+            continue;
+        }
+        let Some(nombre) = p.file_name() else { saltadas += 1; continue };
+        let carpeta_destino = if conservar_estructura {
+            match p.parent().and_then(|par| par.strip_prefix(src_dir).ok()) {
+                Some(rel) => dest_dir.join(rel),
+                None => dest_dir.to_path_buf(),
+            }
+        } else {
+            dest_dir.to_path_buf()
+        };
+        std::fs::create_dir_all(&carpeta_destino).map_err(|e| format!("No se pudo crear {}: {e}", carpeta_destino.display()))?;
+        let destino = carpeta_destino.join(nombre);
+        if destino.exists() {
+            saltadas += 1;
+            continue;
+        }
+        let tmp = carpeta_destino.join(format!(".copiando-{}", nombre.to_string_lossy()));
+        std::fs::copy(p, &tmp).map_err(|e| format!("No se pudo copiar {}: {e}", nombre.to_string_lossy()))?;
+        std::fs::rename(&tmp, &destino).map_err(|e| format!("No se pudo guardar {}: {e}", nombre.to_string_lossy()))?;
+        copiadas += 1;
+    }
+    Ok((copiadas, saltadas))
+}
+
 /// Garantiza que exista la carpeta "Sin clasificar" dentro de la raiz.
 pub fn ensure_unclassified(root: &str) -> Result<String, String> {
     let dir = Path::new(root).join("Sin clasificar");
@@ -284,6 +339,38 @@ mod pruebas_import {
         assert_eq!((c, s), (0, 3));
         assert_eq!(std::fs::read(dest.join("a.mp3")).unwrap(), b"aaa");
         assert!(!dest.join(".copiando-a.mp3").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod pruebas_import_carpeta {
+    #[test]
+    fn carpeta_con_estructura_y_plana() {
+        let dir = std::env::temp_dir().join(format!("infiniity-impcarp-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let src = dir.join("Musica");
+        std::fs::create_dir_all(src.join("Salsa")).unwrap();
+        std::fs::create_dir_all(src.join("Merengue/Viejo")).unwrap();
+        std::fs::create_dir_all(src.join(".oculta")).unwrap();
+        std::fs::write(src.join("Salsa/a.mp3"), b"a").unwrap();
+        std::fs::write(src.join("Merengue/Viejo/b.wav"), b"b").unwrap();
+        std::fs::write(src.join("Merengue/nota.txt"), b"x").unwrap();
+        std::fs::write(src.join(".oculta/c.mp3"), b"c").unwrap();
+        // Original: conserva estructura.
+        let raiz = dir.join("Biblioteca");
+        let (c, s) = super::import_folder(src.to_str().unwrap(), raiz.to_str().unwrap(), true).unwrap();
+        assert_eq!((c, s), (2, 1));
+        assert!(raiz.join("Salsa/a.mp3").is_file());
+        assert!(raiz.join("Merengue/Viejo/b.wav").is_file());
+        assert!(!raiz.join(".oculta").exists());
+        // Equipo: todo plano en Sin clasificar.
+        let sin = dir.join("Sin clasificar");
+        let (c, s) = super::import_folder(src.to_str().unwrap(), sin.to_str().unwrap(), false).unwrap();
+        assert_eq!((c, s), (2, 1));
+        assert!(sin.join("a.mp3").is_file() && sin.join("b.wav").is_file());
+        // Dentro de la biblioteca: se niega.
+        assert!(super::import_folder(raiz.join("Salsa").to_str().unwrap(), raiz.to_str().unwrap(), true).is_err());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

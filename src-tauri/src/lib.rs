@@ -56,6 +56,11 @@ fn import_tracks(paths: Vec<String>, dest: String) -> Result<(usize, usize), Str
 }
 
 #[tauri::command]
+fn import_folder(src: String, dest: String, conservar_estructura: bool) -> Result<(usize, usize), String> {
+    library::import_folder(&src, &dest, conservar_estructura)
+}
+
+#[tauri::command]
 fn ensure_unclassified(root: String) -> Result<String, String> {
     library::ensure_unclassified(&root)
 }
@@ -385,6 +390,7 @@ pub fn run() {
             create_folder,
             ensure_unclassified,
             import_tracks,
+            import_folder,
             read_media,
             system_stats,
             diag_reveal,

@@ -3,6 +3,8 @@ import {
   midiConnect,
   pickAudioFiles,
   importTracks,
+  importFolder,
+  pickFolder,
   ensureUnclassified,
   midiDisconnect,
   minimizeWindow,
@@ -46,6 +48,29 @@ export function TopBar() {
       );
     } catch (e) {
       showToast(`No se pudieron agregar: ${e}`);
+    }
+  };
+
+  // Agregar una carpeta entera. Original: con sus subcarpetas (meter ~/Música
+  // y que queden los generos). Equipo: todo plano en Sin clasificar.
+  const agregarCarpeta = async () => {
+    if (!musicRoot) return;
+    const carpeta = await pickFolder();
+    if (!carpeta) return;
+    const original = sync?.rol === "original";
+    try {
+      const dest = original ? musicRoot : await ensureUnclassified(musicRoot);
+      showToast("Copiando carpeta... (puede tardar si es grande)");
+      const [copiadas, saltadas] = await importFolder(carpeta, dest, original);
+      await reloadLibrary();
+      if (!original) useStore.getState().setSelectedFolder(dest);
+      showToast(
+        `${copiadas} canción(es) agregadas` +
+          (original ? " con sus carpetas" : " a Sin clasificar") +
+          (saltadas > 0 ? ` · ${saltadas} saltadas (ya estaban o no son audio)` : "")
+      );
+    } catch (e) {
+      showToast(`No se pudo agregar la carpeta: ${e}`);
     }
   };
 
@@ -95,6 +120,18 @@ export function TopBar() {
         title="Copiar canciones de este computador a la biblioteca (van a Sin clasificar)"
       >
         ＋ Agregar canciones
+      </button>
+      <button
+        className="btn no-drag"
+        onClick={agregarCarpeta}
+        disabled={!musicRoot}
+        title={
+          sync?.rol === "original"
+            ? "Copiar una carpeta entera a la biblioteca, con sus subcarpetas (géneros)"
+            : "Copiar todas las canciones de una carpeta a Sin clasificar"
+        }
+      >
+        ＋ Agregar carpeta
       </button>
       {musicRoot && <span className="path-chip">{musicRoot}</span>}
 
