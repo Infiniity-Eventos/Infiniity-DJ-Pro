@@ -839,6 +839,12 @@ input[type="range"]::-webkit-slider-thumb {
   background-clip: text;
   -webkit-text-fill-color: transparent;
 }
+.welcome-version {
+  margin-top: -12px;
+  font-size: 13px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+}
 .welcome p {
   color: var(--text-2);
   max-width: 460px;

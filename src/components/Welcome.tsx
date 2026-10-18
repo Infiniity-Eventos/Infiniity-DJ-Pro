@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useStore } from "../state/store";
-import { syncUnirse } from "../lib/tauri";
+import { syncUnirse, modoDibujo, isTauri } from "../lib/tauri";
 
 /**
  * Primera pantalla: pegar el código que manda el PC original. No hay forma de
@@ -14,6 +14,15 @@ export function Welcome() {
   const [nombre, setNombre] = useState("");
   const [uniendo, setUniendo] = useState(false);
   const [error, setError] = useState("");
+  // Version y modo de dibujo a la vista: con una foto de esta pantalla se sabe
+  // si la PC esta en la ultima version y si cayo en modo seguro tras un fallo.
+  const [dibujo, setDibujo] = useState("");
+  useEffect(() => {
+    if (!isTauri()) return;
+    modoDibujo()
+      .then((m) => setDibujo(m.software ? `software (${m.motivo})` : "GPU"))
+      .catch((e) => setDibujo(`desconocido (${e})`));
+  }, []);
 
   // Pegar desde el portapapeles sin tener que escribir ni usar Ctrl+V.
   const pegar = async () => {
@@ -49,6 +58,10 @@ export function Welcome() {
   return (
     <div className="welcome">
       <h1>Infiniity DJ</h1>
+      <div className="welcome-version">
+        versión {__APP_VERSION__}
+        {dibujo && ` · dibujo: ${dibujo}`}
+      </div>
       <p>
         Pega aquí el <b>código</b> que te mandaron desde el PC original. La app crea su carpeta y
         empieza a recibir toda la música sola.
