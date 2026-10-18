@@ -90,6 +90,7 @@ export interface SyncEstado {
   frenado: boolean;
   pcs: PcConectada[];
   raiz: string; // carpeta de la biblioteca según el rol
+  servicio_activo: boolean; // original: el servicio "siempre encendida" ya corre
 }
 export const syncEstado = () => invoke<SyncEstado>("sync_estado");
 export const syncCrearGrupo = (raiz: string) => invoke<string>("sync_crear_grupo", { raiz });

@@ -935,6 +935,17 @@ pub struct SyncEstado {
     pub frenado: bool,
     pub pcs: Vec<PcConectada>,
     pub raiz: String,
+    /// Original: el servicio "siempre encendida" ya está instalado y activo.
+    pub servicio_activo: bool,
+}
+
+/// ¿Está corriendo el servicio de usuario del agente? (solo tiene sentido en el original)
+fn servicio_agente_activo() -> bool {
+    clean_command("systemctl")
+        .args(["--user", "is-active", "--quiet", "infiniity-dj-sync.service"])
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
 }
 
 pub fn estado() -> SyncEstado {
@@ -952,6 +963,9 @@ pub fn estado() -> SyncEstado {
         return e;
     }
     e.activo = true;
+    if c.rol == Rol::Original {
+        e.servicio_activo = servicio_agente_activo();
+    }
     e.frenado = api_get(&c.apikey, "/rest/config/options")
         .ok()
         .and_then(|o| o["maxRecvKbps"].as_i64())

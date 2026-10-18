@@ -178,17 +178,24 @@ export function SyncModal() {
               ))}
             </ul>
 
-            <div className="sync-sub">Para que funcione aunque la app esté cerrada:</div>
+            <div className="sync-sub">Aunque la app esté cerrada:</div>
             <div className="sync-acciones">
-              <button
-                className="btn"
-                disabled={!!ocupado}
-                onClick={() =>
-                  void correr("servicio", syncInstalarServicio, "Listo: la sincronización arranca sola al iniciar sesión")
-                }
-              >
-                {ocupado === "servicio" ? "Instalando..." : "Mantener siempre encendida"}
-              </button>
+              {sync.servicio_activo ? (
+                <span className="sync-row" style={{ margin: 0 }}>
+                  <span className="midi-dot on" />
+                  Siempre encendida: arranca sola al iniciar sesión en este PC.
+                </span>
+              ) : (
+                <button
+                  className="btn"
+                  disabled={!!ocupado}
+                  onClick={() =>
+                    void correr("servicio", syncInstalarServicio, "Listo: la sincronización arranca sola al iniciar sesión")
+                  }
+                >
+                  {ocupado === "servicio" ? "Instalando..." : "Mantener siempre encendida"}
+                </button>
+              )}
               <button className="btn" onClick={() => void syncLog().then(setLog)}>
                 Ver registro
               </button>
