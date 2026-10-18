@@ -23,7 +23,7 @@
  * Grafo por deck:  BufferSource -> normGain -> volumeGain -> xfadeGain -> master -> salida
  */
 
-import { useStore, type DeckId } from "../state/store";
+import { useStore, FX_NEUTRO, type DeckId, type FxKey, type FxValues } from "../state/store";
 import { readMediaBytes } from "../lib/tauri";
 import { analizarCancion, golpeEnTramo, siguienteGolpe, type AnalisisCancion } from "./analisis";
 
@@ -71,6 +71,33 @@ interface Deck {
   analisis: AnalisisCancion | null; // silencios, outro, primer golpe (ver analisis.ts)
   /** Rampa de velocidad en curso (programada en el reloj de audio). null si no hay. */
   rampa: { t0: number; r0: number; r1: number; dur: number } | null;
+  fx: NodosFx;
+}
+
+/**
+ * Efectos de un deck (guia .mega-cuestionario/Guía para Efectos.md). Todo son
+ * nodos estandar de Web Audio: corren en el hilo de audio, no en la interfaz.
+ *
+ *   normGain → graves → medios → agudos → filtro → ┬→ seco ───────────────┐
+ *                                                  └→ [voz humedo] → wet ─┴→ swapLow → volumeGain
+ *
+ * Voz humedo (bajar la voz): la voz casi siempre va en el CENTRO del estereo,
+ * asi que (izq − der) la cancela. Como el bajo y el bombo tambien suelen ir al
+ * centro, se devuelven los graves originales por debajo de 180 Hz. Y encima se
+ * recorta la banda donde vive la voz. La perilla mezcla seco/humedo.
+ *
+ * swapLow: filtro de graves INTERNO que solo usa la transicion (cambio de
+ * graves): asi las perillas del usuario no se mueven solas.
+ */
+interface NodosFx {
+  graves: BiquadFilterNode;
+  medios: BiquadFilterNode;
+  agudos: BiquadFilterNode;
+  filtro: BiquadFilterNode;
+  seco: GainNode;
+  humedo: GainNode;
+  swapLow: BiquadFilterNode;
+  valores: FxValues;
 }
 
 export interface MixResult {
@@ -134,7 +161,9 @@ class AudioEngine {
       const normGain = ctx.createGain();
       const volumeGain = ctx.createGain();
       const xfadeGain = ctx.createGain();
-      normGain.connect(volumeGain);
+      const fx = this.crearFx(ctx);
+      normGain.connect(fx.graves);
+      fx.swapLow.connect(volumeGain);
       volumeGain.connect(xfadeGain);
       xfadeGain.connect(master);
       return {
@@ -152,6 +181,7 @@ class AudioEngine {
         loadToken: 0,
         analisis: null,
         rampa: null,
+        fx,
       };
     };
 
@@ -164,6 +194,138 @@ class AudioEngine {
   private deck(id: DeckId): Deck {
     this.ensure();
     return this.decks![id];
+  }
+
+  // -------- Efectos --------
+
+  private crearFx(ctx: AudioContext): NodosFx {
+    const graves = ctx.createBiquadFilter();
+    graves.type = "lowshelf";
+    graves.frequency.value = 200;
+    const medios = ctx.createBiquadFilter();
+    medios.type = "peaking";
+    medios.frequency.value = 1000;
+    medios.Q.value = 0.7;
+    const agudos = ctx.createBiquadFilter();
+    agudos.type = "highshelf";
+    agudos.frequency.value = 3000;
+    const filtro = ctx.createBiquadFilter();
+    filtro.type = "lowpass";
+    filtro.frequency.value = 20000;
+    filtro.Q.value = 0.5;
+    graves.connect(medios);
+    medios.connect(agudos);
+    agudos.connect(filtro);
+
+    // Camino seco.
+    const seco = ctx.createGain();
+    seco.gain.value = 1;
+    filtro.connect(seco);
+
+    // Camino humedo: cancelar el centro con (izq − der). La MISMA resta sale
+    // por los dos lados (se pierde la anchura estereo, pero da igual): si se
+    // mandara izq−der por un lado y der−izq por el otro, un equipo de sonido
+    // MONO, como muchos de eventos, sumaria los dos y se cancelaria TODO
+    // menos los graves. Medido con tonos de prueba el 2026-10-18.
+    const splitter = ctx.createChannelSplitter(2);
+    const merger = ctx.createChannelMerger(2);
+    filtro.connect(splitter);
+    const lMas = ctx.createGain();
+    lMas.gain.value = 1;
+    const rMenos = ctx.createGain();
+    rMenos.gain.value = -1;
+    splitter.connect(lMas, 0);
+    splitter.connect(rMenos, 1);
+    lMas.connect(merger, 0, 0);
+    rMenos.connect(merger, 0, 0);
+    lMas.connect(merger, 0, 1);
+    rMenos.connect(merger, 0, 1);
+    // ...devolver los graves originales (bajo y bombo tambien van al centro)...
+    const gravesOriginales = ctx.createBiquadFilter();
+    gravesOriginales.type = "lowpass";
+    gravesOriginales.frequency.value = 180;
+    gravesOriginales.Q.value = 0.7;
+    filtro.connect(gravesOriginales);
+    gravesOriginales.connect(merger, 0, 0);
+    gravesOriginales.connect(merger, 0, 1);
+    // ...y recortar la banda de la voz por si queda un fantasma.
+    const recorteVoz = ctx.createBiquadFilter();
+    recorteVoz.type = "peaking";
+    recorteVoz.frequency.value = 1500;
+    recorteVoz.Q.value = 0.8;
+    recorteVoz.gain.value = -6;
+    merger.connect(recorteVoz);
+    const humedo = ctx.createGain();
+    humedo.gain.value = 0;
+    recorteVoz.connect(humedo);
+
+    // Cambio de graves interno (lo usa la transicion).
+    const swapLow = ctx.createBiquadFilter();
+    swapLow.type = "lowshelf";
+    swapLow.frequency.value = 200;
+    swapLow.gain.value = 0;
+    seco.connect(swapLow);
+    humedo.connect(swapLow);
+
+    return { graves, medios, agudos, filtro, seco, humedo, swapLow, valores: { ...FX_NEUTRO } };
+  }
+
+  /** Aplica una perilla (0..1). Suave: los AudioParam se mueven en ~20 ms para no hacer clics. */
+  setFx(id: DeckId, key: FxKey, valor: number): void {
+    const d = this.deck(id);
+    const v = clamp(valor, 0, 1);
+    d.fx.valores[key] = v;
+    const suave = (p: AudioParam, x: number) => {
+      p.cancelScheduledValues(this.ctx!.currentTime);
+      p.setTargetAtTime(x, this.ctx!.currentTime, 0.01);
+    };
+    switch (key) {
+      case "graves":
+      case "medios":
+      case "agudos": {
+        // Centro = 0 dB; extremos = ±12 dB (abajo del todo casi corta: -24 dB).
+        const db = v < 0.5 ? -24 * (0.5 - v) * 2 : 12 * (v - 0.5) * 2;
+        suave(d.fx[key].gain, db);
+        break;
+      }
+      case "filtro": {
+        // Centro = nada. Izquierda: pasa-bajos que va cerrando (20 kHz → 150 Hz).
+        // Derecha: pasa-altos que va subiendo (20 Hz → 6 kHz). Escala logaritmica.
+        const f = d.fx.filtro;
+        if (Math.abs(v - 0.5) < 0.01) {
+          f.type = "lowpass";
+          suave(f.frequency, 20000);
+          suave(f.Q, 0.5);
+        } else if (v < 0.5) {
+          f.type = "lowpass";
+          const p = (0.5 - v) * 2; // 0..1
+          suave(f.frequency, 20000 * Math.pow(150 / 20000, p));
+          suave(f.Q, 0.5 + 1.5 * p);
+        } else {
+          f.type = "highpass";
+          const p = (v - 0.5) * 2;
+          suave(f.frequency, 20 * Math.pow(6000 / 20, p));
+          suave(f.Q, 0.5 + 1.5 * p);
+        }
+        break;
+      }
+      case "voz": {
+        // Mezcla seco/humedo. El humedo suena mas bajito (la resta quita energia): se compensa un poco.
+        suave(d.fx.seco.gain, 1 - v);
+        suave(d.fx.humedo.gain, v * 1.3);
+        break;
+      }
+    }
+    useStore.getState().patchDeck(id, { fx: { ...d.fx.valores } });
+  }
+
+  /** Todas las perillas del deck al neutro (al cargar otra cancion). */
+  resetFx(id: DeckId): void {
+    (Object.keys(FX_NEUTRO) as FxKey[]).forEach((k) => this.setFx(id, k, FX_NEUTRO[k]));
+  }
+
+  getFx(id: DeckId): FxValues {
+    return { ...this.deck(id).fx.valores };
   }
 
   /** Detiene la fuente actual sin marcar "fin de cancion". */
@@ -251,6 +413,7 @@ class AudioEngine {
     d.rate = 1;
     d.naturalBpm = naturalBpm;
     d.analisis = null;
+    this.resetFx(id); // otra cancion, perillas al neutro (S4)
 
     const { patchDeck } = useStore.getState();
     patchDeck(id, {
@@ -743,16 +906,37 @@ class AudioEngine {
     this.startFrom(to, offIn, when);
     st.patchDeck(to, { isPlaying: true });
 
-    // 3. Crossfader.
+    // 3. Crossfader + cambio de graves (D2): la nueva entra SIN graves; entre el
+    //    40 % y el 70 % del recorrido se intercambian (los de la que sale bajan,
+    //    los de la nueva suben), para que nunca suenen dos bombos encima.
+    //    Programado en el reloj de audio, como el crossfader.
+    const dur = op.duracionSeg;
+    const ahora = this.ctx!.currentTime;
+    const SIN_GRAVES = -18;
+    const gIn = t.fx.swapLow.gain;
+    const gOut = f.fx.swapLow.gain;
+    gIn.cancelScheduledValues(ahora);
+    gIn.setValueAtTime(SIN_GRAVES, ahora);
+    gIn.setValueAtTime(SIN_GRAVES, ahora + dur * 0.4);
+    gIn.linearRampToValueAtTime(0, ahora + dur * 0.7);
+    gOut.cancelScheduledValues(ahora);
+    gOut.setValueAtTime(0, ahora);
+    gOut.setValueAtTime(0, ahora + dur * 0.4);
+    gOut.linearRampToValueAtTime(SIN_GRAVES, ahora + dur * 0.7);
+
     const targetX = to === "B" ? 1 : 0;
-    const termino = await this.animateCrossfader(targetX, op.duracionSeg * 1000);
+    const termino = await this.animateCrossfader(targetX, dur * 1000);
     if (!termino) {
-      // Cancelada a medias: se deja todo como esta (quien cancelo toma el mando).
+      // Cancelada a medias: se deja todo como esta (quien cancelo toma el mando),
+      // salvo el cambio de graves interno, que vuelve a neutro.
+      this.resetSwap("A");
+      this.resetSwap("B");
       return { ok: false, reason: "Mezcla cancelada" };
     }
 
     // 4. Cierre.
     this.pause(from);
+    this.resetSwap(from); // si vuelven a darle play, suena normal
     if (rate !== 1 && settings.returnToNatural) {
       await this.animateRate(to, 1, 4000);
     }
@@ -766,6 +950,14 @@ class AudioEngine {
       duracionSeg: useStore.getState().settings.transitionSec,
       exigirCompatibles: true,
     });
+  }
+
+  /** Devuelve el cambio de graves interno de un deck al neutro. */
+  private resetSwap(id: DeckId): void {
+    const g = this.deck(id).fx.swapLow.gain;
+    const now = this.ctx!.currentTime;
+    g.cancelScheduledValues(now);
+    g.setTargetAtTime(0, now, 0.05);
   }
 
   cancelMix(): void {

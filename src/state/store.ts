@@ -21,6 +21,11 @@ export interface DownloadItem {
   errorMsg?: string;
 }
 
+/** Perillas de efectos de un deck (0..1). Neutro: 0.5 en todas menos Voz (0 = sin efecto). */
+export type FxKey = "graves" | "medios" | "agudos" | "filtro" | "voz";
+export type FxValues = Record<FxKey, number>;
+export const FX_NEUTRO: FxValues = { graves: 0.5, medios: 0.5, agudos: 0.5, filtro: 0.5, voz: 0 };
+
 export interface DeckInfo {
   trackPath: string | null;
   trackName: string | null;
@@ -31,6 +36,7 @@ export interface DeckInfo {
   volume: number; // 0..1 (fader del deck)
   rate: number; // playbackRate actual (1.0 = natural)
   loading: boolean;
+  fx: FxValues; // perillas de efectos (ver AudioEngine.setFx)
 }
 
 /** Una cancion dentro de la cola del automix. */
@@ -157,6 +163,7 @@ const emptyDeck = (): DeckInfo => ({
   volume: 1,
   rate: 1,
   loading: false,
+  fx: { ...FX_NEUTRO },
 });
 
 // --- Persistencia sencilla en localStorage ---

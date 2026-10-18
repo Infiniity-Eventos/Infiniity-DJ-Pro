@@ -17,7 +17,7 @@ use serde::Serialize;
 #[derive(Serialize, Clone)]
 pub struct ControlEvent {
     /// Accion logica: "play", "cue", "volume", "crossfader", "jog", "tempo",
-    /// "load", "sync", "cue_hot".
+    /// "load", "sync", "cue_hot", y las perillas "graves", "medios", "agudos", "filtro".
     pub action: String,
     /// 0 = Deck A, 1 = Deck B, 255 = global (ej. crossfader).
     pub deck: u8,
@@ -39,6 +39,14 @@ const CC_TEMPO: u8 = 0x00; // slider de tempo del deck
 const CC_VOLUME: u8 = 0x13; // fader de volumen del canal
 const CC_JOG: u8 = 0x22; // giro del plato (jog)
 const CC_CROSSFADER: u8 = 0x1F; // crossfader (llega como global)
+// Perillas de efectos (numeros documentados de la DDJ-200; se confirman con la
+// unidad real, como el resto). El EQ llega por el canal del deck; el filtro
+// (CFX) llega por el canal 6 con un CC distinto por deck.
+const CC_EQ_HI: u8 = 0x07;
+const CC_EQ_MID: u8 = 0x0B;
+const CC_EQ_LOW: u8 = 0x0F;
+const CC_FILTRO_DECK1: u8 = 0x17;
+const CC_FILTRO_DECK2: u8 = 0x18;
 
 pub fn map_message(msg: &[u8]) -> Option<ControlEvent> {
     if msg.len() < 2 {
@@ -89,6 +97,11 @@ pub fn map_message(msg: &[u8]) -> Option<ControlEvent> {
                     deck: GLOBAL,
                     value: norm,
                 }),
+                CC_EQ_HI if deck != GLOBAL => Some(ControlEvent { action: "agudos".to_string(), deck, value: norm }),
+                CC_EQ_MID if deck != GLOBAL => Some(ControlEvent { action: "medios".to_string(), deck, value: norm }),
+                CC_EQ_LOW if deck != GLOBAL => Some(ControlEvent { action: "graves".to_string(), deck, value: norm }),
+                CC_FILTRO_DECK1 if channel == 6 => Some(ControlEvent { action: "filtro".to_string(), deck: 0, value: norm }),
+                CC_FILTRO_DECK2 if channel == 6 => Some(ControlEvent { action: "filtro".to_string(), deck: 1, value: norm }),
                 CC_JOG => {
                     // Los jog envian valores relativos centrados en 64 (0x40):
                     // >64 = adelante, <64 = atras.

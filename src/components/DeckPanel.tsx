@@ -1,7 +1,16 @@
 import { useState } from "react";
 import { engine } from "../audio/AudioEngine";
 import { automixBloquea } from "../audio/Automix";
-import { useStore, type DeckId } from "../state/store";
+import { useStore, FX_NEUTRO, type DeckId, type FxKey } from "../state/store";
+import { Perilla } from "./Perilla";
+
+const PERILLAS: { key: FxKey; etiqueta: string; titulo: string }[] = [
+  { key: "graves", etiqueta: "Graves", titulo: "Graves: al centro no cambia nada; abajo los quita, arriba los sube" },
+  { key: "medios", etiqueta: "Medios", titulo: "Medios: al centro no cambia nada" },
+  { key: "agudos", etiqueta: "Agudos", titulo: "Agudos: al centro no cambia nada" },
+  { key: "filtro", etiqueta: "Filtro", titulo: "Filtro: al centro nada; a la izquierda va apagando los agudos, a la derecha los graves" },
+  { key: "voz", etiqueta: "Voz", titulo: "Bajar la voz: a 0 no hace nada; cuanto mas arriba, menos voz (funciona mejor en canciones estereo normales)" },
+];
 import { setManualBpm } from "../lib/tauri";
 import { Vinyl } from "./Vinyl";
 import { ProgressBar } from "./ProgressBar";
@@ -100,6 +109,19 @@ export function DeckPanel({ deckId }: { deckId: DeckId }) {
                 ? `velocidad ${(deck.rate * 100).toFixed(1)}%`
                 : "listo"
               : ""}
+          </div>
+          {/* Perillas de efectos: se pueden tocar aunque el automix este encendido (S8). */}
+          <div className="deck-fx">
+            {PERILLAS.map((p) => (
+              <Perilla
+                key={p.key}
+                valor={deck.fx[p.key]}
+                neutro={FX_NEUTRO[p.key]}
+                etiqueta={p.etiqueta}
+                titulo={p.titulo}
+                onChange={(v) => engine.setFx(deckId, p.key, v)}
+              />
+            ))}
           </div>
         </div>
       </div>

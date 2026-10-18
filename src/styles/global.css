@@ -1456,3 +1456,59 @@ body {
   70% { opacity: 1; }
   100% { opacity: 0; }
 }
+
+/* ---------------- Perillas de efectos (por deck) ---------------- */
+.deck-fx {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.perilla {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 52px;
+  user-select: none;
+}
+.perilla-svg {
+  cursor: ns-resize;
+  touch-action: none;
+  display: block;
+}
+.perilla-fondo {
+  fill: none;
+  stroke: var(--slider-track);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+.perilla-activo {
+  fill: none;
+  stroke: var(--accent-soft);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+.perilla-cuerpo {
+  fill: var(--glass-bg-strong);
+  stroke: var(--glass-border);
+  stroke-width: 1;
+}
+.perilla-svg.activa .perilla-cuerpo {
+  fill: var(--purple-500);
+  stroke: var(--purple-300);
+}
+.perilla-aguja {
+  stroke: #ffffff;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+}
+.perilla-etiqueta {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.4px;
+  margin-top: -2px;
+}
+.perilla-svg.activa + .perilla-etiqueta {
+  color: var(--text-1);
+  font-weight: 600;
+}

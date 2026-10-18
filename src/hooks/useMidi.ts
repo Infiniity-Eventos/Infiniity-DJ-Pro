@@ -12,6 +12,11 @@ export function useMidi() {
     let unlisten: (() => void) | undefined;
     onMidiControl((ev) => {
       const deckId: DeckId = ev.deck === 1 ? "B" : "A";
+      // Perillas de efectos: siempre, incluso con el automix encendido (S8 de la guia de Efectos).
+      if (ev.action === "graves" || ev.action === "medios" || ev.action === "agudos" || ev.action === "filtro") {
+        engine.setFx(deckId, ev.action, ev.value);
+        return;
+      }
       // Con el automix encendido la controladora tampoco manda sobre los decks
       // ni el crossfader (D6). Se avisa solo con los botones, no con cada
       // movimiento de un fader (seria un aviso por milisegundo).
