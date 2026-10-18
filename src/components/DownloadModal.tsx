@@ -21,6 +21,7 @@ const isUrl = (s: string) => /youtu\.?be|youtube\.com|^https?:\/\//i.test(s);
  */
 export function DownloadModal({ onClose }: { onClose: () => void }) {
   const showToast = useStore((s) => s.showToast);
+  const downloads = useStore((s) => s.downloads);
 
   const [tools, setTools] = useState<YtdlTools | null>(null);
   const [query, setQuery] = useState("");
@@ -60,10 +61,22 @@ export function DownloadModal({ onClose }: { onClose: () => void }) {
     }
   };
 
-  // Iniciar descarga en segundo plano y cerrar para seguir mezclando.
+  // Iniciar descarga en segundo plano SIN cerrar la ventana: pidieron poder
+  // pedir varias canciones seguidas de la misma busqueda. El estado de cada
+  // una se ve en su boton (en cola / bajando / lista / error).
+  const pedidas = useStore((s) => s.pedidas);
+  const marcarPedida = useStore((s) => s.marcarPedida);
   const download = (url: string, id: string, title: string) => {
+    marcarPedida(id);
     void startDownload(url, id, title);
-    onClose();
+  };
+  const estadoDe = (id: string): { icono: string; titulo: string; ocupado: boolean } => {
+    const d = downloads.find((x) => x.id === id);
+    if (d && d.status === "error") return { icono: "⚠", titulo: `Falló: ${d.errorMsg ?? ""}. Clic para reintentar`, ocupado: false };
+    if (d && d.stage === "en cola") return { icono: "…", titulo: "En cola", ocupado: true };
+    if (d) return { icono: `${Math.round(d.percent)}%`, titulo: d.stage, ocupado: true };
+    if (pedidas.has(id)) return { icono: "✅", titulo: "Ya descargada (está en Sin clasificar)", ocupado: true };
+    return { icono: "⬇", titulo: "Descargar (sigue en segundo plano)", ocupado: false };
   };
 
   const runSearch = async () => {
@@ -179,14 +192,19 @@ export function DownloadModal({ onClose }: { onClose: () => void }) {
                         {r.duration ? ` · ${fmtTime(r.duration)}` : ""}
                       </div>
                     </div>
-                    <button
-                      className="btn load-btn dl-get"
-                      title="Descargar (sigue en segundo plano)"
-                      onClick={() => download(url, r.id, r.title)}
-                      disabled={!!ffmpegMissing}
-                    >
-                      ⬇
-                    </button>
+                    {(() => {
+                      const e = estadoDe(r.id);
+                      return (
+                        <button
+                          className={`btn load-btn dl-get ${e.ocupado ? "dl-get-ocupado" : ""}`}
+                          title={e.titulo}
+                          onClick={() => download(url, r.id, r.title)}
+                          disabled={!!ffmpegMissing || e.ocupado}
+                        >
+                          {e.icono}
+                        </button>
+                      );
+                    })()}
                   </div>
                 );
               })}

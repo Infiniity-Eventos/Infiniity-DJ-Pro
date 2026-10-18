@@ -14,6 +14,35 @@ import { reloadLibrary } from "./library";
 let counter = 0;
 export const nextDownloadId = (seed?: string) => seed || `dl-${++counter}`;
 
+/**
+ * Cola: como maximo DOS descargas a la vez. Pidieron bajar varias canciones
+ * seguidas en pleno evento; si todas arrancan juntas, cada una es un yt-dlp +
+ * un ffmpeg convirtiendo, y en un portatil de 2 nucleos eso le quita CPU a la
+ * mezcla que esta sonando. Las demas esperan "en cola" y arrancan solas.
+ */
+const MAX_A_LA_VEZ = 2;
+let activas = 0;
+const cola: Array<{ id: string; url: string; title: string }> = [];
+
+function siguienteDeLaCola(): void {
+  while (activas < MAX_A_LA_VEZ && cola.length > 0) {
+    const d = cola.shift()!;
+    // Pudo haberse quitado de la lista mientras esperaba (p. ej. reintento).
+    if (!useStore.getState().downloads.some((x) => x.id === d.id)) continue;
+    activas++;
+    void runDownload(d.id, d.url, d.title).finally(() => {
+      activas--;
+      siguienteDeLaCola();
+    });
+  }
+}
+
+function encolar(id: string, url: string, title: string): void {
+  useStore.getState().updateDownload(id, { stage: "en cola", percent: 0 });
+  cola.push({ id, url, title });
+  siguienteDeLaCola();
+}
+
 async function runDownload(id: string, url: string, title: string): Promise<void> {
   const st = useStore.getState();
   if (!st.musicRoot) {
@@ -51,9 +80,9 @@ export async function startDownload(url: string, id: string, title: string): Pro
     st.showToast("Esa canción ya se está descargando");
     return;
   }
-  st.addDownload({ id, url, title, percent: 0, stage: "descargando", status: "downloading" });
-  st.showToast(`⬇️ Descargando en segundo plano: ${title}`);
-  await runDownload(id, url, title);
+  st.addDownload({ id, url, title, percent: 0, stage: "en cola", status: "downloading" });
+  st.showToast(`⬇️ En cola: ${title}`);
+  encolar(id, url, title);
 }
 
 /** Reintenta una descarga que falló, con los MISMOS datos (sin volver a buscar). */
@@ -62,9 +91,9 @@ export function retryDownload(id: string): void {
   if (!d) return;
   useStore.getState().updateDownload(id, {
     status: "downloading",
-    stage: "descargando",
+    stage: "en cola",
     percent: 0,
     errorMsg: undefined,
   });
-  void runDownload(id, d.url, d.title);
+  encolar(id, d.url, d.title);
 }

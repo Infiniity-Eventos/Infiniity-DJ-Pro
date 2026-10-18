@@ -168,7 +168,11 @@ portátil con la prueba de **ventana minimizada/oculta**.
 - Si no baja → es el audio; considerar simplificar el grafo o aceptar el costo (igual no
   se traba).
 
-### 🔴 2. Probar la controladora DDJ-200 (necesita el hardware)
+### ✅ 2. Controladora DDJ-200: CONFIRMADA con la unidad real (2026-10-17)
+El equipo la usó en un evento con la 0.3.9 y respondió. El mapeo de `ddj200.rs` es
+correcto. (Lo de abajo queda como historia.)
+
+### 2b. (histórico) Probar la controladora DDJ-200 (necesita el hardware)
 El código está en `src-tauri/src/ddj200.rs` (mapeo con datos conocidos del modelo, falta
 confirmar con la unidad real). Conectar por USB → botón "DDJ-200" arriba → probar controles.
 La cadena de software (puerto por nombre → conexión → evento → deck) **ya está comprobada**

@@ -23,7 +23,7 @@ export function DownloadIndicator() {
               </span>
               {!failed && (
                 <span className="dl-indicator-pct">
-                  {d.stage === "convirtiendo" ? "MP3…" : `${Math.round(d.percent)}%`}
+                  {d.stage === "convirtiendo" ? "MP3…" : d.stage === "en cola" ? "en cola" : `${Math.round(d.percent)}%`}
                 </span>
               )}
             </div>

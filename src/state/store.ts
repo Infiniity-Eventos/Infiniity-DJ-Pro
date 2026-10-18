@@ -65,6 +65,7 @@ interface AppStore {
   downloads: DownloadItem[]; // descargas en curso (en segundo plano)
   highlightTrack: string | null; // ruta de la cancion recien descargada (para titilar)
   analyzing: Set<string>; // rutas en analisis (para el spinner del boton)
+  pedidas: Set<string>; // ids de YouTube ya pedidos en esta sesion (para marcar ✅ en el buscador)
 
   setTheme: (t: Theme) => void;
   setLowPower: (v: boolean) => void;
@@ -93,6 +94,7 @@ interface AppStore {
   removeDownload: (id: string) => void;
   setHighlightTrack: (path: string | null) => void;
   setAnalyzing: (path: string, on: boolean) => void;
+  marcarPedida: (id: string) => void;
 }
 
 const emptyDeck = (): DeckInfo => ({
@@ -210,6 +212,7 @@ export const useStore = create<AppStore>((set, get) => ({
   downloads: [],
   highlightTrack: null,
   analyzing: new Set<string>(),
+  pedidas: new Set<string>(),
 
   setTheme: (t) => {
     set({ theme: t });
@@ -275,6 +278,7 @@ export const useStore = create<AppStore>((set, get) => ({
       }, 7000);
     }
   },
+  marcarPedida: (id) => set((s) => ({ pedidas: new Set(s.pedidas).add(id) })),
   setAnalyzing: (path, on) =>
     set((st) => {
       const next = new Set(st.analyzing);
