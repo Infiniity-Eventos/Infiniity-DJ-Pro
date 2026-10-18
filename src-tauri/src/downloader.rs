@@ -159,7 +159,12 @@ fn do_search(app: &AppHandle, query: &str) -> Result<Vec<SearchResult>, String> 
     if q.is_empty() {
         return Ok(vec![]);
     }
-    let search = format!("ytsearch12:{q}");
+    // Un enlace se pasa tal cual: yt-dlp devuelve ese video con su titulo (o
+    // todas las canciones si es una lista de reproduccion). Asi el que pega un
+    // link ve lo que va a bajar antes de pedirlo. Si no, busqueda por nombre:
+    // 30 resultados (con 12 "aparecian re poquitas opciones").
+    let es_enlace = q.starts_with("http://") || q.starts_with("https://");
+    let search = if es_enlace { q.to_string() } else { format!("ytsearch30:{q}") };
 
     let mut cmd = clean_command(&ytdlp);
     cmd.args([
@@ -192,7 +197,42 @@ fn do_search(app: &AppHandle, query: &str) -> Result<Vec<SearchResult>, String> 
             channel: parts[3].to_string(),
         });
     }
+    // Enlace de un video que YouTube no deja consultar (p. ej. "Sign in to
+    // confirm you're not a bot" en esta IP): igual se ofrece como resultado,
+    // sin titulo, para que se pueda pedir con ⬇. La descarga usa otros
+    // clientes y reintentos, y a veces si pasa.
+    if results.is_empty() && es_enlace {
+        if let Some(id) = id_de_video_youtube(q) {
+            results.push(SearchResult {
+                id,
+                title: "Enlace de YouTube (no se pudo leer el título)".to_string(),
+                duration: None,
+                channel: String::new(),
+            });
+        }
+    }
     Ok(results)
+}
+
+/// Saca el id de video de un enlace de YouTube (watch?v=ID, youtu.be/ID,
+/// shorts/ID). None si no se reconoce.
+fn id_de_video_youtube(url: &str) -> Option<String> {
+    let es_id = |s: &str| s.len() == 11 && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+    if let Some(i) = url.find("v=") {
+        let id: String = url[i + 2..].chars().take(11).collect();
+        if es_id(&id) {
+            return Some(id);
+        }
+    }
+    for marca in ["youtu.be/", "/shorts/", "/embed/"] {
+        if let Some(i) = url.find(marca) {
+            let id: String = url[i + marca.len()..].chars().take(11).collect();
+            if es_id(&id) {
+                return Some(id);
+            }
+        }
+    }
+    None
 }
 
 /// Descarga el audio de `url` como MP3 dentro de `dest_folder`.

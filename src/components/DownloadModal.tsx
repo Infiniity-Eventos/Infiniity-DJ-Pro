@@ -9,11 +9,10 @@ import {
   type YtdlProgress,
   type YtSearchResult,
 } from "../lib/tauri";
-import { startDownload, nextDownloadId } from "../lib/downloads";
+import { startDownload } from "../lib/downloads";
 import { fmtTime } from "../lib/format";
 import { CopyButton } from "./CopyButton";
 
-const isUrl = (s: string) => /youtu\.?be|youtube\.com|^https?:\/\//i.test(s);
 
 /**
  * Buscador de YouTube. Al descargar, la descarga corre en SEGUNDO PLANO y la
@@ -82,10 +81,10 @@ export function DownloadModal({ onClose }: { onClose: () => void }) {
   const runSearch = async () => {
     const q = query.trim();
     if (!q || searching) return;
-    if (isUrl(q)) {
-      download(q, nextDownloadId(), "canción de YouTube");
-      return;
-    }
+    // Un enlace tambien pasa por la busqueda: yt-dlp devuelve el video con su
+    // titulo (o la lista completa si es una playlist) y se pide con ⬇ como
+    // cualquier resultado. Antes bajaba directo "canción de YouTube" sin
+    // mostrar nada y parecia que no hacia nada.
     setSearching(true);
     setResults([]);
     try {
@@ -152,7 +151,7 @@ export function DownloadModal({ onClose }: { onClose: () => void }) {
             <div className="dl-search-row">
               <input
                 className="dl-input"
-                placeholder="Nombre de la canción (o pega un enlace)..."
+                placeholder="Nombre de la canción, o pega un enlace de YouTube (canción o lista)..."
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && runSearch()}
