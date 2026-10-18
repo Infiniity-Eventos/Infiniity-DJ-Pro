@@ -124,6 +124,11 @@ export function SyncModal() {
               {sync.activo ? "Sincronización encendida" : "Sincronización apagada (arrancando...)"}
             </div>
 
+            {sync.pendientes > 0 && (
+              <div className="sync-row">
+                ⬇ Recibiendo <b>{sync.pendientes}</b> canciones ({sync.pendientes_mb.toFixed(0)} MB) que agregó el equipo...
+              </div>
+            )}
             <div className="sync-sub">Código para las demás PC (cópialo y mándalo por WhatsApp):</div>
             <div className="sync-codigo">{codigo || "..."}</div>
             <div className="sync-acciones">
@@ -215,6 +220,11 @@ export function SyncModal() {
               <span className={`midi-dot ${sync.original_conectado ? "on" : "off"}`} />
               {sync.original_conectado ? "Conectada con el PC original" : "Sin conexión con el PC original (se reintenta sola)"}
             </div>
+            {sync.por_subir > 0 && (
+              <div className="sync-row">
+                ⬆ Subiendo <b>{sync.por_subir}</b> canciones ({sync.por_subir_mb.toFixed(0)} MB) al PC original...
+              </div>
+            )}
             <div className="sync-row">
               Biblioteca en esta PC: <b>{Math.round(sync.completado)}%</b>
               {sync.pendientes > 0 ? ` · faltan ${sync.pendientes} (${sync.pendientes_mb.toFixed(0)} MB)` : " · al día"}
@@ -291,10 +301,12 @@ export function etiquetaSync(e: ReturnType<typeof useStore.getState>["sync"]): {
   if (!e || e.rol === "ninguno") return { texto: "Sync", clase: "" };
   if (!e.activo) return { texto: "Sync: arrancando", clase: "sync-off" };
   if (e.rol === "original") {
+    if (e.pendientes > 0) return { texto: `Sync: recibiendo ${e.pendientes}`, clase: "sync-on" };
     const n = e.pcs.filter((p) => p.conectado).length;
     return { texto: `Sync: ${n} PC`, clase: "sync-on" };
   }
   if (!e.original_conectado) return { texto: "Sync: sin conexión", clase: "sync-off" };
+  if (e.por_subir > 0 && !e.musica && !e.pausa_manual) return { texto: `Sync: subiendo ${e.por_subir}`, clase: "sync-on" };
   if (e.pendientes === 0) return { texto: "Sync: al día", clase: "sync-on" };
   if (!e.autorizado) return { texto: `Sync: faltan ${e.pendientes}`, clase: "sync-warn" };
   if (e.musica) return { texto: "Sync: pausa (música)", clase: "sync-warn" };

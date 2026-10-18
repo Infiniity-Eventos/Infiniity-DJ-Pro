@@ -81,8 +81,10 @@ export interface SyncEstado {
   rol: SyncRol;
   activo: boolean; // Syncthing responde
   original_conectado: boolean;
-  pendientes: number; // archivos que faltan por recibir (equipo)
+  pendientes: number; // archivos que faltan por recibir en esta PC
   pendientes_mb: number;
+  por_subir: number; // equipo: lo propio que al original aún le falta
+  por_subir_mb: number;
   completado: number; // % de la Biblioteca que ya está en esta PC (equipo)
   autorizado: boolean;
   musica: boolean;

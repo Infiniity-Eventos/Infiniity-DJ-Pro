@@ -773,7 +773,7 @@ pub fn unirse(codigo_texto: &str, nombre_pc: &str) -> Result<(), String> {
     let (bib, sin, _) = rutas_carpetas(&c);
     escribir_stignore(&bib)?;
     std::fs::create_dir_all(&sin).map_err(|e| e.to_string())?;
-    frenar(true)?; // hasta que la persona autorice
+    frenar(true, false)?; // recibir frenado hasta que la persona autorice; subir libre
     Ok(())
 }
 
@@ -865,14 +865,15 @@ pub fn limpiar_conflictos() -> usize {
 
 /// Frenar (límite mínimo) o soltar la velocidad. Se recalcula con
 /// `aplicar_velocidad`; esto es el mando directo.
-fn frenar(frenado: bool) -> Result<(), String> {
+fn frenar(recibir_frenado: bool, enviar_frenado: bool) -> Result<(), String> {
     let c = leer_config();
-    let kbps = if frenado { KBPS_FRENADO } else { 0 };
+    let recv = if recibir_frenado { KBPS_FRENADO } else { 0 };
+    let send = if enviar_frenado { KBPS_FRENADO } else { 0 };
     api_enviar(
         &c.apikey,
         "PATCH",
         "/rest/config/options",
-        Some(&serde_json::json!({ "maxRecvKbps": kbps, "maxSendKbps": kbps })),
+        Some(&serde_json::json!({ "maxRecvKbps": recv, "maxSendKbps": send })),
     )
 }
 
@@ -896,15 +897,19 @@ pub fn marcar(autorizado: Option<bool>, musica: Option<bool>, pausa_manual: Opti
 /// Decide la velocidad según: autorizado, música sonando, pausa manual.
 pub fn aplicar_velocidad() -> Result<(), String> {
     let c = leer_config();
-    let frenado = match c.rol {
+    // RECIBIR se frena hasta que la persona autorice (es lo que pidieron
+    // decidir), y con musica o pausa. ENVIAR (lo que ella misma agrego) va
+    // libre salvo con musica o pausa: con el freno en las dos direcciones, 1,3
+    // GB de descargas de una PC tardaban ~7 h en llegar al original.
+    let (recibir, enviar) = match c.rol {
         Rol::Equipo => {
             let b = banderas();
-            !b.autorizado || b.musica || b.pausa_manual
+            (!b.autorizado || b.musica || b.pausa_manual, b.musica || b.pausa_manual)
         }
         // El original nunca se frena: es el punto de encuentro.
-        _ => false,
+        _ => (false, false),
     };
-    frenar(frenado)
+    frenar(recibir, enviar)
 }
 
 // ---------------------------------------------------------------------------
@@ -926,8 +931,10 @@ pub struct SyncEstado {
     pub rol: Rol,
     pub activo: bool, // Syncthing responde
     pub original_conectado: bool,
-    pub pendientes: u64,      // archivos que faltan por recibir (equipo)
+    pub pendientes: u64,      // archivos que faltan por recibir en ESTA PC
     pub pendientes_mb: f64,
+    pub por_subir: u64,       // equipo: archivos propios que al original aun le faltan
+    pub por_subir_mb: f64,
     pub completado: f64,      // % de la Biblioteca que ya está (equipo)
     pub autorizado: bool,
     pub musica: bool,
@@ -1004,23 +1011,32 @@ pub fn estado() -> SyncEstado {
             });
         }
     }
-    if c.rol == Rol::Equipo {
-        // Lo que a ESTA PC le falta de la Biblioteca + Sin clasificar.
-        let mut faltan = 0;
-        let mut bytes = 0.0;
-        let mut comp = Vec::new();
-        for carpeta in [CARPETA_BIBLIOTECA, CARPETA_SIN_CLASIFICAR] {
-            if let Ok(v) = api_get(&c.apikey, &format!("/rest/db/completion?folder={carpeta}")) {
-                faltan += v["needItems"].as_u64().unwrap_or(0) + v["needDeletes"].as_u64().unwrap_or(0);
-                bytes += v["needBytes"].as_f64().unwrap_or(0.0);
-                if carpeta == CARPETA_BIBLIOTECA {
-                    comp.push(v["completion"].as_f64().unwrap_or(0.0));
-                }
+    // Lo que a ESTA PC le falta por recibir (equipo: Biblioteca + Sin
+    // clasificar; original: Sin clasificar, lo que el equipo agrego).
+    let carpetas: &[&str] = if c.rol == Rol::Equipo {
+        &[CARPETA_BIBLIOTECA, CARPETA_SIN_CLASIFICAR]
+    } else {
+        &[CARPETA_SIN_CLASIFICAR]
+    };
+    let mut faltan = 0;
+    let mut bytes = 0.0;
+    for carpeta in carpetas {
+        if let Ok(v) = api_get(&c.apikey, &format!("/rest/db/completion?folder={carpeta}")) {
+            faltan += v["needItems"].as_u64().unwrap_or(0) + v["needDeletes"].as_u64().unwrap_or(0);
+            bytes += v["needBytes"].as_f64().unwrap_or(0.0);
+            if *carpeta == CARPETA_BIBLIOTECA {
+                e.completado = v["completion"].as_f64().unwrap_or(0.0);
             }
         }
-        e.pendientes = faltan;
-        e.pendientes_mb = bytes / 1_048_576.0;
-        e.completado = comp.first().copied().unwrap_or(0.0);
+    }
+    e.pendientes = faltan;
+    e.pendientes_mb = bytes / 1_048_576.0;
+    if c.rol == Rol::Equipo {
+        // Lo que al ORIGINAL le falta de Sin clasificar = lo que esta PC sube.
+        if let Ok(v) = api_get(&c.apikey, &format!("/rest/db/completion?folder={CARPETA_SIN_CLASIFICAR}&device={}", c.id_original)) {
+            e.por_subir = v["needItems"].as_u64().unwrap_or(0);
+            e.por_subir_mb = v["needBytes"].as_f64().unwrap_or(0.0) / 1_048_576.0;
+        }
     }
     e
 }
