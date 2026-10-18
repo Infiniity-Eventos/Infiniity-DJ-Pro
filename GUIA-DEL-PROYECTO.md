@@ -220,9 +220,10 @@ src/
 │   ├── PromptModal.tsx          🆕 Pedir dato propio (reemplaza window.prompt).
 │   ├── StatsMonitor.tsx         🆕 Chip RAM/CPU + graba diagnóstico.
 │   ├── AutomixBar.tsx           Cola del automix (3ª columna): encender, Saltar, Limpiar, arrastrar.
+│   ├── Perilla.tsx              Perilla SVG de efecto (arrastre vertical, rueda, doble clic al neutro).
 │   ├── DownloadModal.tsx        🆕 Buscador de YouTube.
 │   └── DownloadIndicator.tsx    🆕 Descargas en 2do plano + reintento.
-├── audio/AudioEngine.ts         ⭐ Motor con AudioBuffer (ver 2.2) + auto-nivelación + transicion() con golpes alineados.
+├── audio/AudioEngine.ts         ⭐ Motor con AudioBuffer (ver 2.2) + auto-nivelación + transicion() con golpes alineados y cambio de graves + efectos por deck (crearFx/setFx).
 ├── audio/analisis.ts            Silencios, cola floja y primer golpe del audio decodificado (~14 ms).
 ├── audio/Automix.ts             ⭐ Controlador del automix (cola, precarga, regla de la vuelta, bloqueos).
 ├── lib/
