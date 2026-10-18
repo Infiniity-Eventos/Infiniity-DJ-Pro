@@ -84,7 +84,18 @@ class AudioEngine {
     const ctx = new AudioContext({ latencyHint: "playback" });
     const master = ctx.createGain();
     master.gain.value = useStore.getState().masterVolume;
-    master.connect(ctx.destination);
+    // Limitador de seguridad al final: como la nivelacion ahora apunta mas
+    // alto (ver computeNormGain), dos decks sonando a la vez podrian pasarse
+    // del maximo y distorsionar. Esto frena solo los picos; no cambia el
+    // volumen normal. Corre en el hilo de audio nativo: no cuesta CPU visible.
+    const limiter = ctx.createDynamicsCompressor();
+    limiter.threshold.value = -1;
+    limiter.knee.value = 0;
+    limiter.ratio.value = 20;
+    limiter.attack.value = 0.002;
+    limiter.release.value = 0.1;
+    master.connect(limiter);
+    limiter.connect(ctx.destination);
 
     const makeDeck = (): Deck => {
       const normGain = ctx.createGain();
@@ -241,11 +252,18 @@ class AudioEngine {
       }
     }
     const rms = Math.sqrt(sumSq / count);
-    const REF_RMS = 0.1; // objetivo de sonoridad (~-20 dBFS)
+    // Objetivo de sonoridad ~-14 dBFS (como Spotify/YouTube). Antes era 0.1
+    // (-20 dBFS): una cancion moderna, masterizada fuerte (RMS ~0.3), quedaba
+    // atenuada a un tercio (-10 dB) y en los eventos "sonaba re pasito". Con
+    // 0.2 las fuertes bajan poco y las flojas suben; el limitador del master
+    // atrapa los picos.
+    const REF_RMS = 0.2;
     let gain = rms > 0.0001 ? REF_RMS / rms : 1;
     // No sobrepasar el pico ~0.97 (evita saturacion/distorsion).
     if (peak > 0) gain = Math.min(gain, 0.97 / peak);
-    return clamp(gain, 0.25, 4);
+    // Nunca bajar una cancion a menos de la mitad: mejor un poco despareja
+    // que "pasito" en pleno baile.
+    return clamp(gain, 0.5, 4);
   }
 
   // -------- Transporte --------

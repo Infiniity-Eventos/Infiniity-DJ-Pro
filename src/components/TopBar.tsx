@@ -93,9 +93,11 @@ export function TopBar() {
       <button
         className="btn no-drag"
         onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-        title="Cambiar tema claro/oscuro"
+        title={theme === "dark" ? "Cambiar a tema claro" : "Cambiar a tema oscuro"}
       >
-        {theme === "dark" ? "☀️" : "🌙"}
+        {/* Texto, no simbolo: el sol de la fuente monocroma parecia un engranaje
+            y el equipo creia que era "configuracion". */}
+        {theme === "dark" ? "Claro" : "Oscuro"}
       </button>
 
       {/* Buscar actualizacion a mano. Existe porque si el aviso automatico no
