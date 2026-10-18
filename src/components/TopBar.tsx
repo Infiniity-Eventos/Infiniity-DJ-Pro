@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useStore } from "../state/store";
 import {
   midiConnect,
@@ -51,28 +52,28 @@ export function TopBar() {
     }
   };
 
-  // Agregar una carpeta entera. Original: con sus subcarpetas (meter ~/Música
-  // y que queden los generos). Equipo: todo plano en Sin clasificar.
+  // Agregar una carpeta entera: se escanea con todas sus subcarpetas y TODAS
+  // las canciones caen sueltas en "Sin clasificar" (pedido: nada de subcarpetas
+  // ahi; el orden lo pone despues el PC original).
   const agregarCarpeta = async () => {
     if (!musicRoot) return;
     const carpeta = await pickFolder();
     if (!carpeta) return;
-    const original = sync?.rol === "original";
     try {
-      const dest = original ? musicRoot : await ensureUnclassified(musicRoot);
-      showToast("Copiando carpeta... (puede tardar si es grande)");
-      const [copiadas, saltadas] = await importFolder(carpeta, dest, original);
+      const dest = await ensureUnclassified(musicRoot);
+      showToast("Buscando canciones en la carpeta... (puede tardar si es grande)");
+      const [copiadas, saltadas] = await importFolder(carpeta, dest, false);
       await reloadLibrary();
-      if (!original) useStore.getState().setSelectedFolder(dest);
+      useStore.getState().setSelectedFolder(dest);
       showToast(
-        `${copiadas} canción(es) agregadas` +
-          (original ? " con sus carpetas" : " a Sin clasificar") +
+        `${copiadas} canción(es) agregadas a Sin clasificar` +
           (saltadas > 0 ? ` · ${saltadas} saltadas (ya estaban o no son audio)` : "")
       );
     } catch (e) {
       showToast(`No se pudo agregar la carpeta: ${e}`);
     }
   };
+  const [menuAgregar, setMenuAgregar] = useState(false);
 
 
   const toggleMidi = async () => {
@@ -113,26 +114,38 @@ export function TopBar() {
       >
         ⬇️ YouTube
       </button>
-      <button
-        className="btn no-drag"
-        onClick={agregarCanciones}
-        disabled={!musicRoot}
-        title="Copiar canciones de este computador a la biblioteca (van a Sin clasificar)"
-      >
-        ＋ Agregar canciones
-      </button>
-      <button
-        className="btn no-drag"
-        onClick={agregarCarpeta}
-        disabled={!musicRoot}
-        title={
-          sync?.rol === "original"
-            ? "Copiar una carpeta entera a la biblioteca, con sus subcarpetas (géneros)"
-            : "Copiar todas las canciones de una carpeta a Sin clasificar"
-        }
-      >
-        ＋ Agregar carpeta
-      </button>
+      <span className="agregar-wrap no-drag">
+        <button
+          className="btn"
+          onClick={() => setMenuAgregar((v) => !v)}
+          disabled={!musicRoot}
+          title="Copiar canciones de este computador a la biblioteca (van a Sin clasificar)"
+        >
+          ＋ Agregar canciones
+        </button>
+        {menuAgregar && (
+          <div className="glass glass-strong agregar-menu" onMouseLeave={() => setMenuAgregar(false)}>
+            <button
+              className="btn"
+              onClick={() => {
+                setMenuAgregar(false);
+                void agregarCanciones();
+              }}
+            >
+              🎵 Canciones sueltas…
+            </button>
+            <button
+              className="btn"
+              onClick={() => {
+                setMenuAgregar(false);
+                void agregarCarpeta();
+              }}
+            >
+              📁 Carpeta completa… <span className="sync-dim">(se escanea entera)</span>
+            </button>
+          </div>
+        )}
+      </span>
       {musicRoot && <span className="path-chip">{musicRoot}</span>}
 
       <span className="spacer" />
