@@ -9,7 +9,16 @@ import { copiarTexto } from "../lib/clipboard";
  * borrosa. Confirma en pantalla si copio o no: un boton que falla en silencio
  * es peor que no tenerlo.
  */
-export function CopyButton({ texto, className }: { texto: string; className?: string }) {
+export function CopyButton({
+  texto,
+  className,
+  etiqueta = "Copiar error",
+}: {
+  texto: string;
+  className?: string;
+  /** Texto del boton; por defecto "Copiar error" (su uso original). */
+  etiqueta?: string;
+}) {
   const [estado, setEstado] = useState<"" | "ok" | "fallo">("");
 
   const copiar = async () => {
@@ -22,11 +31,11 @@ export function CopyButton({ texto, className }: { texto: string; className?: st
     <button
       className={className ?? "btn dl-mini"}
       onClick={copiar}
-      title="Copiar el error para poder enviarlo"
+      title={`${etiqueta} al portapapeles`}
     >
       {estado === "ok" && "✅ Copiado"}
       {estado === "fallo" && "❌ No se pudo copiar"}
-      {estado === "" && "📋 Copiar error"}
+      {estado === "" && `📋 ${etiqueta}`}
     </button>
   );
 }

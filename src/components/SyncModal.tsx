@@ -123,8 +123,8 @@ export function SyncModal() {
 
             <div className="sync-sub">Código para las demás PC (cópialo y mándalo por WhatsApp):</div>
             <div className="sync-codigo">{codigo || "..."}</div>
-            <div className="modal-actions" style={{ justifyContent: "flex-start" }}>
-              {codigo && <CopyButton texto={codigo} />}
+            <div className="sync-acciones">
+              {codigo && <CopyButton texto={codigo} className="btn btn-accent" etiqueta="Copiar código" />}
               <button
                 className="btn"
                 disabled={!!ocupado}
@@ -150,7 +150,7 @@ export function SyncModal() {
             </ul>
 
             <div className="sync-sub">Para que funcione aunque la app esté cerrada:</div>
-            <div className="modal-actions" style={{ justifyContent: "flex-start" }}>
+            <div className="sync-acciones">
               <button
                 className="btn"
                 disabled={!!ocupado}
@@ -189,7 +189,7 @@ export function SyncModal() {
               {sync.autorizado && !sync.musica && sync.pausa_manual && "⏸ En pausa (la pausaste tú)."}
               {sync.autorizado && !sync.musica && !sync.pausa_manual && "▶ Sincronizando cuando hay algo pendiente."}
             </div>
-            <div className="modal-actions" style={{ justifyContent: "flex-start" }}>
+            <div className="sync-acciones">
               {(!sync.autorizado || sync.pausa_manual) && (
                 <button
                   className="btn btn-accent"
@@ -239,7 +239,7 @@ export function SyncModal() {
         )}
 
         {sync && sync.rol !== "ninguno" && !aviso && (
-          <div className="modal-actions">
+          <div className="modal-actions sync-cerrar">
             <button className="btn" onClick={cerrar}>
               Cerrar
             </button>
