@@ -71,6 +71,9 @@ export function FolderTree() {
   const setSelectedArtist = useStore((s) => s.setSelectedArtist);
   const vista = useStore((s) => s.vistaCarpetas);
   const setVista = useStore((s) => s.setVistaCarpetas);
+  // Buscador del panel: filtra carpetas o artistas por nombre.
+  const [filtro, setFiltro] = useState("");
+  const q = filtro.trim().toLowerCase();
 
   // Carpetas de primer nivel: "Sin clasificar" primero, el resto por nombre.
   const carpetas = useMemo(() => {
@@ -119,11 +122,19 @@ export function FolderTree() {
         <span className="count">{total}</span>
       </div>
 
-      {vista === "generos" && carpetas.map((n) => <FilaCarpeta key={n.path} node={n} />)}
+      <input
+        className="dl-input folder-buscar"
+        placeholder={vista === "generos" ? "Buscar carpeta..." : "Buscar artista..."}
+        value={filtro}
+        onChange={(e) => setFiltro(e.target.value)}
+      />
+
+      {vista === "generos" &&
+        carpetas.filter((n) => !q || n.name.toLowerCase().includes(q)).map((n) => <FilaCarpeta key={n.path} node={n} />)}
 
       {vista === "artistas" && (
         <>
-          {artistas.lista.map(([a, n]) => (
+          {artistas.lista.filter(([a]) => !q || a.toLowerCase().includes(q)).map(([a, n]) => (
             <div
               key={a}
               className={`folder-row ${selectedArtist === a ? "active" : ""}`}

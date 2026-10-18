@@ -1135,3 +1135,8 @@ body {
   color: var(--text-dim);
   font-weight: 400;
 }
+.folder-buscar {
+  margin: 4px 0 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
