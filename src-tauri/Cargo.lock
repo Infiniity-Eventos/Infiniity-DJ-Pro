@@ -1641,7 +1641,7 @@ dependencies = [
 
 [[package]]
 name = "infiniity-dj"
-version = "0.3.12"
+version = "0.3.13"
 dependencies = [
  "lzma-rs",
  "midir",
