@@ -15,6 +15,21 @@ export function Welcome() {
   const [uniendo, setUniendo] = useState(false);
   const [error, setError] = useState("");
 
+  // Pegar desde el portapapeles sin tener que escribir ni usar Ctrl+V.
+  const pegar = async () => {
+    try {
+      const t = await navigator.clipboard.readText();
+      if (!t.trim()) {
+        setError("El portapapeles está vacío: copia el código del WhatsApp primero.");
+        return;
+      }
+      setCodigo(t.trim());
+      setError("");
+    } catch (e) {
+      setError(`No se pudo leer el portapapeles (${e}). Haz clic en el cuadro y usa Ctrl+V.`);
+    }
+  };
+
   const unirse = async () => {
     const c = codigo.trim();
     if (!c || uniendo) return;
@@ -43,16 +58,24 @@ export function Welcome() {
         placeholder="Nombre de esta PC (ej: Portátil Sharon)"
         value={nombre}
         onChange={(e) => setNombre(e.target.value)}
+        onMouseDown={(e) => (e.currentTarget as HTMLInputElement).focus()}
         maxLength={40}
+        autoFocus
       />
-      <textarea
-        className="dl-input welcome-codigo"
-        placeholder="IDJ1-..."
-        value={codigo}
-        onChange={(e) => setCodigo(e.target.value)}
-        rows={3}
-        spellCheck={false}
-      />
+      <div className="welcome-fila">
+        <textarea
+          className="dl-input welcome-codigo"
+          placeholder="IDJ1-..."
+          value={codigo}
+          onChange={(e) => setCodigo(e.target.value)}
+          onMouseDown={(e) => (e.currentTarget as HTMLTextAreaElement).focus()}
+          rows={3}
+          spellCheck={false}
+        />
+        <button className="btn" onClick={pegar} title="Pegar el código copiado del WhatsApp">
+          📋 Pegar código
+        </button>
+      </div>
       <button
         className="btn btn-accent"
         style={{ fontSize: 18, padding: "14px 28px" }}

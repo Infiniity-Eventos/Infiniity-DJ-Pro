@@ -22,8 +22,20 @@ body {
 }
 
 button,
-input {
+input,
+textarea {
   font-family: inherit;
+}
+
+/* El body lleva user-select: none (para que la interfaz no se "pinte" al
+   arrastrar). En WebKit eso puede dejar un cuadro de texto sin poder
+   enfocarse ni escribir ("no deja escribir" en la pantalla del codigo). Los
+   campos de texto SIEMPRE seleccionables. */
+input,
+textarea {
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
 }
 
 /* Scrollbars discretas y moradas */
@@ -1022,6 +1034,16 @@ body {
 }
 .welcome-nombre {
   width: min(560px, 90vw);
+}
+.welcome-fila {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+  width: min(640px, 90vw);
+}
+.welcome-fila .welcome-codigo {
+  flex: 1;
+  width: auto;
 }
 .welcome-codigo {
   width: min(560px, 90vw);
