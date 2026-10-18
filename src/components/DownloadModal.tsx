@@ -87,7 +87,9 @@ export function DownloadModal({ onClose }: { onClose: () => void }) {
   };
 
   const ffmpegMissing = tools && !tools.ffmpeg;
-  const needsInstall = tools && (!tools.ytdlp || !tools.deno);
+  // ffmpeg tambien lo instala la app (version estatica en su carpeta): nada de
+  // pedirle "sudo apt install" a alguien en pleno evento.
+  const needsInstall = tools && (!tools.ytdlp || !tools.deno || !tools.ffmpeg);
 
   return (
     <div className="modal-overlay" onClick={installing ? undefined : onClose}>
@@ -99,23 +101,14 @@ export function DownloadModal({ onClose }: { onClose: () => void }) {
         {tools && needsInstall && (
           <div className="dl-section">
             <div className="modal-msg" style={{ marginBottom: 12 }}>
-              Para buscar y descargar falta instalar el motor (una sola vez, ~110 MB). La app
-              lo hace sola.
+              Para buscar y descargar falta instalar el motor (una sola vez, ~150 MB). La app
+              lo hace sola, sin contraseña.
             </div>
             <ul className="dl-tools">
               <li>{tools.ytdlp ? "✅" : "⬜"} yt-dlp (buscador/descargador)</li>
               <li>{tools.deno ? "✅" : "⬜"} Deno (motor JS)</li>
-              <li>{tools.ffmpeg ? "✅" : "❌"} ffmpeg (conversor a MP3)</li>
+              <li>{tools.ffmpeg ? "✅" : "⬜"} ffmpeg (conversor a MP3)</li>
             </ul>
-            {ffmpegMissing && (
-              <div className="dl-warn">
-                ⚠️ Falta <b>ffmpeg</b>, que convierte a MP3. Instálalo según tu sistema:
-                <br />
-                Linux Mint / Ubuntu: <code>sudo apt install ffmpeg</code>
-                <br />
-                Fedora: <code>sudo dnf install ffmpeg-free</code>
-              </div>
-            )}
             {installing && installProgress && (
               <ProgressBarDL percent={installProgress.percent} message={installProgress.message} />
             )}
@@ -143,15 +136,6 @@ export function DownloadModal({ onClose }: { onClose: () => void }) {
 
         {tools && !needsInstall && (
           <div className="dl-section">
-            {ffmpegMissing && (
-              <div className="dl-warn">
-                ⚠️ Falta <b>ffmpeg</b>, que convierte a MP3. Instálalo según tu sistema:
-                <br />
-                Linux Mint / Ubuntu: <code>sudo apt install ffmpeg</code>
-                <br />
-                Fedora: <code>sudo dnf install ffmpeg-free</code>
-              </div>
-            )}
             <div className="dl-search-row">
               <input
                 className="dl-input"

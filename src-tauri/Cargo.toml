@@ -49,6 +49,10 @@ reqwest = { version = "0.12", default-features = false, features = [
 ] }
 # Descomprimir el .zip de Deno sin llamar a python3.
 zip = { version = "2", default-features = false, features = ["deflate"] }
+# Descomprimir el .tar.xz de ffmpeg estatico, 100% en Rust (sin liblzma ni tar
+# del sistema: dentro del AppImage no se puede contar con ellos).
+lzma-rs = "0.3"
+tar = "0.4"
 
 # Para enterarnos cuando el proceso que dibuja se cae (ver arranque.rs). Misma
 # version y features que usa Tauri por dentro; no agrega nada al paquete.

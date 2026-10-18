@@ -18,6 +18,10 @@ const YTDLP_URL: &str =
     "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux";
 const DENO_URL: &str =
     "https://github.com/denoland/deno/releases/latest/download/deno-x86_64-unknown-linux-gnu.zip";
+// ffmpeg ESTATICO: un solo ejecutable que no necesita nada del sistema. Asi la
+// app lo instala en su carpeta sin pedir contraseña de administrador (en Mint
+// ffmpeg no viene, y pedirle "sudo apt install" a alguien en un evento no sirve).
+const FFMPEG_URL: &str = "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz";
 
 #[derive(Serialize, Clone)]
 pub struct Tools {
@@ -115,7 +119,8 @@ pub fn resolve_tools(app: &AppHandle) -> Tools {
     let deno = first_existing(&[bin.join("deno"), h.join(".deno/bin/deno")])
         .or_else(|| search_path("deno"));
 
-    let ffmpeg = search_path("ffmpeg");
+    // Primero el de la app (estatico, instalado por ella); si no, el del sistema.
+    let ffmpeg = first_existing(&[bin.join("ffmpeg")]).or_else(|| search_path("ffmpeg"));
 
     let ready = ytdlp.is_some() && deno.is_some() && ffmpeg.is_some();
     Tools {
@@ -522,6 +527,51 @@ fn descargar(
 
 /// Descomprime un .zip. Antes se llamaba a python3, que dentro del AppImage
 /// ni siquiera arrancaba.
+/// Saca de un .tar.xz solo los archivos cuyo nombre este en `nombres`, y los
+/// deja directo en `destino` (sin subcarpetas). El xz se descomprime primero a
+/// un .tar en disco para no cargar ~150 MB en memoria en un portatil flojo.
+fn extraer_tar_xz(txz: &Path, destino: &Path, nombres: &[&str]) -> Result<(), String> {
+    let tar_path = txz.with_extension("tar");
+    {
+        let entrada = std::fs::File::open(txz)
+            .map_err(|e| format!("No se pudo abrir {}: {e}", txz.display()))?;
+        let salida = std::fs::File::create(&tar_path)
+            .map_err(|e| format!("No se pudo crear {}: {e}", tar_path.display()))?;
+        let mut lector = std::io::BufReader::new(entrada);
+        let mut escritor = std::io::BufWriter::new(salida);
+        lzma_rs::xz_decompress(&mut lector, &mut escritor)
+            .map_err(|e| format!("El archivo de ffmpeg está dañado o incompleto (xz): {e:?}"))?;
+        use std::io::Write;
+        escritor.flush().map_err(|e| e.to_string())?;
+    }
+    let resultado = (|| -> Result<(), String> {
+        let archivo = std::fs::File::open(&tar_path).map_err(|e| e.to_string())?;
+        let mut tar = tar::Archive::new(archivo);
+        let mut encontrados = 0;
+        for entrada in tar.entries().map_err(|e| format!("No se pudo leer el tar: {e}"))? {
+            let mut entrada = entrada.map_err(|e| format!("Entrada dañada en el tar: {e}"))?;
+            let ruta = entrada.path().map_err(|e| e.to_string())?.into_owned();
+            let Some(nombre) = ruta.file_name().and_then(|n| n.to_str()) else { continue };
+            if !entrada.header().entry_type().is_file() || !nombres.contains(&nombre) {
+                continue;
+            }
+            entrada
+                .unpack(destino.join(nombre))
+                .map_err(|e| format!("No se pudo extraer {nombre}: {e}"))?;
+            encontrados += 1;
+            if encontrados == nombres.len() {
+                break;
+            }
+        }
+        if encontrados == 0 {
+            return Err("El paquete de ffmpeg no traía el programa esperado.".to_string());
+        }
+        Ok(())
+    })();
+    let _ = std::fs::remove_file(&tar_path);
+    resultado
+}
+
 fn descomprimir(zip_path: &Path, destino: &Path) -> Result<(), String> {
     let archivo = std::fs::File::open(zip_path)
         .map_err(|e| format!("No se pudo abrir el archivo comprimido: {e}"))?;
@@ -568,7 +618,7 @@ fn do_install(app: &AppHandle) -> Result<Tools, String> {
     // yt-dlp (binario standalone, no necesita Python en el equipo destino).
     let ytdlp_path = bin.join("yt-dlp");
     if !ytdlp_path.is_file() {
-        descargar(app, YTDLP_URL, &ytdlp_path, "la descarga de yt-dlp", 0.0, 45.0)?;
+        descargar(app, YTDLP_URL, &ytdlp_path, "la descarga de yt-dlp", 0.0, 15.0)?;
         if !ytdlp_path.is_file() {
             return Err("La descarga de yt-dlp terminó pero el archivo no quedó guardado.".to_string());
         }
@@ -579,9 +629,9 @@ fn do_install(app: &AppHandle) -> Result<Tools, String> {
     let deno_path = bin.join("deno");
     if !deno_path.is_file() {
         let zip_path = bin.join("deno.zip");
-        descargar(app, DENO_URL, &zip_path, "la descarga de Deno", 45.0, 90.0)?;
+        descargar(app, DENO_URL, &zip_path, "la descarga de Deno", 15.0, 55.0)?;
 
-        emit_progress(app, "__install__", 92.0, "descargando", "Descomprimiendo...");
+        emit_progress(app, "__install__", 57.0, "descargando", "Descomprimiendo Deno...");
         let resultado = descomprimir(&zip_path, &bin);
         let _ = std::fs::remove_file(&zip_path);
         resultado?;
@@ -592,12 +642,82 @@ fn do_install(app: &AppHandle) -> Result<Tools, String> {
         set_executable(&deno_path);
     }
 
+    // ffmpeg estatico (solo si el equipo no tiene uno). Viene en .tar.xz con
+    // ffmpeg y ffprobe dentro de una subcarpeta; se sacan los dos a bin/.
+    if resolve_tools(app).ffmpeg.is_none() {
+        let txz = bin.join("ffmpeg.tar.xz");
+        descargar(app, FFMPEG_URL, &txz, "la descarga de ffmpeg", 60.0, 92.0)?;
+        emit_progress(app, "__install__", 94.0, "descargando", "Descomprimiendo ffmpeg (tarda un poco)...");
+        let resultado = extraer_tar_xz(&txz, &bin, &["ffmpeg", "ffprobe"]);
+        let _ = std::fs::remove_file(&txz);
+        resultado?;
+        let ffmpeg_path = bin.join("ffmpeg");
+        if !ffmpeg_path.is_file() {
+            return Err("ffmpeg se descomprimió pero no apareció el programa esperado.".to_string());
+        }
+        set_executable(&ffmpeg_path);
+        set_executable(&bin.join("ffprobe"));
+    }
+
     emit_progress(app, "__install__", 100.0, "listo", "Descargador instalado");
     Ok(resolve_tools(app))
 }
 
 #[cfg(test)]
 mod pruebas {
+    /// extraer_tar_xz saca SOLO los archivos pedidos, sin subcarpetas.
+    #[test]
+    fn extraer_tar_xz_saca_solo_lo_pedido() {
+        let dir = std::env::temp_dir().join(format!("infiniity-txz-{}", std::process::id()));
+        let origen = dir.join("ffmpeg-7.0-amd64-static");
+        std::fs::create_dir_all(&origen).unwrap();
+        std::fs::write(origen.join("ffmpeg"), b"#!/bin/sh\necho soy ffmpeg\n").unwrap();
+        std::fs::write(origen.join("ffprobe"), b"#!/bin/sh\necho soy ffprobe\n").unwrap();
+        std::fs::write(origen.join("GPLv3.txt"), b"licencia").unwrap();
+        let txz = dir.join("f.tar.xz");
+        let ok = std::process::Command::new("tar")
+            .args(["-cJf", txz.to_str().unwrap(), "-C", dir.to_str().unwrap(), "ffmpeg-7.0-amd64-static"])
+            .status()
+            .expect("hace falta tar+xz en el equipo de desarrollo")
+            .success();
+        assert!(ok);
+        let destino = dir.join("bin");
+        std::fs::create_dir_all(&destino).unwrap();
+        super::extraer_tar_xz(&txz, &destino, &["ffmpeg", "ffprobe"]).unwrap();
+        assert_eq!(std::fs::read(destino.join("ffmpeg")).unwrap(), b"#!/bin/sh\necho soy ffmpeg\n");
+        assert!(destino.join("ffprobe").is_file());
+        assert!(!destino.join("GPLv3.txt").exists(), "no debe sacar lo que no se pidio");
+        assert!(!dir.join("f.tar").exists(), "el .tar intermedio se borra");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Baja el ffmpeg estatico REAL (40 MB) y comprueba que corre. Pesada: solo
+    /// con `cargo test -- --ignored`.
+    #[test]
+    #[ignore]
+    fn ffmpeg_estatico_real_se_descarga_y_corre() {
+        let dir = std::env::temp_dir().join(format!("infiniity-ffmpeg-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let txz = dir.join("ffmpeg.tar.xz");
+        let bytes = reqwest::blocking::Client::builder()
+            .timeout(std::time::Duration::from_secs(600))
+            .build()
+            .unwrap()
+            .get(super::FFMPEG_URL)
+            .send()
+            .unwrap()
+            .bytes()
+            .unwrap();
+        std::fs::write(&txz, &bytes).unwrap();
+        super::extraer_tar_xz(&txz, &dir, &["ffmpeg", "ffprobe"]).unwrap();
+        super::set_executable(&dir.join("ffmpeg"));
+        let out = std::process::Command::new(dir.join("ffmpeg")).arg("-version").output().unwrap();
+        let texto = String::from_utf8_lossy(&out.stdout);
+        assert!(out.status.success() && texto.starts_with("ffmpeg version"), "{texto}");
+        eprintln!("{}", texto.lines().next().unwrap_or(""));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// Reproduce el bloqueo que dejaba las descargas clavadas en 0%.
     ///
     /// Se lanza un proceso que escupe MUCHOS mensajes de error (bastante mas
