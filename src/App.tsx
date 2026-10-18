@@ -121,6 +121,7 @@ export default function App() {
         <Welcome />
         <SyncModal />
         <ConfirmModal />
+        <PromptModal />
         {toast && <div className="glass glass-strong toast">{toast}</div>}
       </>
     );

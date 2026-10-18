@@ -511,7 +511,11 @@ input[type="range"]::-webkit-slider-thumb {
   padding: 12px 22px;
   border-radius: var(--radius-md);
   font-size: 14px;
-  z-index: 100;
+  /* CAPAS de la app (no inventar otras): menus 60 · chips 90-95 · paneles
+     (YouTube, actualizacion, Sync) 200 · cuadros de pregunta/confirmacion 300
+     · notificaciones 400. Antes todo compartia la 200 y ganaba el que se
+     pintaba despues: el cuadro de "nombre" salia DEBAJO del panel Sync. */
+  z-index: 400;
   animation: toastIn var(--t-med);
 }
 @keyframes toastIn {
@@ -643,6 +647,10 @@ input[type="range"]::-webkit-slider-thumb {
   justify-content: center;
   background: rgba(10, 5, 25, 0.55);
   animation: modalFade 150ms ease;
+}
+/* Cuadros de pregunta/confirmacion: siempre por encima de cualquier panel. */
+.modal-overlay.modal-encima {
+  z-index: 300;
 }
 @keyframes modalFade {
   from {

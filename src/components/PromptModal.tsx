@@ -28,7 +28,7 @@ export function PromptModal() {
   };
 
   return (
-    <div className="modal-overlay" onClick={close}>
+    <div className="modal-overlay modal-encima" onClick={close}>
       <div className="glass glass-strong modal-box" onClick={(e) => e.stopPropagation()}>
         <div className="modal-msg">{box.message}</div>
         <input

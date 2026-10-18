@@ -10,7 +10,7 @@ export function ConfirmModal() {
   if (!box) return null;
 
   return (
-    <div className="modal-overlay" onClick={close}>
+    <div className="modal-overlay modal-encima" onClick={close}>
       <div className="glass glass-strong modal-box" onClick={(e) => e.stopPropagation()}>
         <div className="modal-msg">{box.message}</div>
         <div className="modal-actions">
