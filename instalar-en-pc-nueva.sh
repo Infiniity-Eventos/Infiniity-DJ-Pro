@@ -43,6 +43,9 @@ if ! ldconfig -p 2>/dev/null | grep -q "libfuse.so.2"; then
   if command -v apt-get >/dev/null 2>&1; then
     sudo apt-get update
     sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64
+    # ffmpeg convierte a MP3 lo que baja el descargador de YouTube. Mint no lo
+    # trae de fabrica, y sin el "buscar" funciona pero "descargar" falla.
+    sudo apt-get install -y ffmpeg || echo "⚠ No se pudo instalar ffmpeg: el descargador de YouTube no podra convertir a MP3."
   elif command -v dnf >/dev/null 2>&1; then
     sudo dnf install -y fuse-libs
   elif command -v pacman >/dev/null 2>&1; then

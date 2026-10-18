@@ -269,6 +269,7 @@ pub fn run() {
             downloader::ytdl_search,
             downloader::ytdl_download,
             downloader::ytdl_install,
+            downloader::ytdl_update,
             analyze_bpm,
             set_manual_bpm,
             midi_list,

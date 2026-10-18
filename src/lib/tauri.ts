@@ -90,6 +90,8 @@ export interface YtSearchResult {
 export const ytdlTools = () => invoke<YtdlTools>("ytdl_tools");
 export const ytdlSearch = (query: string) => invoke<YtSearchResult[]>("ytdl_search", { query });
 export const ytdlInstall = () => invoke<YtdlTools>("ytdl_install");
+/** yt-dlp -U: devuelve el mensaje de yt-dlp ("Updated yt-dlp to ..." / "is up to date"). */
+export const ytdlUpdate = () => invoke<string>("ytdl_update");
 export const ytdlDownload = (url: string, destFolder: string, id: string) =>
   invoke<string>("ytdl_download", { url, destFolder, id });
 export const onYtdlProgress = (

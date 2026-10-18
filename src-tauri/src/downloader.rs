@@ -219,6 +219,13 @@ fn emit_progress(app: &AppHandle, id: &str, percent: f64, stage: &str, message: 
 
 /// Convierte la salida de error de yt-dlp en un mensaje claro para el usuario.
 fn friendly_error(stderr: &str) -> String {
+    // YouTube reconoce el trafico de yt-dlp y exige iniciar sesion. Depende de
+    // la IP/red y de la version de yt-dlp; por eso antes de llegar aqui ya se
+    // intento actualizar yt-dlp y repetir (ver do_download).
+    if stderr.contains("Sign in to confirm") || stderr.contains("not a bot") {
+        return "YouTube está bloqueando las descargas desde esta conexión (pide iniciar sesión).                 Suele ser temporal: espera 10-15 minutos, o prueba desde otra red                 (por ejemplo compartiendo datos del celular)."
+            .to_string();
+    }
     if stderr.contains("429") || stderr.contains("Too Many Requests") {
         return "YouTube limitó las descargas por ahora (demasiadas seguidas). \
                 Espera 1-2 minutos y vuelve a intentar."
@@ -244,7 +251,66 @@ fn friendly_error(stderr: &str) -> String {
     "No se pudo descargar (revisa el enlace o tu conexión).".to_string()
 }
 
+/// Actualiza yt-dlp a su ultima version (el binario se reemplaza a si mismo con
+/// `-U`). Devuelve el ultimo mensaje de yt-dlp ("Updated yt-dlp to ..." o
+/// "yt-dlp is up to date ...").
+///
+/// POR QUE: YouTube cambia cada pocas semanas y un yt-dlp de hace dos meses
+/// empieza a fallar con "Sign in to confirm you're not a bot". La app instalaba
+/// yt-dlp una vez y nunca lo actualizaba: en los equipos del equipo se quedo
+/// en la version de julio.
+pub fn actualizar_ytdlp(app: &AppHandle) -> Result<String, String> {
+    let tools = resolve_tools(app);
+    let ytdlp = tools.ytdlp.ok_or("yt-dlp no esta instalado")?;
+    // Solo se toca el yt-dlp que instalo la propia app. Si el equipo usa uno
+    // suyo (pip, ~/.local/bin), es cosa de quien lo instalo.
+    if !Path::new(&ytdlp).starts_with(app_bin_dir(app)) {
+        return Ok(format!("yt-dlp externo ({ytdlp}): no se actualiza desde la app"));
+    }
+    let out = clean_command(&ytdlp)
+        .arg("-U")
+        .output()
+        .map_err(|e| format!("No se pudo ejecutar yt-dlp -U: {e}"))?;
+    let texto = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let ultima = texto.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("").trim().to_string();
+    if out.status.success() {
+        Ok(ultima)
+    } else {
+        Err(if ultima.is_empty() { "yt-dlp -U fallo sin decir por que".to_string() } else { ultima })
+    }
+}
+
+#[tauri::command]
+pub async fn ytdl_update(app: AppHandle) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || actualizar_ytdlp(&app))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Errores que suelen deberse a un yt-dlp desactualizado frente a YouTube.
+fn parece_bloqueo_de_youtube(stderr: &str) -> bool {
+    stderr.contains("Sign in to confirm")
+        || stderr.contains("not a bot")
+        || stderr.contains("Unable to extract")
+        || stderr.contains("challenge")
+        || stderr.contains("needs to be reloaded")
+}
+
 fn do_download(app: &AppHandle, url: &str, dest_folder: &str, id: &str) -> Result<String, String> {
+    descargar_con(app, url, dest_folder, id, false)
+}
+
+fn descargar_con(
+    app: &AppHandle,
+    url: &str,
+    dest_folder: &str,
+    id: &str,
+    es_reintento: bool,
+) -> Result<String, String> {
     let tools = resolve_tools(app);
     let ytdlp = tools.ytdlp.ok_or("yt-dlp no esta instalado")?;
     let deno = tools.deno.ok_or("deno (motor JS) no esta instalado")?;
@@ -340,6 +406,19 @@ fn do_download(app: &AppHandle, url: &str, dest_folder: &str, id: &str) -> Resul
     let errbuf = hilo_errores.join().unwrap_or_default();
 
     if !status.success() {
+        // Si huele a yt-dlp viejo, actualizarlo y repetir UNA vez antes de
+        // rendirse. Si ya estaba al dia, el error es de YouTube/la red.
+        if !es_reintento && parece_bloqueo_de_youtube(&errbuf) {
+            emit_progress(app, id, 0.0, "descargando", "Actualizando el descargador y reintentando...");
+            match actualizar_ytdlp(app) {
+                Ok(msg) if msg.contains("Updated") => {
+                    eprintln!("descargador: {msg}; reintentando");
+                    return descargar_con(app, url, dest_folder, id, true);
+                }
+                Ok(msg) => eprintln!("descargador: yt-dlp ya estaba al dia ({msg})"),
+                Err(e) => eprintln!("AVISO: no se pudo actualizar yt-dlp: {e}"),
+            }
+        }
         emit_progress(app, id, 0.0, "error", "No se pudo descargar");
         return Err(friendly_error(&errbuf));
     }

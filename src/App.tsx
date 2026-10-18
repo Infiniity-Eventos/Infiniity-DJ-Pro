@@ -14,7 +14,7 @@ import { StatsMonitor } from "./components/StatsMonitor";
 import { DownloadModal } from "./components/DownloadModal";
 import { DownloadIndicator } from "./components/DownloadIndicator";
 import { UpdateModal } from "./components/UpdateModal";
-import { onYtdlProgress, modoDibujo, interfazLista, isTauri } from "./lib/tauri";
+import { onYtdlProgress, modoDibujo, interfazLista, isTauri, ytdlUpdate } from "./lib/tauri";
 
 export default function App() {
   const theme = useStore((s) => s.theme);
@@ -55,6 +55,36 @@ export default function App() {
     const t = window.setTimeout(() => {
       interfazLista().catch((err) => console.error("[App] interfaz_lista fallo", err));
     }, 2500);
+    return () => window.clearTimeout(t);
+  }, []);
+
+  // Mantener yt-dlp al dia (una vez al dia, 20 s despues de abrir, en segundo
+  // plano). YouTube cambia cada pocas semanas y un yt-dlp viejo deja de bajar.
+  useEffect(() => {
+    if (!isTauri()) return;
+    const CLAVE = "ytdlp-ultima-revision";
+    const UN_DIA = 24 * 3600 * 1000;
+    let ultima = 0;
+    try {
+      ultima = Number(localStorage.getItem(CLAVE) ?? 0);
+    } catch (err) {
+      console.error("[yt-dlp] no se pudo leer la fecha de la ultima revision", err);
+    }
+    if (Date.now() - ultima < UN_DIA) return;
+    const t = window.setTimeout(() => {
+      ytdlUpdate()
+        .then((msg) => {
+          try {
+            localStorage.setItem(CLAVE, String(Date.now()));
+          } catch (err) {
+            console.error("[yt-dlp] no se pudo guardar la fecha de la revision", err);
+          }
+          console.log("[yt-dlp]", msg);
+          if (msg.includes("Updated")) useStore.getState().showToast("Descargador de YouTube actualizado");
+        })
+        // Sin yt-dlp instalado o sin internet no es un fallo: se intenta otro dia.
+        .catch((err) => console.warn("[yt-dlp] no se pudo revisar la actualizacion:", err));
+    }, 20000);
     return () => window.clearTimeout(t);
   }, []);
 
