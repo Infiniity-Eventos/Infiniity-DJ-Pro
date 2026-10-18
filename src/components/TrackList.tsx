@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { engine } from "../audio/AudioEngine";
 import { reloadLibrary } from "../lib/library";
+import { partirArtistas } from "./FolderTree";
 import { useStore, type DeckId } from "../state/store";
 import { analyzeBpm, type TrackInfo } from "../lib/tauri";
 import { fmtTime } from "../lib/format";
@@ -45,7 +46,8 @@ export function TrackList() {
         );
       }
       const inFolder = !selectedFolder || t.folder.startsWith(selectedFolder);
-      const ofArtist = !selectedArtist || (t.artist ?? "") === selectedArtist;
+      // Un artista "aparece" en la cancion si es uno de sus colaboradores.
+      const ofArtist = !selectedArtist || partirArtistas(t.artist).includes(selectedArtist);
       return inFolder && ofArtist;
     });
   }, [library, search, selectedFolder, selectedArtist]);

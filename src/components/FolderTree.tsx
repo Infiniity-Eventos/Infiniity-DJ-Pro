@@ -16,6 +16,15 @@ import { reloadLibrary } from "../lib/library";
  */
 const SIN_CLASIFICAR = "Sin clasificar";
 
+/** "A x B x C" -> ["A", "B", "C"] (el separador lo pone la skill /Organizar_Canciones). */
+export function partirArtistas(artist: string | null): string[] {
+  if (!artist) return [];
+  return artist
+    .split(" x ")
+    .map((a) => a.trim())
+    .filter((a) => a.length > 0);
+}
+
 function FilaCarpeta({ node }: { node: FolderNode }) {
   const selectedFolder = useStore((s) => s.selectedFolder);
   const setSelectedFolder = useStore((s) => s.setSelectedFolder);
@@ -85,12 +94,18 @@ export function FolderTree() {
     return [...sin, ...resto];
   }, [library]);
 
-  // Artistas desde la etiqueta; sin etiqueta = "Sin artista" (lo que la skill no ha organizado).
+  // Artistas desde la etiqueta. "Bad Bunny x Jhay Cortez" son DOS artistas:
+  // la cancion cuenta para cada uno (asi "Bad Bunny" junta tambien sus
+  // colaboraciones). Sin etiqueta = "Sin artista" (lo que la skill no ha organizado).
   const artistas = useMemo(() => {
     const conteo = new Map<string, number>();
     for (const t of library?.tracks ?? []) {
-      const a = t.artist ?? "";
-      conteo.set(a, (conteo.get(a) ?? 0) + 1);
+      const partes = partirArtistas(t.artist);
+      if (partes.length === 0) {
+        conteo.set("", (conteo.get("") ?? 0) + 1);
+        continue;
+      }
+      for (const a of partes) conteo.set(a, (conteo.get(a) ?? 0) + 1);
     }
     const lista = [...conteo.entries()]
       .filter(([a]) => a !== "")
