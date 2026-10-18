@@ -95,6 +95,12 @@ la ignoran… Sync NO la ignora: es pequeña, no importa).
 
 ## Reglas que no se negocian
 
+- **Ninguna canción queda con artista "Desconocido".** Si Deezer no la reconoce: prueba variantes
+  de búsqueda (sin signos, "Título Artista", solo el título), compara la **duración** del archivo
+  con la de los candidatos (±5 s = la misma), y busca en la web ("<título> canción" / "quién canta
+  <título>"). Solo un mix o un beat instrumental sin autor lleva "Infiniity Eventos". Si de verdad
+  no aparece, pregunta al usuario (él suele saberlo) antes de aplicar.
+
 - **Nunca** correr sobre la biblioteca sin el `--simular` previo del paso 3.
 - **Nunca** borrar una canción sin que el usuario lo haya dicho para ESA canción.
 - Si `identificar.py` falla por internet (muchos `AVISO:`), no inventes: repite más tarde.
