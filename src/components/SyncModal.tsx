@@ -93,12 +93,15 @@ export function SyncModal() {
         {sync && sync.rol === "ninguno" && (
           <div className="dl-section">
             <div className="modal-msg">
-              Esta PC usa su propia carpeta. Si esta es la <b>carpeta madre</b> de la música, conviértela
-              en el original del grupo: las demás PC recibirán todo desde aquí con un código.
-              <br />
-              <br />
-              Si esta PC es de alguien del equipo, mejor sal de la carpeta y entra con el código desde la
-              pantalla de inicio.
+              Esta PC no está en ningún grupo. Entra con el código que manda Camilo desde la pantalla de
+              inicio.
+              {musicRoot && (
+                <>
+                  <br />
+                  <br />
+                  Si esta es la <b>carpeta madre</b> de la música, conviértela en el original del grupo.
+                </>
+              )}
             </div>
             <div className="modal-actions">
               <button className="btn" onClick={cerrar}>

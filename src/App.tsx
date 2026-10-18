@@ -22,6 +22,7 @@ export default function App() {
   const theme = useStore((s) => s.theme);
   const lowPower = useStore((s) => s.lowPower);
   const musicRoot = useStore((s) => s.musicRoot);
+  const sync = useStore((s) => s.sync);
   const toast = useStore((s) => s.toast);
   const downloaderOpen = useStore((s) => s.downloaderOpen);
   const setDownloaderOpen = useStore((s) => s.setDownloaderOpen);
@@ -107,7 +108,14 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (!musicRoot) {
+  // Sin biblioteca sincronizada no hay app: solo la pantalla del código. Una
+  // carpeta local elegida en versiones viejas se ignora (pedido: nada de
+  // carpetas locales). Mientras Rust no ha dicho el rol, no se muestra nada
+  // para no parpadear entre pantallas.
+  if (isTauri() && sync === null) {
+    return <div className="welcome">Cargando...</div>;
+  }
+  if (!musicRoot || (sync && sync.rol === "ninguno")) {
     return (
       <>
         <Welcome />

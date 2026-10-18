@@ -1,32 +1,18 @@
 import { useState } from "react";
 import { useStore } from "../state/store";
-import { pickFolder, isTauri, syncUnirse } from "../lib/tauri";
-import { reloadLibrary } from "../lib/library";
+import { syncUnirse } from "../lib/tauri";
 
 /**
- * Primera pantalla. Dos caminos:
- * - PC del EQUIPO: pega el código que manda el PC original y listo (la carpeta
- *   la crea la app; no se elige). Es el camino normal.
- * - PC ORIGINAL (o sin grupo): elegir la carpeta de música de este computador.
+ * Primera pantalla: pegar el código que manda el PC original. No hay forma de
+ * elegir una carpeta del computador: la biblioteca SIEMPRE es la sincronizada
+ * (pedido explícito: que nadie use carpetas locales). El PC original ya está
+ * configurado; si hubiera que rehacerlo, es con `--sync-cli crear` (solo Camilo).
  */
 export function Welcome() {
-  const setMusicRoot = useStore((s) => s.setMusicRoot);
   const showToast = useStore((s) => s.showToast);
   const [codigo, setCodigo] = useState("");
   const [uniendo, setUniendo] = useState(false);
   const [error, setError] = useState("");
-
-  const choose = async () => {
-    if (!isTauri()) {
-      showToast("Esta pantalla funciona dentro de la app instalada");
-      return;
-    }
-    const folder = await pickFolder();
-    if (folder) {
-      setMusicRoot(folder);
-      await reloadLibrary();
-    }
-  };
 
   const unirse = async () => {
     const c = codigo.trim();
@@ -68,14 +54,10 @@ export function Welcome() {
         {uniendo ? "Entrando (baja Syncthing, ~11 MB)..." : "🔁 Entrar al grupo con el código"}
       </button>
       {error && <div className="dl-warn welcome-error">{error}</div>}
-
       <p className="welcome-alt">
-        ¿Este es el PC <b>original</b> (la carpeta madre de la música) o quieres usar una carpeta
-        propia?
+        El código te lo manda Camilo desde su app (botón <b>Sync</b>). Toda la música llega sola a esta
+        PC; no hay que elegir ninguna carpeta.
       </p>
-      <button className="btn" onClick={choose}>
-        📁 Elegir carpeta de música de este computador
-      </button>
     </div>
   );
 }

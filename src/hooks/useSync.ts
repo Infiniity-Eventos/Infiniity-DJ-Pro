@@ -22,12 +22,15 @@ export function useSync() {
         if (!vivo) return;
         const st = useStore.getState();
         st.setSync(e);
-        if (e.rol === "equipo") {
-          // La biblioteca del equipo es FIJA: la carpeta sincronizada.
+        if (e.rol !== "ninguno") {
+          // La biblioteca es FIJA: la carpeta sincronizada (equipo) o la carpeta
+          // madre (original). Nadie la cambia desde la interfaz.
           if (st.musicRoot !== e.raiz) {
             st.setMusicRoot(e.raiz);
             await reloadLibrary();
           }
+        }
+        if (e.rol === "equipo") {
           if (!avisado && e.activo && e.pendientes > 0 && !e.autorizado) {
             avisado = true;
             st.setSyncAviso(true);

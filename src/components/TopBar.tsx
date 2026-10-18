@@ -1,13 +1,11 @@
 import { useStore } from "../state/store";
 import {
-  pickFolder,
   midiConnect,
   midiDisconnect,
   minimizeWindow,
   toggleFullscreen,
   quitApp,
 } from "../lib/tauri";
-import { reloadLibrary } from "../lib/library";
 import { EVENTO_BUSCAR_ACTUALIZACION } from "./UpdateModal";
 import { etiquetaSync } from "./SyncModal";
 
@@ -18,7 +16,6 @@ export function TopBar() {
   const setLowPower = useStore((s) => s.setLowPower);
   const lowPowerAuto = useStore((s) => s.lowPowerAuto);
   const musicRoot = useStore((s) => s.musicRoot);
-  const setMusicRoot = useStore((s) => s.setMusicRoot);
   const midiConnected = useStore((s) => s.midiConnected);
   const midiPort = useStore((s) => s.midiPort);
   const setMidi = useStore((s) => s.setMidi);
@@ -26,17 +23,8 @@ export function TopBar() {
   const setDownloaderOpen = useStore((s) => s.setDownloaderOpen);
   const sync = useStore((s) => s.sync);
   const setSyncOpen = useStore((s) => s.setSyncOpen);
-  const modoEquipo = sync?.rol === "equipo";
   const etiqueta = etiquetaSync(sync);
 
-  const changeFolder = async () => {
-    const folder = await pickFolder();
-    if (folder) {
-      setMusicRoot(folder);
-      await reloadLibrary();
-      showToast("Carpeta de musica actualizada");
-    }
-  };
 
   const toggleMidi = async () => {
     if (midiConnected) {
@@ -60,12 +48,8 @@ export function TopBar() {
       <span className="brand">Infiniity DJ</span>
       <span className="app-version" title="Versión instalada">v{__APP_VERSION__}</span>
 
-      {/* En una PC del equipo la biblioteca es la carpeta sincronizada: no se elige. */}
-      {!modoEquipo && (
-        <button className="btn no-drag" onClick={changeFolder} title="Cambiar carpeta de musica">
-          📁 Carpeta
-        </button>
-      )}
+      {/* Sin boton "Carpeta": la biblioteca es siempre la sincronizada (en el
+          original, la carpeta madre). Pedido explicito: nada de carpetas locales. */}
       <button
         className={`btn no-drag ${etiqueta.clase}`}
         onClick={() => setSyncOpen(true)}
