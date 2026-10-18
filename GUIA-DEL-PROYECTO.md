@@ -168,6 +168,12 @@ portátil con la prueba de **ventana minimizada/oculta**.
 - Si no baja → es el audio; considerar simplificar el grafo o aceptar el costo (igual no
   se traba).
 
+### ✅ Sync: biblioteca sincronizada entre PC (0.4.0, 2026-10-18)
+Ver `PLAN-SYNC.md`. El PC original comparte `~/Música`; las PC del equipo entran con un código,
+reciben todo en `~/Infiniity DJ/Biblioteca` y solo pueden agregar descargas. Motor en
+`src-tauri/src/sync.rs` (Syncthing manejado por API REST). Para diagnosticar en cualquier PC:
+`/home/USUARIO/Applications/Infiniity-DJ.AppImage --sync-cli estado` (también `log`, `codigo`).
+
 ### ✅ 2. Controladora DDJ-200: CONFIRMADA con la unidad real (2026-10-17)
 El equipo la usó en un evento con la 0.3.9 y respondió. El mapeo de `ddj200.rs` es
 correcto. (Lo de abajo queda como historia.)

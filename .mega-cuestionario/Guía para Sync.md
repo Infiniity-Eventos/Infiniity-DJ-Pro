@@ -5,7 +5,7 @@
 
 - **Tarea:** que todas las PC del equipo usen la misma biblioteca de música, con el original en el PC de Camilo, sincronizada con Syncthing y manejada desde la app.
 - **Inicio:** 2026-10-18 (diseño acordado el 2026-10-17)
-- **Estado:** 🔵 Construyendo (rondas cerradas el 2026-10-18)
+- **Estado:** ✅ Terminada (0.4.0, 2026-10-18)
 - **Proyecto:** `~/Apps Zeven/Infiniity Dj Pro` (Tauri v2 + React)
 
 ---
@@ -94,26 +94,26 @@ Ninguna. Todo lo demás son decisiones técnicas internas anotadas como suposici
 ## 7. Plan de implementación
 
 Fase A — motor (Rust, `src-tauri/src/sync.rs`)
-- [ ] A1 · Instalar Syncthing en la carpeta de la app (bajar release de GitHub, .tar.gz, 100% Rust) si no está.
-- [ ] A2 · Arrancar/parar Syncthing con home propio (`app_data/syncthing`), API key propia, puertos S14, sin navegador; leer su API REST.
-- [ ] A3 · Estado `sync.json`: rol (original/equipo/ninguno), secreto, id del original, autorizado-esta-sesión.
-- [ ] A4 · Original: "crear grupo" → carpetas `biblioteca` (sendonly, `~/Música`, .stignore "Sin clasificar"), `sinclasificar` (sendreceive, papelera 30 d), `bpm` (sendreceive). Generar código.
-- [ ] A5 · Original: vigilante que acepta PC pendientes con el secreto (S9) y les comparte las 3 carpetas. Modo `--sync-agente` + servicio de usuario (S10). Borrar config anterior (D8).
-- [ ] A6 · Equipo: "unirse con código" → añade el original, acepta las 3 carpetas en `~/Infiniity DJ/Biblioteca` (receiveonly / sendreceive / sendreceive), escribe .stignore, revert automático de cambios locales en Biblioteca (S3).
-- [ ] A7 · Equipo: límite 50 KB/s hasta autorizar (S11); pausa por música (D15); contar pendientes (`/rest/db/completion`).
-- [ ] A8 · Limpieza de `*.sync-conflict-*` y no bajar duplicados (D14).
-- [ ] A9 · Caché de BPM por PC en carpeta `bpm` (S13), clave relativa (S1).
+- [x] A1 · Instalar Syncthing en la carpeta de la app (bajar release de GitHub, .tar.gz, 100% Rust) si no está.
+- [x] A2 · Arrancar/parar Syncthing con home propio (`app_data/syncthing`), API key propia, puertos S14, sin navegador; leer su API REST.
+- [x] A3 · Estado `sync.json`: rol (original/equipo/ninguno), secreto, id del original, autorizado-esta-sesión.
+- [x] A4 · Original: "crear grupo" → carpetas `biblioteca` (sendonly, `~/Música`, .stignore "Sin clasificar"), `sinclasificar` (sendreceive, papelera 30 d), `bpm` (sendreceive). Generar código.
+- [x] A5 · Original: vigilante que acepta PC pendientes con el secreto (S9) y les comparte las 3 carpetas. Modo `--sync-agente` + servicio de usuario (S10). Borrar config anterior (D8).
+- [x] A6 · Equipo: "unirse con código" → añade el original, acepta las 3 carpetas en `~/Infiniity DJ/Biblioteca` (receiveonly / sendreceive / sendreceive), escribe .stignore, revert automático de cambios locales en Biblioteca (S3).
+- [x] A7 · Equipo: límite 50 KB/s hasta autorizar (S11); pausa por música (D15); contar pendientes (`/rest/db/completion`).
+- [x] A8 · Limpieza de `*.sync-conflict-*` y no bajar duplicados (D14).
+- [x] A9 · Caché de BPM por PC en carpeta `bpm` (S13), clave relativa (S1).
 
 Fase B — interfaz (React)
-- [ ] B1 · Rol equipo: pantalla de bienvenida pide el código en vez de carpeta; sin botón Carpeta; sin mover/crear carpetas (D13); biblioteca fija.
-- [ ] B2 · Botón **Sync** en la barra con estado (al día / N pendientes / sincronizando / en pausa por música / sin conexión con el original) y panel: Sincronizar ahora / Pausar / Continuar.
-- [ ] B3 · Aviso al abrir "Te falta sincronizar con la carpeta madre: N canciones" (D11, S12).
-- [ ] B4 · Rol original: panel con código (Copiar), cambiar secreto, lista de PC conectadas y último sync, "Crear grupo".
-- [ ] B5 · Avance de la primera copia.
+- [x] B1 · Rol equipo: pantalla de bienvenida pide el código en vez de carpeta; sin botón Carpeta; sin mover/crear carpetas (D13); biblioteca fija.
+- [x] B2 · Botón **Sync** en la barra con estado (al día / N pendientes / sincronizando / en pausa por música / sin conexión con el original) y panel: Sincronizar ahora / Pausar / Continuar.
+- [x] B3 · Aviso al abrir "Te falta sincronizar con la carpeta madre: N canciones" (D11, S12).
+- [x] B4 · Rol original: panel con código (Copiar), cambiar secreto, lista de PC conectadas y último sync, "Crear grupo".
+- [x] B5 · Avance de la primera copia.
 
 Fase C — prueba y publicación
-- [ ] C1 · Probar en este PC: original (app instalada) + "PC del equipo" simulada (el AppImage con otro HOME).
-- [ ] C2 · Publicar; en las PC del equipo todo queda inactivo hasta que se meta un código.
+- [x] C1 · Probar en este PC: original (app instalada) + "PC del equipo" simulada (el AppImage con otro HOME).
+- [x] C2 · Publicar; en las PC del equipo todo queda inactivo hasta que se meta un código.
 
 ---
 
@@ -121,3 +121,4 @@ Fase C — prueba y publicación
 
 - **2026-10-18** — Se abre la guía. Investigación previa: la app ya instala herramientas en su carpeta sin sudo (`downloader.rs`), el caché de BPM es por ruta absoluta (S1), la pantalla de bienvenida (`Welcome.tsx`) es donde iría el código de emparejamiento, y existe una configuración previa de Syncthing en este PC (S7). Ronda 1 entregada.
 - **2026-10-18** — Ronda 1 respondida. No hace falta ronda 2. Plan escrito; se empieza por la fase A.
+- **2026-10-18** — Construido y probado con dos instancias en este PC (ver mensaje del commit). Decidido sobre la marcha: (1) `limitBandwidthInLan: true`, sin eso el freno no aplicaba en la red local; (2) las banderas de sesión (autorizado/música/pausa) van en `sync-sesion.json` y se borran al abrir la app, para que la app y `--sync-cli` vean lo mismo; (3) la dirección del original se puede fijar con `INFINIITY_DJ_SYNC_DIRECCION_ORIGINAL` (solo pruebas); (4) `--sync-cli` quedó como herramienta de diagnóstico. Tropiezos: el tar.gz trae otro archivo llamado "syncthing" (perfil de firewall); `--no-default-folder` no existe en `serve`; la config se guardaba antes de generar la clave de la API. Publicado como 0.4.0. Cuestionario HTML borrado (ya respondido).

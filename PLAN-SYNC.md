@@ -1,7 +1,10 @@
 # Plan: biblioteca sincronizada entre todas las PC (Sync)
 
-Acordado el 2026-10-17. **Pendiente de hacer**: se dejó para después porque el
-equipo estaba en un evento y no se quería arriesgar nada.
+Acordado el 2026-10-17. **Implementado el 2026-10-18 (versión 0.4.0)**; las
+decisiones finas están en `.mega-cuestionario/Guía para Sync.md`. Código:
+`src-tauri/src/sync.rs` (motor), `src/components/SyncModal.tsx` (panel),
+`src/hooks/useSync.ts` (estado y freno por música), `src/components/Welcome.tsx`
+(entrar con código). Diagnóstico sin ventana: `Infiniity-DJ.AppImage --sync-cli estado`.
 
 ## Qué se quiere
 
