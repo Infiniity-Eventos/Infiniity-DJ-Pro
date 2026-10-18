@@ -59,6 +59,14 @@ pub fn analyze(path: &str) -> Result<AnalyzeResult, String> {
         .ok_or_else(|| "El archivo no tiene pista de audio".to_string())?;
     let track_id = track.id;
     let sample_rate = track.codec_params.sample_rate.unwrap_or(44100) as f32;
+    // Duracion REAL desde la cabecera (si el archivo la trae): el analisis de
+    // tempo solo mira los primeros 120 s y antes reportaba esos 120 s como
+    // duracion, y la lista mostraba "2:00" en todas las canciones.
+    let duracion_cabecera = track
+        .codec_params
+        .n_frames
+        .map(|n| n as f32 / sample_rate)
+        .filter(|d| *d > 0.0);
 
     let mut decoder = symphonia::default::get_codecs()
         .make(&track.codec_params, &DecoderOptions::default())
@@ -131,10 +139,11 @@ pub fn analyze(path: &str) -> Result<AnalyzeResult, String> {
     // Si cortamos temprano, estimamos la duracion total leyendo el resto del
     // conteo aproximado ya acumulado. Para mostrar duracion exacta el frontend
     // usa el propio reproductor; aqui damos una estimacion util.
-    let duration = if total_frames > 0 {
-        total_frames as f32 / sample_rate
-    } else {
-        0.0
+    let analizada = if total_frames > 0 { total_frames as f32 / sample_rate } else { 0.0 };
+    // Si se corto a los 120 s, la cabecera manda (si existe); si no, lo leido.
+    let duration = match duracion_cabecera {
+        Some(d) if d >= analizada => d,
+        _ => analizada,
     };
 
     let bpm = estimate_bpm(&envelope, frame_rate);

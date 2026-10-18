@@ -5,7 +5,7 @@
 
 - **Tarea:** una skill del repositorio que, cada semana, toma lo que hay en "Sin clasificar", identifica cada canción por internet, le escribe todos los metadatos dentro del MP3 (título, artista, género, BPM, etc.) y la mueve a su carpeta de género.
 - **Inicio:** 2026-10-18
-- **Estado:** 🔵 Construyendo (rondas cerradas el 2026-10-18)
+- **Estado:** ✅ Terminada (skill lista; primera corrida real pendiente de que Camilo la invoque)
 - **Proyecto:** `~/Apps Zeven/Infiniity Dj Pro` · biblioteca `~/Música/Infiniity Dj Pro` (Sync: PC original)
 
 ---
@@ -131,20 +131,20 @@ WAV solo admite unos pocos (INFO: título, artista, género, fecha, comentario);
 ## 8. Plan de implementación
 
 **A. La app lee etiquetas** (Rust + React) — para que el panel por artistas y el BPM de etiqueta funcionen en todas las PC.
-- [ ] A1 · `read_library` lee ID3 (crate `id3`): título, artista, género, TBPM, REPLAYGAIN_TRACK_GAIN → `TrackInfo { artist, bpm_tag, gain_db }`. BPM: etiqueta > caché > "?".
-- [ ] A2 · Motor de audio: si la canción trae ReplayGain, usarlo en vez de medir (`computeNormGain` solo si no hay).
-- [ ] A3 · Panel de carpetas: pestañas **Géneros** / **Artistas**; "Sin clasificar" primera; sin "Nueva carpeta". La lista muestra "Título · Artista".
-- [ ] A4 · Descargador: `--embed-metadata` (título/artista de YouTube) + comentario con el id del video (`youtube:<id>`) para trazabilidad.
-- [ ] A5 · `infiniity-dj --bpm-cli <archivo>`: BPM y duración desde la terminal (la skill lo usa cuando Deezer no da BPM).
-- [ ] A6 · Publicar.
+- [x] A1 · `read_library` lee ID3 (crate `id3`): título, artista, género, TBPM, REPLAYGAIN_TRACK_GAIN → `TrackInfo { artist, bpm_tag, gain_db }`. BPM: etiqueta > caché > "?".
+- [x] A2 · Motor de audio: si la canción trae ReplayGain, usarlo en vez de medir (`computeNormGain` solo si no hay).
+- [x] A3 · Panel de carpetas: pestañas **Géneros** / **Artistas**; "Sin clasificar" primera; sin "Nueva carpeta". La lista muestra "Título · Artista".
+- [x] A4 · Descargador: `--embed-metadata` (título/artista de YouTube) + comentario con el id del video (`youtube:<id>`) para trazabilidad.
+- [x] A5 · `infiniity-dj --bpm-cli <archivo>`: BPM y duración desde la terminal (la skill lo usa cuando Deezer no da BPM).
+- [x] A6 · Publicar.
 
 **B. La skill `/Organizar_Canciones`** (`.claude/skills/Organizar_Canciones/`)
-- [ ] B1 · `SKILL.md`: el procedimiento semanal, el catálogo D14, reglas de mapeo de géneros, formato D6/D16, firma D15, dudosas D19, carpeta comodín D4/D17, mixes D8/D18, alias de artistas D22.
-- [ ] B2 · `scripts/identificar.py`: por cada archivo de Sin clasificar → limpia el nombre, consulta Deezer/iTunes/MusicBrainz, devuelve candidatos con confianza (JSON). Detecta mixes (>15 min o "mix/megamix/set").
-- [ ] B3 · `scripts/aplicar.py`: convierte a MP3 320k si hace falta, calcula ReplayGain (ffmpeg ebur128), BPM (Deezer o `--bpm-cli`), escribe etiquetas (mutagen), borra carátula, renombra y mueve. Idempotente: no toca lo ya firmado salvo que se pida.
-- [ ] B4 · `scripts/revision.py`: genera `.organizar/Revision-<fecha>.html` con reproductor por canción (dudosas y repetidas) y botón copiar respuestas.
-- [ ] B5 · Estado: `.organizar/estado.json` (géneros en espera con sus canciones, contadores de mixes por género, alias de artistas).
-- [ ] B6 · Prueba con copias de 5–10 canciones reales en una carpeta de prueba (nunca sobre la biblioteca).
+- [x] B1 · `SKILL.md`: el procedimiento semanal, el catálogo D14, reglas de mapeo de géneros, formato D6/D16, firma D15, dudosas D19, carpeta comodín D4/D17, mixes D8/D18, alias de artistas D22.
+- [x] B2 · `scripts/identificar.py`: por cada archivo de Sin clasificar → limpia el nombre, consulta Deezer/iTunes/MusicBrainz, devuelve candidatos con confianza (JSON). Detecta mixes (>15 min o "mix/megamix/set").
+- [x] B3 · `scripts/aplicar.py`: convierte a MP3 320k si hace falta, calcula ReplayGain (ffmpeg ebur128), BPM (Deezer o `--bpm-cli`), escribe etiquetas (mutagen), borra carátula, renombra y mueve. Idempotente: no toca lo ya firmado salvo que se pida.
+- [x] B4 · `scripts/revision.py`: genera `.organizar/Revision-<fecha>.html` con reproductor por canción (dudosas y repetidas) y botón copiar respuestas.
+- [x] B5 · Estado: `.organizar/estado.json` (géneros en espera con sus canciones, contadores de mixes por género, alias de artistas).
+- [x] B6 · Prueba con copias de 5–10 canciones reales en una carpeta de prueba (nunca sobre la biblioteca).
 
 **C. Primera corrida real** sobre "Sin clasificar" (148 canciones), con Camilo resolviendo dudosas.
 
@@ -155,3 +155,4 @@ WAV solo admite unos pocos (INFO: título, artista, género, fecha, comentario);
 - **2026-10-18** — Investigación: mutagen y ffprobe disponibles; APIs probadas (S2); 149 MP3 sin etiquetas. Ronda 1 entregada.
 - **2026-10-18** — Ronda 1 respondida (D4–D13). Supuestos nuevos: carpeta comodín provisional "Otros" (nombre a confirmar en ronda 2); mix = archivo de más de 15 min o con "mix/megamix/set" en el nombre; conversión a MP3 320 kbps; la memoria de géneros "en espera" vive en `.organizar/pendientes-genero.json`. Ronda 2 entregada.
 - **2026-10-18** — Ronda 2 respondida (D14–D22, incluida la petición del panel con dos modos). Sin ronda 3. Plan escrito; se empieza por A (la app) porque la skill depende de que la app lea etiquetas.
+- **2026-10-18** — Construido. App 0.4.13 (lee etiquetas, panel Géneros/Artistas, ReplayGain, `--bpm-cli`, descargador con etiquetas) y 0.4.14 (duración real en el analizador: antes reportaba 120 s y la lista decía "2:00"). Skill en `.claude/skills/Organizar_Canciones/` con `comun.py`, `identificar.py`, `aplicar.py`, `revision.py`. Probada sobre copias de 6 canciones reales: 3 seguras quedaron etiquetadas/renombradas/movidas; 3 dudosas (género genérico "dance", choque Deezer-vs-artista en "Dardos", no reconocida por un "?") fueron a la página de revisión. Decidido sobre la marcha: cuando internet y el artista chocan, propone el artista pero pide confirmación; géneros genéricos ("dance", "latino", "pop") no cuentan como seguros; respaldo "Artista - Título" desde el nombre de YouTube; etiquetas en ID3 v2.3 (compatibilidad); ReplayGain con referencia -18 LUFS; TXXX:INFINIITY_ORGANIZADA como marca de "ya firmada". Cuestionarios HTML borrados.
