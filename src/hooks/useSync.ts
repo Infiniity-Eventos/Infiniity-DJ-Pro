@@ -16,12 +16,26 @@ export function useSync() {
     if (!isTauri()) return;
     let vivo = true;
     let avisado = false;
+    // Mientras llegan (o salen) canciones por Sync, la lista en pantalla se
+    // queda vieja: se recarga sola cuando cambia lo pendiente, como mucho cada
+    // 15 s, y una vez mas al terminar. Antes habia que cerrar y abrir.
+    let pendientesAntes = -1;
+    let ultimaRecarga = 0;
     const tick = async () => {
       try {
         const e = await syncEstado();
         if (!vivo) return;
         const st = useStore.getState();
         st.setSync(e);
+        const movimiento = e.pendientes + e.por_subir;
+        if (e.rol !== "ninguno" && pendientesAntes !== -1 && movimiento !== pendientesAntes) {
+          const ahora = Date.now();
+          if (movimiento === 0 || ahora - ultimaRecarga > 15000) {
+            ultimaRecarga = ahora;
+            await reloadLibrary();
+          }
+        }
+        pendientesAntes = movimiento;
         if (e.rol !== "ninguno") {
           // La biblioteca es FIJA: la carpeta sincronizada (equipo) o la carpeta
           // madre (original). Nadie la cambia desde la interfaz.

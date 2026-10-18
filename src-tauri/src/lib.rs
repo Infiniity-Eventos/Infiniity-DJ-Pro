@@ -337,6 +337,24 @@ pub fn run() {
         sync::iniciar(sync::dir_datos_por_defecto());
         sync::correr_agente();
     }
+    // `infiniity-dj --lib-cli <carpeta>`: cuántas canciones ve el escaneo (diagnóstico).
+    {
+        let args: Vec<String> = std::env::args().collect();
+        if let Some(i) = args.iter().position(|a| a == "--lib-cli") {
+            let root = args.get(i + 1).cloned().unwrap_or_default();
+            let mut cache = Cache::default();
+            match library::read_library(&root, &mut cache) {
+                Ok(l) => {
+                    println!("canciones: {}", l.tracks.len());
+                    for n in &l.tree.children {
+                        println!("  {} -> {}", n.name, n.track_count);
+                    }
+                }
+                Err(e) => println!("ERROR: {e}"),
+            }
+            std::process::exit(0);
+        }
+    }
     // `infiniity-dj --sync-cli <orden>`: diagnóstico/pruebas sin ventana.
     let args: Vec<String> = std::env::args().collect();
     if let Some(i) = args.iter().position(|a| a == "--sync-cli") {

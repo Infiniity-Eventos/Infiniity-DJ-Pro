@@ -1,5 +1,6 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { engine } from "../audio/AudioEngine";
+import { reloadLibrary } from "../lib/library";
 import { useStore, type DeckId } from "../state/store";
 import { analyzeBpm, type TrackInfo } from "../lib/tauri";
 import { fmtTime } from "../lib/format";
@@ -87,18 +88,31 @@ export function TrackList() {
     }
   };
 
+  // "Actualizar lista": vuelve a leer la carpeta (por si llegaron canciones
+  // por Sync o se copiaron a mano) y analiza el BPM de las que no lo tengan.
+  const [actualizando, setActualizando] = useState(false);
   const analyzeAll = async () => {
-    const pending = tracks.filter((t) => t.bpm === null);
-    if (pending.length === 0) {
-      showToast("Todas las canciones visibles ya tienen BPM");
-      return;
+    if (actualizando) return;
+    setActualizando(true);
+    try {
+      await reloadLibrary();
+      // Lista FRESCA del store, no la copia vieja de este render.
+      const lib = useStore.getState().library;
+      const todas = lib?.tracks ?? [];
+      const pending = todas.filter((t) => t.bpm === null);
+      if (pending.length === 0) {
+        showToast(`Lista actualizada: ${todas.length} canciones, todas con BPM`);
+        return;
+      }
+      showToast(`Lista actualizada: ${todas.length} canciones. Analizando ${pending.length} sin BPM...`);
+      // Una a la vez: no satura la CPU en equipos de gama baja.
+      for (const t of pending) {
+        await analyzeOne(t);
+      }
+      showToast("Analisis terminado");
+    } finally {
+      setActualizando(false);
     }
-    showToast(`Analizando ${pending.length} canciones en segundo plano...`);
-    // Una a la vez: no satura la CPU en equipos de gama baja.
-    for (const t of pending) {
-      await analyzeOne(t);
-    }
-    showToast("Analisis terminado");
   };
 
   return (
@@ -109,8 +123,13 @@ export function TrackList() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        <button className="btn" onClick={analyzeAll} title="Analizar el BPM de las canciones sin ritmo">
-          Analizar todo
+        <button
+          className="btn"
+          onClick={analyzeAll}
+          disabled={actualizando}
+          title="Volver a leer la carpeta y analizar el BPM de las canciones que no lo tengan"
+        >
+          {actualizando ? "Actualizando..." : "Actualizar lista"}
         </button>
       </div>
 
