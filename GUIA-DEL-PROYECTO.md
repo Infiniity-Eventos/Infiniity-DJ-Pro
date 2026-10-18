@@ -171,6 +171,9 @@ portátil con la prueba de **ventana minimizada/oculta**.
 ### 🔴 2. Probar la controladora DDJ-200 (necesita el hardware)
 El código está en `src-tauri/src/ddj200.rs` (mapeo con datos conocidos del modelo, falta
 confirmar con la unidad real). Conectar por USB → botón "DDJ-200" arriba → probar controles.
+La cadena de software (puerto por nombre → conexión → evento → deck) **ya está comprobada**
+con una controladora virtual (`herramientas/ddj-virtual/`, 2026-10-17). Lo único pendiente
+es confirmar que la unidad física manda los mismos números de nota/CC.
 
 ### 🟡 3. Reemplazar visuales provisionales (cuando lleguen del cliente)
 | Qué | Dónde |
