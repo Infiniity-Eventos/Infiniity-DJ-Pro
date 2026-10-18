@@ -67,14 +67,14 @@ la ignoran… Sync NO la ignora: es pequeña, no importa).
    ReplayGain, BPM si falta y **copia** la versión organizada a su carpeta; la original queda en
    "Sin clasificar" **a propósito** (fase 1): así las PC del equipo arman la copia nueva a partir
    de la vieja sin volver a bajar ~5 MB por canción. Las ya firmadas se saltan.
-   **Fase 2 — limpiar**: cuando el panel Sync (o `--sync-cli estado`) muestre a las PC del equipo
-   conectadas al 100 %, borra las originales:
+   **Fase 2 — limpiar, EN LA MISMA CORRIDA**: espera a que las PC **conectadas** lleguen al 100 %
+   (tope 20 min) y borra las originales. Las PC apagadas **no cuentan**: bajarán lo nuevo cuando
+   vuelvan; nada queda duplicado "por culpa" de una PC apagada.
    ```bash
-   python3 -I .claude/skills/Organizar_Canciones/scripts/aplicar.py /dev/null --biblioteca "$BIB" --limpiar
+   python3 -I .claude/skills/Organizar_Canciones/scripts/aplicar.py /dev/null --biblioteca "$BIB" --limpiar --esperar 20
    ```
-   Si no están al 100 % todavía, díselo al usuario: puede limpiar más tarde con
-   "/Organizar_Canciones limpiar" (solo corre esa orden). Mientras tanto cada canción se ve dos
-   veces (en Sin clasificar y en su género): es normal.
+   Corre esto después de aplicar las seguras Y otra vez después de aplicar las dudosas (paso 4).
+   "/Organizar_Canciones limpiar" corre solo esta orden (por si una vez quedó pendiente).
 4. **Dudosas y repetidas** (D19): genera la página y ábrela:
    ```bash
    python3 -I .claude/skills/Organizar_Canciones/scripts/revision.py "$BIB/.organizar/candidatos-<fecha>.json" --salida "$BIB/.organizar/Revision-<fecha>.html" && xdg-open "$BIB/.organizar/Revision-<fecha>.html"

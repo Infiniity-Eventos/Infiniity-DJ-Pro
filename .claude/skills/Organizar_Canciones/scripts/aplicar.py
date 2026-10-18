@@ -120,6 +120,31 @@ def escribir_etiquetas(ruta: Path, c: dict, gain: float | None, bpm: float | Non
     t.save(ruta, v2_version=3)  # v2.3: lo leen hasta los programas viejos
 
 
+def esperar_pcs_conectadas(minutos: int) -> None:
+    """Espera a que las PC del equipo que estan CONECTADAS tengan el 100% de la
+    biblioteca (asi arman la copia nueva a partir de la vieja). Las apagadas NO
+    cuentan: bajaran lo nuevo cuando vuelvan. Tope: `minutos`."""
+    import time
+    fin = time.time() + minutos * 60
+    while True:
+        try:
+            r = subprocess.run([str(APPIMAGE), "--sync-cli", "estado"], capture_output=True, text=True, timeout=60)
+            e = json.loads(r.stdout)
+        except Exception as ex:
+            print(f"  AVISO: no se pudo leer el estado de Sync ({ex}); se limpia igual")
+            return
+        conectadas = [p for p in e.get("pcs", []) if p.get("conectado")]
+        atrasadas = [p for p in conectadas if p.get("completado", 0) < 99.9]
+        if not atrasadas:
+            print(f"  PC conectadas al dia: {len(conectadas)} (apagadas: {len(e.get('pcs', [])) - len(conectadas)}, bajaran al volver)")
+            return
+        if time.time() > fin:
+            print(f"  Tope de {minutos} min: {len(atrasadas)} PC conectadas aun no al 100%; se limpia igual (bajaran lo que falte)")
+            return
+        print("  esperando a: " + ", ".join(f"{p['nombre']} {p['completado']:.0f}%" for p in atrasadas))
+        time.sleep(30)
+
+
 def nombre_mix(genero: str, estado: dict) -> str:
     n = estado.setdefault("mixes", {}).get(genero, 0) + 1
     estado["mixes"][genero] = n
@@ -134,9 +159,12 @@ def main():
     ap.add_argument("--forzar", action="store_true", help="reorganizar aunque ya este firmada")
     ap.add_argument("--mover", action="store_true", help="mover en vez de copiar (sin fase de limpieza)")
     ap.add_argument("--limpiar", action="store_true", help="borrar los originales de las canciones ya copiadas (fase 2)")
+    ap.add_argument("--esperar", type=int, default=0, help="con --limpiar: esperar hasta N minutos a que las PC CONECTADAS lleguen al 100%%")
     a = ap.parse_args()
     bib = Path(a.biblioteca)
     if a.limpiar:
+        if a.esperar:
+            esperar_pcs_conectadas(a.esperar)
         estado = leer_estado(bib)
         pendientes = estado.get("originales_por_borrar", [])
         borrados, quedan = 0, []
