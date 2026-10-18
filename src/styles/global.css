@@ -1065,7 +1065,14 @@ body {
   font-size: 13px;
 }
 
-/* Menú del botón "Agregar canciones" */
+/* Menú del botón "Agregar canciones".
+   La barra de arriba va por ENCIMA de los paneles de abajo: cada panel de
+   vidrio (backdrop-filter) es una capa propia y, sin esto, el menú desplegado
+   se dibujaba escondido detras de los decks. */
+.topbar {
+  position: relative;
+  z-index: 60;
+}
 .agregar-wrap {
   position: relative;
   display: inline-block;
