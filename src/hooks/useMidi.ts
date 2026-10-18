@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { onMidiControl } from "../lib/tauri";
+import { onMidiControl, onMidiStatus } from "../lib/tauri";
 import { engine } from "../audio/AudioEngine";
 import { useStore, type DeckId } from "../state/store";
 
@@ -40,8 +40,22 @@ export function useMidi() {
     }).then((fn) => {
       unlisten = fn;
     });
+    // Conexion/desconexion automatica: reflejarla en el boton y avisar.
+    let unlistenStatus: (() => void) | undefined;
+    onMidiStatus((s) => {
+      const { setMidi, showToast } = useStore.getState();
+      setMidi(s.connected, s.port);
+      showToast(
+        s.connected
+          ? `Controladora conectada: ${s.port ?? "DDJ-200"}`
+          : "Controladora desconectada. Revisa el cable; la sigo buscando."
+      );
+    }).then((fn) => {
+      unlistenStatus = fn;
+    });
     return () => {
       if (unlisten) unlisten();
+      if (unlistenStatus) unlistenStatus();
     };
   }, []);
 }

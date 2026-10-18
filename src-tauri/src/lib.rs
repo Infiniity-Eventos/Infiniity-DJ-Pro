@@ -176,8 +176,13 @@ fn midi_list() -> Vec<String> {
 
 #[tauri::command]
 fn midi_connect(app: tauri::AppHandle, state: tauri::State<AppState>) -> Result<String, String> {
-    let (conn, name) = midi::connect(app)?;
     let mut m = state.midi.lock().map_err(|_| "midi ocupado".to_string())?;
+    // El usuario la pidio: desde ahora el vigilante vuelve a buscarla solo.
+    m.auto = true;
+    if let Some(name) = &m.port_name {
+        return Ok(name.clone());
+    }
+    let (conn, name) = midi::connect(app)?;
     m.conn = Some(conn);
     m.port_name = Some(name.clone());
     Ok(name)
@@ -188,6 +193,7 @@ fn midi_disconnect(state: tauri::State<AppState>) -> Result<(), String> {
     let mut m = state.midi.lock().map_err(|_| "midi ocupado".to_string())?;
     m.conn = None; // al soltar la conexion se cierra
     m.port_name = None;
+    m.auto = false; // la apago a mano: no reconectar hasta que la vuelva a pedir
     Ok(())
 }
 
@@ -245,6 +251,8 @@ pub fn run() {
             }
             #[cfg(target_os = "linux")]
             arranque::vigilar_motor_web(app.handle());
+            // Buscar y reconectar la controladora sola (ver midi.rs).
+            midi::vigilar(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

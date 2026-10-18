@@ -126,6 +126,15 @@ export const setManualBpm = (path: string, bpm: number) =>
 export const midiList = () => invoke<string[]>("midi_list");
 export const midiConnect = () => invoke<string>("midi_connect");
 export const midiDisconnect = () => invoke<void>("midi_disconnect");
+export interface MidiStatus {
+  connected: boolean;
+  port: string | null;
+}
+/** La controladora aparecio o se fue (lo detecta el vigilante en Rust). */
+export const onMidiStatus = (handler: (s: MidiStatus) => void): Promise<UnlistenFn> => {
+  if (!isTauri()) return Promise.resolve(() => {});
+  return tauriListen<MidiStatus>("midi://status", (e) => handler(e.payload));
+};
 export const onMidiControl = (
   handler: (ev: MidiControlEvent) => void
 ): Promise<UnlistenFn> => {

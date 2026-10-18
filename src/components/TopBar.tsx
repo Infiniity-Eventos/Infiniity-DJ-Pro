@@ -45,7 +45,8 @@ export function TopBar() {
       setMidi(true, port);
       showToast(`Controladora conectada: ${port}`);
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "No se encontro la DDJ-200");
+      const msg = e instanceof Error ? e.message : String(e);
+      showToast(`${msg}. Conectala por USB: se conecta sola al detectarla.`);
     }
   };
 
@@ -68,7 +69,15 @@ export function TopBar() {
 
       <span className="spacer" />
 
-      <button className="btn no-drag" onClick={toggleMidi} title="Conectar la DDJ-200">
+      <button
+        className="btn no-drag"
+        onClick={toggleMidi}
+        title={
+          midiConnected
+            ? "Controladora conectada. Clic para desconectarla."
+            : "Se conecta sola al enchufarla por USB. Clic para buscarla ahora."
+        }
+      >
         <span className={`midi-dot ${midiConnected ? "on" : "off"}`} />
         {midiConnected ? midiPort ?? "DDJ-200" : "DDJ-200"}
       </button>
