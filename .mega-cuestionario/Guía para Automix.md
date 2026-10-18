@@ -5,7 +5,7 @@
 
 - **Tarea:** dos formas de mezclar sola la música: (1) una **cola Automix** manual en una barra lateral donde se arrastran canciones y el programa las encadena sin silencios y con transiciones suaves; (2) un botón **"Poner automix"** junto a "Actualizar lista" que toma la carpeta (género o artista) que se está viendo y la mezcla sola buscando la mejor ruta para que no haya golpes de ritmo.
 - **Inicio:** 2026-10-18
-- **Estado:** ✅ Terminada (0.4.18, 2026-10-18) · pendiente de probar en un portátil real del equipo
+- **Estado:** ✅ Terminada (0.4.18; ajuste 0.4.20 tras el primer evento real, 2026-10-18)
 - **Proyecto:** `~/Apps Zeven/Infiniity Dj Pro` (Tauri + React) · versión actual 0.4.17
 
 ---
@@ -147,3 +147,6 @@ Cosas que decidí yo — porque las deduje del código o porque él respondió "
 - **Pedidos del usuario durante la construcción (2026-10-18):** el aviso "apaga el automix" se perdía abajo → ahora sale **grande en el centro y se desvanece** (2,6 s). La barra de progreso debe seguir mostrando dónde va la canción con el automix encendido → ya lo hace (lo que vio en su pantalla fue la recarga en caliente de Vite mezclando módulos viejos y nuevos; con la app reiniciada no pasa). Al apagar el automix la canción sigue en su deck para mezclarla a mano → así funciona.
 - **Decisión sobre la marcha:** la ruta por carpeta, cuando no suena nada, empieza por la **más lenta** y va subiendo (arrancar por la mitad obligaba a bajar de golpe al final).
 - **2026-10-18 · Cierre.** Commit `ca89680` + publicación 0.4.18. Los HTML de las rondas se borraron; esta guía queda como historia. **Pendiente de la vida real:** probar en un portátil del equipo (WebKitGTK, i5-6300U) que la transición suene alineada y que el CPU no suba al precargar; y escuchar cómo cae el punto de entrada en canciones con cola floja larga.
+- **2026-10-18 · Primer uso real (Sharon, portátil del equipo, 0.4.18).** Dijo: "no deja adelantar ni pausar" y "se demora mucho en bajar el sonido de una canción; necesito que se pause una para que suene bien la otra". Se le llevó al usuario como choque con D6 y D16:
+  - **D6 se mantiene** (controles bloqueados con el automix encendido; para pasar está Saltar). Decisión del usuario, 2026-10-18.
+  - **D16 cambia:** transición de **5 s en bailables y 4 s en lentos** (antes 8 y 6), y la curva de la transición automática pasa a **igual potencia**: la que sale baja desde el primer segundo (con el corte lineal se quedaba al 100 % media transición). El crossfader manual conserva su corte lineal. El cambio de graves (Efectos, D2) sigue entre el 40 % y el 70 %.

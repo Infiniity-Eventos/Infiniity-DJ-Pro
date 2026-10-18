@@ -800,14 +800,18 @@ class AudioEngine {
       const x1 = clamp(target, 0, 1);
       const dur = Math.max(0.05, durationMs / 1000);
       const t0 = ctx.currentTime + 0.02;
-      // Muestrear el corte lineal a lo largo del recorrido.
+      // Curva de IGUAL POTENCIA (no el corte lineal del crossfader manual): la
+      // que sale empieza a bajar desde el primer segundo y la que entra sube
+      // suave, sin que el volumen total se hunda en el medio. Con el corte
+      // lineal, la que salia se quedaba al 100 % media transicion y en el
+      // evento sonaban "dos canciones encima" (queja del equipo, 2026-10-18).
       const N = 256;
       const ga = new Float32Array(N);
       const gb = new Float32Array(N);
       for (let i = 0; i < N; i++) {
         const x = x0 + (x1 - x0) * (i / (N - 1));
-        ga[i] = x <= 0.5 ? 1 : 2 * (1 - x);
-        gb[i] = x >= 0.5 ? 1 : 2 * x;
+        ga[i] = Math.cos((x * Math.PI) / 2);
+        gb[i] = Math.sin((x * Math.PI) / 2);
       }
       for (const [g, curva] of [[decks.A.xfadeGain.gain, ga], [decks.B.xfadeGain.gain, gb]] as const) {
         g.cancelScheduledValues(ctx.currentTime);

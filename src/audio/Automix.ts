@@ -28,9 +28,13 @@ import { ordenarRuta } from "../lib/ruta";
 
 /** Generos donde la cancion se deja casi entera (no se come la cola floja). */
 const GENEROS_LENTOS = ["viejoteca", "carranga", "boleros", "bolero", "balada", "baladas"];
-/** Duracion de la transicion (s) en bailables y en lentos. */
-const DUR_BAILABLE = 8;
-const DUR_LENTO = 6;
+/**
+ * Duracion de la transicion (s) en bailables y en lentos. Eran 8 y 6: en el
+ * primer evento real el equipo sintio que "se demora mucho en bajar el sonido"
+ * (dos canciones encima). Se acorto el 2026-10-18.
+ */
+const DUR_BAILABLE = 5;
+const DUR_LENTO = 4;
 /** Cada cuanto se vigila la cancion que suena. 4 veces por segundo, como la barra de progreso. */
 const TICK_MS = 250;
 /** Espera tras una transicion antes de precargar la siguiente (deja respirar a la CPU). */
