@@ -195,7 +195,7 @@ es confirmar que la unidad física manda los mismos números de nota/CC.
 ### 🟢 4. Mejoras opcionales / ideas
 - **Visor de ondas (waveform)**: se acordó hacerlo ESTÁTICO (precalculado del AudioBuffer al
   cargar, casi gratis), NO un analizador en vivo (ese sí consume). Quedó pendiente.
-- Cola de "próximas canciones" + auto-play de la siguiente.
+- ✅ Cola de "próximas canciones" + auto-play: es el **Automix** (0.4.18). Guía: `.mega-cuestionario/Guía para Automix.md`.
 - Auto-updater de Tauri (para no depender de correr `instalar.sh` a mano). Requiere firmar
   y hostear las actualizaciones.
 - **Legal:** descargar de YouTube para uso comercial es zona gris (decisión del cliente).
@@ -219,12 +219,16 @@ src/
 │   ├── ConfirmModal.tsx         🆕 Aviso propio (reemplaza window.confirm).
 │   ├── PromptModal.tsx          🆕 Pedir dato propio (reemplaza window.prompt).
 │   ├── StatsMonitor.tsx         🆕 Chip RAM/CPU + graba diagnóstico.
+│   ├── AutomixBar.tsx           Cola del automix (3ª columna): encender, Saltar, Limpiar, arrastrar.
 │   ├── DownloadModal.tsx        🆕 Buscador de YouTube.
 │   └── DownloadIndicator.tsx    🆕 Descargas en 2do plano + reintento.
-├── audio/AudioEngine.ts         ⭐ Motor con AudioBuffer (ver 2.2) + auto-nivelación.
+├── audio/AudioEngine.ts         ⭐ Motor con AudioBuffer (ver 2.2) + auto-nivelación + transicion() con golpes alineados.
+├── audio/analisis.ts            Silencios, cola floja y primer golpe del audio decodificado (~14 ms).
+├── audio/Automix.ts             ⭐ Controlador del automix (cola, precarga, regla de la vuelta, bloqueos).
 ├── lib/
 │   ├── tauri.ts                 Puente con Rust (read_media, ytdl_*, system_stats, etc.).
 │   ├── downloads.ts             🆕 Orquesta descargas en 2do plano + reintento.
+│   ├── ruta.ts                  Orden por ritmo para "Poner automix".
 │   └── library.ts, format.ts    Ayudas.
 ├── state/store.ts               Estado global (zustand) + auto-⚡ en equipos flojos.
 └── styles/theme.css, global.css ⭐ Colores y estilos. Incluye modo ⚡.

@@ -58,6 +58,23 @@ Cada una salió de un fallo real en el equipo de alguien:
    `src-tauri/src/downloader.rs`). Dentro del AppImage, las variables heredadas
    rompen `curl`, `python3` y cualquier herramienta externa.
 
+7. **Nada que afecte al sonido se anima con `requestAnimationFrame`.** El motor
+   web congela rAF con la ventana oculta o minimizada, y una transición del
+   automix quedó a medias con los dos decks a todo volumen. Crossfader y
+   velocidad van como curvas en los `AudioParam` (`AudioEngine.ts`), que corren
+   en el hilo de audio pase lo que pase con la pantalla.
+
+## Probar el automix sin la ventana nativa
+
+```bash
+DJ_BIBLIOTECA_JSON=/ruta/biblioteca.json npx vite
+```
+
+Con esa variable, Vite sirve la biblioteca (un JSON con la forma de
+`read_library`) y el audio por HTTP, y la app abre en un navegador normal
+(poner `musicRoot` en `localStorage` → `infiniity-dj-prefs`). Solo desarrollo;
+en el AppImage no existe. Hay `window.__dj` con el store, el motor y el automix.
+
 ## Al mandar comandos por WhatsApp al equipo
 
 WhatsApp **borra los asteriscos** de los comandos sin avisar. La persona ejecuta
