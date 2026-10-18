@@ -9,6 +9,14 @@ import { DeckPanel } from "./components/DeckPanel";
 import { Mixer } from "./components/Mixer";
 import { FolderTree } from "./components/FolderTree";
 import { TrackList } from "./components/TrackList";
+import { AutomixBar } from "./components/AutomixBar";
+import { engine } from "./audio/AudioEngine";
+import { automix } from "./audio/Automix";
+
+// Solo en desarrollo: para inspeccionar el estado desde la consola del navegador.
+if (import.meta.env.DEV) {
+  (window as unknown as { __dj: unknown }).__dj = { useStore, engine, automix };
+}
 import { Welcome } from "./components/Welcome";
 import { ConfirmModal } from "./components/ConfirmModal";
 import { PromptModal } from "./components/PromptModal";
@@ -24,7 +32,9 @@ export default function App() {
   const musicRoot = useStore((s) => s.musicRoot);
   const sync = useStore((s) => s.sync);
   const toast = useStore((s) => s.toast);
+  const avisoCentral = useStore((s) => s.avisoCentral);
   const downloaderOpen = useStore((s) => s.downloaderOpen);
+  const automixPlegada = useStore((s) => s.automix.plegada);
   const setDownloaderOpen = useStore((s) => s.setDownloaderOpen);
 
   useMidi();
@@ -135,11 +145,17 @@ export default function App() {
         <Mixer />
         <DeckPanel deckId="B" />
       </div>
-      <div className="library-area">
+      <div className={`library-area ${automixPlegada ? "automix-plegada-area" : ""}`}>
         <FolderTree />
         <TrackList />
+        <AutomixBar />
       </div>
       {toast && <div className="glass glass-strong toast">{toast}</div>}
+      {avisoCentral && (
+        <div key={avisoCentral} className="glass glass-strong aviso-central">
+          {avisoCentral}
+        </div>
+      )}
       <ConfirmModal />
       <PromptModal />
       <UpdateModal />

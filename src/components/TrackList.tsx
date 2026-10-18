@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { engine } from "../audio/AudioEngine";
+import { automix, automixBloquea } from "../audio/Automix";
 import { reloadLibrary } from "../lib/library";
 import { partirArtistas } from "./FolderTree";
 import { useStore, type DeckId } from "../state/store";
@@ -53,6 +54,8 @@ export function TrackList() {
   }, [library, search, selectedFolder, selectedArtist]);
 
   const loadToDeck = (deckId: DeckId, t: TrackInfo) => {
+    // Con el automix encendido, los decks los maneja el automix (D14).
+    if (automixBloquea()) return;
     const doLoad = () => {
       void engine.load(deckId, t.path, t.bpm, t.name, t.gain_db);
       showToast(`Cargando en Deck ${deckId}: ${t.name}`);
@@ -127,6 +130,47 @@ export function TrackList() {
     }
   };
 
+  // "Poner automix": la cola se llena con lo que se esta viendo (carpeta,
+  // artista, todas, o el resultado del buscador), ordenado por ritmo, y el
+  // automix se enciende. Si la cola ya tiene canciones, se pregunta (D3).
+  const etiquetaVista = (): string => {
+    const q = search.trim();
+    if (q) return `Búsqueda "${q}"`;
+    if (selectedArtist) return selectedArtist;
+    if (selectedFolder) return selectedFolder.split("/").pop() ?? selectedFolder;
+    return "Todas las canciones";
+  };
+  const ponerAutomix = () => {
+    if (tracks.length === 0) {
+      showToast("No hay canciones en esta vista para poner en automix");
+      return;
+    }
+    const etiqueta = etiquetaVista();
+    const cola = useStore.getState().automix.cola;
+    if (cola.length === 0) {
+      automix.ponerCarpeta(tracks, etiqueta, "limpiar");
+      showToast(`Automix: ${etiqueta} · ${tracks.length} canciones`);
+      return;
+    }
+    useStore.getState().askConfirm(
+      `La cola del automix ya tiene ${cola.length} canciones. ¿Qué hago con "${etiqueta}" (${tracks.length})?`,
+      () => {
+        automix.ponerCarpeta(tracks, etiqueta, "limpiar");
+        showToast(`Automix: ${etiqueta} · ${tracks.length} canciones`);
+      },
+      {
+        yesLabel: "Limpiar y poner",
+        alt: {
+          label: "Añadir al final",
+          onClick: () => {
+            automix.ponerCarpeta(tracks, etiqueta, "anadir");
+            showToast(`Automix: ${tracks.length} canciones añadidas al final`);
+          },
+        },
+      }
+    );
+  };
+
   return (
     <div className="glass tracklist">
       <div className="search-bar">
@@ -142,6 +186,14 @@ export function TrackList() {
           title="Volver a leer la carpeta y analizar el BPM de las canciones que no lo tengan"
         >
           {actualizando ? "Actualizando..." : "Actualizar lista"}
+        </button>
+        <button
+          className="btn btn-accent"
+          onClick={ponerAutomix}
+          disabled={tracks.length === 0}
+          title="Poner en la cola del automix todo lo que se ve aquí, ordenado por ritmo, y empezar a mezclar solo"
+        >
+          ♪ Poner automix
         </button>
       </div>
 

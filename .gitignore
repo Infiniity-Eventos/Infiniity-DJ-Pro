@@ -17,3 +17,4 @@ npm-debug.log*
 # Datos locales generados por la app en pruebas
 *.bpmcache.json
 __pycache__/
+.claude/launch.json

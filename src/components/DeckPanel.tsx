@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { engine } from "../audio/AudioEngine";
+import { automixBloquea } from "../audio/Automix";
 import { useStore, type DeckId } from "../state/store";
 import { setManualBpm } from "../lib/tauri";
 import { Vinyl } from "./Vinyl";
@@ -19,6 +20,7 @@ export function DeckPanel({ deckId }: { deckId: DeckId }) {
   const onDropTrack = (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
+    if (automixBloquea()) return;
     const path = e.dataTransfer.getData("text/plain");
     if (!path || !library) return;
     const t = library.tracks.find((x) => x.path === path);
@@ -109,7 +111,7 @@ export function DeckPanel({ deckId }: { deckId: DeckId }) {
           className="btn btn-icon"
           disabled={!hasTrack}
           title="Retroceder 5s"
-          onClick={() => engine.nudge(deckId, -5)}
+          onClick={() => !automixBloquea() && engine.nudge(deckId, -5)}
         >
           <IconPrev />
         </button>
@@ -117,7 +119,7 @@ export function DeckPanel({ deckId }: { deckId: DeckId }) {
           className="btn btn-icon btn-accent"
           disabled={!hasTrack}
           title={deck.isPlaying ? "Pausar" : "Reproducir"}
-          onClick={() => engine.togglePlay(deckId)}
+          onClick={() => !automixBloquea() && engine.togglePlay(deckId)}
         >
           {deck.isPlaying ? <IconPause /> : <IconPlay />}
         </button>
@@ -125,7 +127,7 @@ export function DeckPanel({ deckId }: { deckId: DeckId }) {
           className="btn btn-icon"
           disabled={!hasTrack}
           title="Adelantar 5s"
-          onClick={() => engine.nudge(deckId, 5)}
+          onClick={() => !automixBloquea() && engine.nudge(deckId, 5)}
         >
           <IconNext />
         </button>
@@ -139,7 +141,7 @@ export function DeckPanel({ deckId }: { deckId: DeckId }) {
             max={1}
             step={0.01}
             value={deck.volume}
-            onChange={(e) => engine.setVolume(deckId, parseFloat(e.target.value))}
+            onChange={(e) => !automixBloquea() && engine.setVolume(deckId, parseFloat(e.target.value))}
           />
         </div>
       </div>

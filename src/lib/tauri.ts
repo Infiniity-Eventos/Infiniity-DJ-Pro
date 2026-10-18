@@ -65,7 +65,17 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
 }
 
 // --- Biblioteca ---
-export const readLibrary = (root: string) => invoke<LibraryData>("read_library", { root });
+/** Modo navegador de prueba (solo desarrollo; ver vite.config.ts). */
+const pruebaNavegador = (): boolean => import.meta.env.DEV && !isTauri();
+
+export const readLibrary = async (root: string): Promise<LibraryData> => {
+  if (pruebaNavegador()) {
+    const r = await fetch("/__dj/biblioteca.json");
+    if (!r.ok) throw new Error("(modo navegador) sin biblioteca de prueba: define DJ_BIBLIOTECA_JSON");
+    return (await r.json()) as LibraryData;
+  }
+  return invoke<LibraryData>("read_library", { root });
+};
 export const moveTrack = (from: string, toFolder: string) =>
   invoke<string>("move_track", { from, toFolder });
 export const createFolder = (parent: string, name: string) =>
@@ -232,6 +242,11 @@ export function fileUrl(path: string): string {
  * (via AudioBufferSourceNode), que es lo mas fiable en Linux/WebKitGTK.
  */
 export async function readMediaBytes(path: string): Promise<ArrayBuffer> {
+  if (pruebaNavegador()) {
+    const r = await fetch(`/__dj/media?path=${encodeURIComponent(path)}`);
+    if (!r.ok) throw new Error(`(modo navegador) no se pudo leer ${path}`);
+    return r.arrayBuffer();
+  }
   if (!isTauri()) throw new Error("(modo navegador) sin acceso a archivos");
   const buf = await tauriInvoke<ArrayBuffer>("read_media", { path });
   // Algunos entornos devuelven un tipo array-like; normalizar a ArrayBuffer.

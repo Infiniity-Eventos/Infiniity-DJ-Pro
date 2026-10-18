@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { engine } from "../audio/AudioEngine";
+import { automixBloquea } from "../audio/Automix";
 import { fmtTime } from "../lib/format";
 import { useStore, type DeckId } from "../state/store";
 
@@ -13,6 +14,7 @@ import { useStore, type DeckId } from "../state/store";
  */
 export function ProgressBar({ deckId }: { deckId: DeckId }) {
   const isPlaying = useStore((s) => s.decks[deckId].isPlaying);
+  const duration = useStore((s) => s.decks[deckId].duration);
   const barRef = useRef<HTMLDivElement>(null);
   const fillRef = useRef<HTMLDivElement>(null);
   const curRef = useRef<HTMLSpanElement>(null);
@@ -34,10 +36,13 @@ export function ProgressBar({ deckId }: { deckId: DeckId }) {
     // render a 60fps (a diferencia de requestAnimationFrame).
     const id = window.setInterval(paint, 250);
     return () => window.clearInterval(id);
+    // `duration` entra para repintar cuando se carga otra cancion en pausa
+    // (si no, la barra mostraba "0:00 / -0:00" hasta darle play).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deckId, isPlaying]);
+  }, [deckId, isPlaying, duration]);
 
   const onSeek = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (automixBloquea()) return;
     const rect = barRef.current!.getBoundingClientRect();
     const f = (e.clientX - rect.left) / rect.width;
     engine.seekFraction(deckId, Math.min(1, Math.max(0, f)));

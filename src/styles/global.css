@@ -76,10 +76,22 @@ textarea {
 
 .library-area {
   display: grid;
-  grid-template-columns: 260px 1fr;
+  /* Carpetas · Lista · Automix (la cola que se mezcla sola) */
+  grid-template-columns: 260px 1fr 300px;
   gap: 12px;
   flex: 1 1 auto;
   min-height: 0;
+}
+.library-area.automix-plegada-area {
+  grid-template-columns: 260px 1fr 44px;
+}
+@media (max-width: 1280px) {
+  .library-area {
+    grid-template-columns: 220px 1fr 270px;
+  }
+  .library-area.automix-plegada-area {
+    grid-template-columns: 220px 1fr 44px;
+  }
 }
 
 /* ---------------- Barra superior ---------------- */
@@ -1139,4 +1151,308 @@ body {
   margin: 4px 0 8px;
   padding: 8px 10px;
   font-size: 12px;
+}
+
+
+/* ---------------- Automix (cola que se mezcla sola) ---------------- */
+.automix {
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  min-height: 0;
+  gap: 10px;
+  transition: box-shadow var(--t-med), border-color var(--t-med);
+}
+.automix.encendido {
+  border-color: var(--accent-soft);
+  box-shadow: 0 0 0 1px rgba(192, 132, 252, 0.35), var(--shadow);
+}
+.automix-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.automix-titulo {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  line-height: 1.15;
+}
+.automix-titulo b {
+  font-size: 15px;
+  letter-spacing: 0.3px;
+}
+.automix-sub {
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.automix-plegar {
+  padding: 4px 9px;
+  font-size: 14px;
+}
+
+/* Boton de encendido: un interruptor con luz. */
+.automix-power {
+  font: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px 7px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--t-med), color var(--t-med), border-color var(--t-med), box-shadow var(--t-med);
+}
+.automix-power-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
+  transition: background var(--t-med), box-shadow var(--t-med);
+}
+.automix-power:hover {
+  border-color: var(--accent-soft);
+  color: var(--text-1);
+}
+.automix-power.on {
+  background: linear-gradient(120deg, var(--purple-500), var(--purple-400));
+  border-color: var(--purple-300);
+  color: #ffffff;
+  box-shadow: 0 4px 18px rgba(124, 58, 237, 0.45);
+}
+.automix-power.on .automix-power-dot {
+  background: #86efac;
+  box-shadow: 0 0 10px #86efac, 0 0 2px #ffffff;
+}
+
+.automix-estado {
+  background: var(--track-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+.automix-linea {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  min-width: 0;
+}
+.automix-etq {
+  flex: 0 0 64px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  font-weight: 700;
+}
+.automix-txt {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-1);
+}
+.automix-num {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 14px;
+}
+.automix-apagado {
+  color: var(--text-dim);
+  line-height: 1.35;
+}
+
+.automix-acciones {
+  display: flex;
+  gap: 8px;
+}
+.automix-acciones .btn {
+  flex: 1;
+  padding: 7px 8px;
+  font-size: 12px;
+}
+
+.automix-cola {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.automix-vacia {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  color: var(--text-dim);
+  font-size: 12px;
+  border: 2px dashed var(--glass-border);
+  border-radius: var(--radius-sm);
+  min-height: 90px;
+  transition: border-color var(--t-fast), background var(--t-fast);
+}
+.automix-vacia.drop {
+  border-color: var(--accent);
+  background: var(--glass-bg-strong);
+}
+.automix-fila {
+  display: grid;
+  grid-template-columns: 22px 1fr 32px 36px 20px;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 6px 6px 4px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  font-size: 12px;
+  cursor: grab;
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+.automix-fila:hover {
+  background: var(--glass-bg-strong);
+  border-color: var(--glass-border);
+}
+.automix-fila:active {
+  cursor: grabbing;
+}
+.automix-fila.sono {
+  opacity: 0.55;
+}
+.automix-fila.fallo {
+  opacity: 0.6;
+  border-color: rgba(248, 113, 113, 0.5);
+}
+.automix-fila.sonando {
+  background: linear-gradient(120deg, rgba(124, 58, 237, 0.45), rgba(168, 85, 247, 0.25));
+  border-color: var(--purple-300);
+  font-weight: 600;
+}
+.automix-fila.siguiente {
+  border-color: var(--accent-soft);
+}
+.automix-fila.sobre-arriba {
+  box-shadow: 0 -2px 0 0 var(--accent);
+}
+.automix-fila.sobre-abajo {
+  box-shadow: 0 2px 0 0 var(--accent);
+}
+.automix-pos {
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.automix-fila.sonando .automix-pos {
+  color: #ffffff;
+}
+.automix-nombre {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+.automix-marca {
+  font-size: 10px;
+  color: var(--accent-soft);
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.automix-marca.mal {
+  color: #fca5a5;
+}
+.automix-bpm,
+.automix-dur {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+  text-align: right;
+  font-size: 11px;
+}
+.automix-quitar {
+  font: inherit;
+  background: transparent;
+  border: 0;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+  border-radius: 6px;
+}
+.automix-quitar:hover {
+  color: #ffffff;
+  background: rgba(248, 113, 113, 0.5);
+}
+
+/* Plegada: una tira vertical con la luz y el conteo. */
+.automix-plegada {
+  cursor: pointer;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 12px 0;
+  gap: 12px;
+}
+.automix-led {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+}
+.automix-led.on {
+  background: #86efac;
+  box-shadow: 0 0 10px #86efac;
+}
+.automix-vertical {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  color: var(--text-dim);
+}
+
+/* Modo bajo consumo: sin sombras brillantes. */
+:root[data-lowpower="1"] .automix.encendido,
+:root[data-lowpower="1"] .automix-power.on {
+  box-shadow: none;
+}
+
+/* Aviso grande en el centro (p. ej. "apaga el automix"): aparece y se desvanece solo. */
+.aviso-central {
+  position: fixed;
+  left: 50%;
+  top: 42%;
+  transform: translate(-50%, -50%);
+  z-index: 60;
+  padding: 18px 28px;
+  border-radius: var(--radius-md);
+  font-size: 20px;
+  font-weight: 700;
+  text-align: center;
+  max-width: 70vw;
+  pointer-events: none;
+  border: 1px solid var(--purple-300);
+  box-shadow: 0 10px 40px rgba(28, 14, 66, 0.5);
+  animation: aviso-central-vida 2.6s ease forwards;
+}
+@keyframes aviso-central-vida {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.96); }
+  8% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  70% { opacity: 1; }
+  100% { opacity: 0; }
 }

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { engine } from "../audio/AudioEngine";
+import { automixBloquea } from "../audio/Automix";
 import { useStore } from "../state/store";
 
 export function Mixer() {
@@ -8,6 +9,7 @@ export function Mixer() {
   const autoMixing = useStore((s) => s.autoMixing);
   const decks = useStore((s) => s.decks);
   const showToast = useStore((s) => s.showToast);
+  const automixOn = useStore((s) => s.automix.encendido);
 
   // El slider vertical va girado: su ANCHO tiene que ser el ALTO de la columna.
   const trackRef = useRef<HTMLDivElement>(null);
@@ -24,6 +26,7 @@ export function Mixer() {
   const canMix = !!decks.A.trackPath && !!decks.B.trackPath;
 
   const doMix = async () => {
+    if (automixBloquea()) return;
     if (autoMixing) {
       engine.cancelMix();
       showToast("Mezcla cancelada");
@@ -41,12 +44,12 @@ export function Mixer() {
     <div className="glass glass-strong mixer">
       <button
         className={`btn ${autoMixing ? "btn" : "btn-accent"} mix-btn`}
-        disabled={!canMix && !autoMixing}
+        disabled={(!canMix && !autoMixing) || automixOn}
         onClick={doMix}
       >
-        {autoMixing ? "CANCELAR" : "MEZCLAR"}
+        {autoMixing ? (automixOn ? "AUTOMIX" : "CANCELAR") : "MEZCLAR"}
         <span className="mix-sub">
-          {autoMixing ? "mezcla en curso..." : "transición automática"}
+          {automixOn ? "lo maneja el automix" : autoMixing ? "mezcla en curso..." : "transición automática"}
         </span>
       </button>
 
@@ -63,9 +66,10 @@ export function Mixer() {
           max={1}
           step={0.01}
           value={crossfader}
-          onChange={(e) => engine.setCrossfader(parseFloat(e.target.value))}
-          onDoubleClick={() => engine.setCrossfader(0.5)}
-          title="Doble clic para volver al centro"
+          onChange={(e) => !automixBloquea() && engine.setCrossfader(parseFloat(e.target.value))}
+          onDoubleClick={() => !automixBloquea() && engine.setCrossfader(0.5)}
+          onMouseDown={() => automixOn && automixBloquea()}
+          title={automixOn ? "Lo mueve el automix" : "Doble clic para volver al centro"}
         />
       </div>
 

@@ -12,6 +12,15 @@ export function useMidi() {
     let unlisten: (() => void) | undefined;
     onMidiControl((ev) => {
       const deckId: DeckId = ev.deck === 1 ? "B" : "A";
+      // Con el automix encendido la controladora tampoco manda sobre los decks
+      // ni el crossfader (D6). Se avisa solo con los botones, no con cada
+      // movimiento de un fader (seria un aviso por milisegundo).
+      if (useStore.getState().automix.encendido) {
+        if (ev.action === "play" || ev.action === "cue") {
+          if (ev.value > 0) useStore.getState().showAvisoCentral("Para mezclar tú mismo, apaga el automix");
+        }
+        return;
+      }
       switch (ev.action) {
         case "play":
           if (ev.value > 0) engine.togglePlay(deckId);

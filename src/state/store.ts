@@ -33,6 +33,42 @@ export interface DeckInfo {
   loading: boolean;
 }
 
+/** Una cancion dentro de la cola del automix. */
+export interface ItemCola {
+  id: string; // unico dentro de la cola (una misma cancion puede estar dos veces)
+  path: string;
+  nombre: string; // "Titulo · Artista" o el nombre del archivo
+  bpm: number | null;
+  duracion: number | null;
+  gainDb: number | null; // ReplayGain de la etiqueta (para que suene pareja desde el primer segundo)
+  sono: boolean; // ya sono en esta vuelta (regla D11: primero las que no han sonado)
+  fallo: string | null; // no se pudo cargar: se salta y se muestra el porque
+}
+
+export interface EstadoAutomix {
+  encendido: boolean;
+  cola: ItemCola[];
+  etiqueta: string | null; // de donde vino la cola ("Salsa", "Romeo Santos"...)
+  sonandoId: string | null; // item que suena ahora
+  siguienteId: string | null; // item precargado en el deck libre
+  siguienteLista: boolean; // false = todavia cargando
+  /** Segundos que faltan para la proxima mezcla (null = no se sabe / nada suena). */
+  faltan: number | null;
+  mensaje: string | null; // estado corto para la barra ("cola vacia", "mezclando...")
+  plegada: boolean; // barra plegada para ganar espacio
+}
+
+/**
+ * Aviso de confirmacion propio (no bloquea el audio). `alt` es un tercer boton
+ * opcional (p. ej. "Añadir al final" ademas de "Limpiar y poner").
+ */
+export interface ConfirmBox {
+  message: string;
+  onYes: () => void;
+  yesLabel?: string;
+  alt?: { label: string; onClick: () => void };
+}
+
 export interface Settings {
   transitionSec: number; // duracion de la transicion automatica
   returnToNatural: boolean; // al terminar, la cancion nueva vuelve a su tempo
@@ -61,7 +97,8 @@ interface AppStore {
   midiConnected: boolean;
   midiPort: string | null;
   toast: string | null;
-  confirmBox: { message: string; onYes: () => void } | null; // aviso de confirmacion
+  avisoCentral: string | null; // aviso grande en el centro de la pantalla, se desvanece solo
+  confirmBox: ConfirmBox | null; // aviso de confirmacion
   promptBox: { message: string; defaultValue: string; onSubmit: (v: string) => void } | null; // pedir un dato (sin bloquear el audio)
   downloaderOpen: boolean; // modal de descarga de YouTube abierto
   downloads: DownloadItem[]; // descargas en curso (en segundo plano)
@@ -71,6 +108,7 @@ interface AppStore {
   sync: SyncEstado | null; // estado de la sincronizacion (lo refresca useSync cada pocos segundos)
   syncOpen: boolean; // panel de Sync abierto
   syncAviso: boolean; // aviso "te falta sincronizar" (equipo, una vez por sesion)
+  automix: EstadoAutomix;
 
   setTheme: (t: Theme) => void;
   setLowPower: (v: boolean) => void;
@@ -91,7 +129,8 @@ interface AppStore {
   setSettings: (s: Partial<Settings>) => void;
   setMidi: (connected: boolean, port: string | null) => void;
   showToast: (msg: string) => void;
-  askConfirm: (message: string, onYes: () => void) => void;
+  showAvisoCentral: (msg: string) => void;
+  askConfirm: (message: string, onYes: () => void, extra?: Omit<ConfirmBox, "message" | "onYes">) => void;
   closeConfirm: () => void;
   askPrompt: (message: string, defaultValue: string, onSubmit: (v: string) => void) => void;
   closePrompt: () => void;
@@ -105,6 +144,7 @@ interface AppStore {
   setSync: (e: SyncEstado | null) => void;
   setSyncOpen: (v: boolean) => void;
   setSyncAviso: (v: boolean) => void;
+  patchAutomix: (p: Partial<EstadoAutomix>) => void;
 }
 
 const emptyDeck = (): DeckInfo => ({
@@ -218,6 +258,7 @@ export const useStore = create<AppStore>((set, get) => ({
   midiConnected: false,
   midiPort: null,
   toast: null,
+  avisoCentral: null,
   confirmBox: null,
   promptBox: null,
   downloaderOpen: false,
@@ -228,6 +269,17 @@ export const useStore = create<AppStore>((set, get) => ({
   sync: null,
   syncOpen: false,
   syncAviso: false,
+  automix: {
+    encendido: false,
+    cola: [],
+    etiqueta: null,
+    sonandoId: null,
+    siguienteId: null,
+    siguienteLista: false,
+    faltan: null,
+    mensaje: null,
+    plegada: false,
+  },
 
   setTheme: (t) => {
     set({ theme: t });
@@ -274,7 +326,13 @@ export const useStore = create<AppStore>((set, get) => ({
       if (get().toast === msg) set({ toast: null });
     }, 3200);
   },
-  askConfirm: (message, onYes) => set({ confirmBox: { message, onYes } }),
+  showAvisoCentral: (msg) => {
+    set({ avisoCentral: msg });
+    window.setTimeout(() => {
+      if (get().avisoCentral === msg) set({ avisoCentral: null });
+    }, 2600);
+  },
+  askConfirm: (message, onYes, extra) => set({ confirmBox: { message, onYes, ...(extra ?? {}) } }),
   closeConfirm: () => set({ confirmBox: null }),
   askPrompt: (message, defaultValue, onSubmit) =>
     set({ promptBox: { message, defaultValue, onSubmit } }),
@@ -300,6 +358,7 @@ export const useStore = create<AppStore>((set, get) => ({
   setSync: (e) => set({ sync: e }),
   setSyncOpen: (v) => set({ syncOpen: v }),
   setSyncAviso: (v) => set({ syncAviso: v }),
+  patchAutomix: (p) => set((st) => ({ automix: { ...st.automix, ...p } })),
   setAnalyzing: (path, on) =>
     set((st) => {
       const next = new Set(st.analyzing);
