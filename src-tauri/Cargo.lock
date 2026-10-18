@@ -1643,6 +1643,7 @@ dependencies = [
 name = "infiniity-dj"
 version = "0.3.13"
 dependencies = [
+ "flate2",
  "lzma-rs",
  "midir",
  "reqwest 0.12.28",

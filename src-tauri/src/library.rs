@@ -64,6 +64,16 @@ fn count_tracks_in(dir: &Path) -> usize {
 }
 
 /// Construye el arbol de subcarpetas de forma recursiva.
+/// Carpetas y archivos ocultos (empiezan por "."): se saltan. Syncthing crea
+/// `.stfolder`, `.stversions` (la papelera, LLENA de MP3 borrados) y archivos
+/// `.sync-conflict-*`; sin esto aparecerian como canciones.
+fn es_oculto(p: &Path) -> bool {
+    p.file_name()
+        .and_then(|n| n.to_str())
+        .map(|n| n.starts_with('.'))
+        .unwrap_or(false)
+}
+
 fn build_tree(dir: &Path) -> FolderNode {
     let name = dir
         .file_name()
@@ -76,7 +86,7 @@ fn build_tree(dir: &Path) -> FolderNode {
         let mut dirs: Vec<PathBuf> = rd
             .filter_map(|e| e.ok())
             .map(|e| e.path())
-            .filter(|p| p.is_dir())
+            .filter(|p| p.is_dir() && !es_oculto(p))
             .collect();
         dirs.sort();
         for d in dirs {
@@ -92,11 +102,13 @@ fn build_tree(dir: &Path) -> FolderNode {
     }
 }
 
-pub fn read_library(root: &str, cache: &Cache) -> Result<LibraryData, String> {
+pub fn read_library(root: &str, cache: &mut Cache) -> Result<LibraryData, String> {
     let root_path = Path::new(root);
     if !root_path.is_dir() {
         return Err("La carpeta de musica no existe".to_string());
     }
+    // BPM analizados en OTRAS PC (llegan por la biblioteca sincronizada).
+    cache.recargar_ajenos();
 
     let tree = build_tree(root_path);
 
@@ -105,10 +117,11 @@ pub fn read_library(root: &str, cache: &Cache) -> Result<LibraryData, String> {
     for entry in walkdir::WalkDir::new(root_path)
         .follow_links(false)
         .into_iter()
+        .filter_entry(|e| e.depth() == 0 || !es_oculto(e.path()))
         .filter_map(|e| e.ok())
     {
         let p = entry.path();
-        if !p.is_file() {
+        if !p.is_file() || p.to_string_lossy().contains(".sync-conflict-") {
             continue;
         }
         let ext = match is_audio(p) {
@@ -123,7 +136,10 @@ pub fn read_library(root: &str, cache: &Cache) -> Result<LibraryData, String> {
         let modified = modified_secs(&meta);
         let path_str = p.to_string_lossy().to_string();
         let key = track_key(&path_str, size, modified);
-        let cached = cache.get(&key).unwrap_or_default();
+        let cached = cache
+            .get(&key)
+            .or_else(|| crate::cache::clave_relativa(root_path, p, size).and_then(|r| cache.get_relativa(&r)))
+            .unwrap_or_default();
 
         tracks.push(TrackInfo {
             name: p

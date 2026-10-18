@@ -68,6 +68,40 @@ export const createFolder = (parent: string, name: string) =>
 export const ensureUnclassified = (root: string) =>
   invoke<string>("ensure_unclassified", { root });
 
+// --- Sincronización de la biblioteca (ver src-tauri/src/sync.rs) ---
+export type SyncRol = "ninguno" | "original" | "equipo";
+export interface PcConectada {
+  nombre: string;
+  conectado: boolean;
+  ultimo_visto: string;
+  completado: number; // % de la Biblioteca que esa PC ya tiene
+}
+export interface SyncEstado {
+  rol: SyncRol;
+  activo: boolean; // Syncthing responde
+  original_conectado: boolean;
+  pendientes: number; // archivos que faltan por recibir (equipo)
+  pendientes_mb: number;
+  completado: number; // % de la Biblioteca que ya está en esta PC (equipo)
+  autorizado: boolean;
+  musica: boolean;
+  pausa_manual: boolean;
+  frenado: boolean;
+  pcs: PcConectada[];
+  raiz: string; // carpeta de la biblioteca según el rol
+}
+export const syncEstado = () => invoke<SyncEstado>("sync_estado");
+export const syncCrearGrupo = (raiz: string) => invoke<string>("sync_crear_grupo", { raiz });
+export const syncCodigo = () => invoke<string>("sync_codigo");
+export const syncCambiarSecreto = () => invoke<string>("sync_cambiar_secreto");
+export const syncUnirse = (codigo: string) => invoke<void>("sync_unirse", { codigo });
+export const syncAutorizar = (autorizado: boolean, pausaManual: boolean) =>
+  invoke<void>("sync_autorizar", { autorizado, pausaManual });
+export const syncMusica = (sonando: boolean) => invoke<void>("sync_musica", { sonando });
+export const syncInstalarServicio = () => invoke<string>("sync_instalar_servicio");
+export const syncSalir = () => invoke<void>("sync_salir");
+export const syncLog = () => invoke<string>("sync_log");
+
 // --- Descargador de YouTube (yt-dlp) ---
 export interface YtdlTools {
   ytdlp: string | null;

@@ -13,11 +13,19 @@ function FolderRow({ node, depth }: { node: FolderNode; depth: number }) {
 
   const active = selectedFolder === node.path;
 
+  const modoEquipo = useStore((s) => s.sync?.rol === "equipo");
+
   const onDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setDropping(false);
     const from = e.dataTransfer.getData("text/plain");
     if (!from) return;
+    // En una PC del equipo mover = borrar en "Sin clasificar" (en TODAS) +
+    // agregar en una carpeta que se revierte. La cancion desapareceria.
+    if (modoEquipo) {
+      showToast("Las carpetas las organiza el PC original. Aquí no se mueven canciones.");
+      return;
+    }
     try {
       await moveTrack(from, node.path);
       await reloadLibrary();
@@ -80,6 +88,7 @@ export function FolderTree() {
   const selectedFolder = useStore((s) => s.selectedFolder);
   const setSelectedFolder = useStore((s) => s.setSelectedFolder);
   const showToast = useStore((s) => s.showToast);
+  const modoEquipo = useStore((s) => s.sync?.rol === "equipo");
 
   const newFolder = () => {
     const parent = selectedFolder ?? library?.root;
@@ -109,9 +118,11 @@ export function FolderTree() {
         <span>Todas las canciones</span>
       </div>
       {library && <FolderRow node={library.tree} depth={0} />}
-      <button className="btn" style={{ marginTop: 10, width: "100%" }} onClick={newFolder}>
-        ＋ Nueva carpeta
-      </button>
+      {!modoEquipo && (
+        <button className="btn" style={{ marginTop: 10, width: "100%" }} onClick={newFolder}>
+          ＋ Nueva carpeta
+        </button>
+      )}
     </div>
   );
 }

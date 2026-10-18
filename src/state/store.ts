@@ -6,7 +6,7 @@
  */
 
 import { create } from "zustand";
-import type { LibraryData } from "../lib/tauri";
+import type { LibraryData, SyncEstado } from "../lib/tauri";
 
 export type DeckId = "A" | "B";
 export type Theme = "dark" | "light";
@@ -66,6 +66,9 @@ interface AppStore {
   highlightTrack: string | null; // ruta de la cancion recien descargada (para titilar)
   analyzing: Set<string>; // rutas en analisis (para el spinner del boton)
   pedidas: Set<string>; // ids de YouTube ya pedidos en esta sesion (para marcar ✅ en el buscador)
+  sync: SyncEstado | null; // estado de la sincronizacion (lo refresca useSync cada pocos segundos)
+  syncOpen: boolean; // panel de Sync abierto
+  syncAviso: boolean; // aviso "te falta sincronizar" (equipo, una vez por sesion)
 
   setTheme: (t: Theme) => void;
   setLowPower: (v: boolean) => void;
@@ -95,6 +98,9 @@ interface AppStore {
   setHighlightTrack: (path: string | null) => void;
   setAnalyzing: (path: string, on: boolean) => void;
   marcarPedida: (id: string) => void;
+  setSync: (e: SyncEstado | null) => void;
+  setSyncOpen: (v: boolean) => void;
+  setSyncAviso: (v: boolean) => void;
 }
 
 const emptyDeck = (): DeckInfo => ({
@@ -213,6 +219,9 @@ export const useStore = create<AppStore>((set, get) => ({
   highlightTrack: null,
   analyzing: new Set<string>(),
   pedidas: new Set<string>(),
+  sync: null,
+  syncOpen: false,
+  syncAviso: false,
 
   setTheme: (t) => {
     set({ theme: t });
@@ -279,6 +288,9 @@ export const useStore = create<AppStore>((set, get) => ({
     }
   },
   marcarPedida: (id) => set((s) => ({ pedidas: new Set(s.pedidas).add(id) })),
+  setSync: (e) => set({ sync: e }),
+  setSyncOpen: (v) => set({ syncOpen: v }),
+  setSyncAviso: (v) => set({ syncAviso: v }),
   setAnalyzing: (path, on) =>
     set((st) => {
       const next = new Set(st.analyzing);

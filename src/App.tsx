@@ -2,6 +2,8 @@ import { useEffect } from "react";
 import { useStore, weakMachineDefault } from "./state/store";
 import { reloadLibrary } from "./lib/library";
 import { useMidi } from "./hooks/useMidi";
+import { useSync } from "./hooks/useSync";
+import { SyncModal } from "./components/SyncModal";
 import { TopBar } from "./components/TopBar";
 import { DeckPanel } from "./components/DeckPanel";
 import { Mixer } from "./components/Mixer";
@@ -25,6 +27,7 @@ export default function App() {
   const setDownloaderOpen = useStore((s) => s.setDownloaderOpen);
 
   useMidi();
+  useSync();
 
   // Aplicar el tema (claro/oscuro) y el modo bajo consumo al documento.
   useEffect(() => {
@@ -108,6 +111,8 @@ export default function App() {
     return (
       <>
         <Welcome />
+        <SyncModal />
+        <ConfirmModal />
         {toast && <div className="glass glass-strong toast">{toast}</div>}
       </>
     );
@@ -129,6 +134,7 @@ export default function App() {
       <ConfirmModal />
       <PromptModal />
       <UpdateModal />
+      <SyncModal />
       <StatsMonitor />
       <DownloadIndicator />
       {downloaderOpen && <DownloadModal onClose={() => setDownloaderOpen(false)} />}

@@ -45,6 +45,7 @@ tauri-plugin-process = "2"
 # programa, asi que no importa si el almacen del equipo esta roto.
 reqwest = { version = "0.12", default-features = false, features = [
     "blocking",
+    "json",
     "rustls-tls-webpki-roots",
 ] }
 # Descomprimir el .zip de Deno sin llamar a python3.
@@ -53,6 +54,8 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 # del sistema: dentro del AppImage no se puede contar con ellos).
 lzma-rs = "0.3"
 tar = "0.4"
+# Descomprimir el .tar.gz de Syncthing (sincronizacion de la biblioteca).
+flate2 = "1"
 
 # Para enterarnos cuando el proceso que dibuja se cae (ver arranque.rs). Misma
 # version y features que usa Tauri por dentro; no agrega nada al paquete.

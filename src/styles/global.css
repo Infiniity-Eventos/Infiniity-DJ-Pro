@@ -931,3 +931,83 @@ body {
 .job-title {
   font-family: "Emoji Seguro", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
+
+/* ---------------- Sincronización (SyncModal / botón Sync) ---------------- */
+.sync-box {
+  width: min(680px, 92vw);
+}
+.sync-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  margin: 6px 0;
+}
+.sync-sub {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  margin-top: 14px;
+  margin-bottom: 6px;
+}
+.sync-dim {
+  color: var(--text-dim);
+}
+.sync-codigo {
+  font-family: ui-monospace, "DejaVu Sans Mono", monospace;
+  font-size: 12px;
+  word-break: break-all;
+  background: var(--track-bg);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  user-select: text;
+}
+.sync-pcs {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: 13px;
+}
+.sync-pcs li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+.sync-log {
+  margin-top: 12px;
+  max-height: 220px;
+  overflow: auto;
+  font-size: 11px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  user-select: text;
+  white-space: pre-wrap;
+}
+.sync-peligro {
+  color: #fca5a5;
+}
+.btn.sync-on {
+  border-color: #34d399;
+}
+.btn.sync-warn {
+  border-color: #fbbf24;
+}
+.btn.sync-off {
+  opacity: 0.75;
+}
+.welcome-codigo {
+  width: min(560px, 90vw);
+  font-family: ui-monospace, "DejaVu Sans Mono", monospace;
+  font-size: 13px;
+  resize: none;
+}
+.welcome-error {
+  max-width: 560px;
+}
+.welcome-alt {
+  margin-top: 28px;
+  font-size: 13px;
+}

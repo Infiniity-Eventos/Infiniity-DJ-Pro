@@ -9,6 +9,7 @@ import {
 } from "../lib/tauri";
 import { reloadLibrary } from "../lib/library";
 import { EVENTO_BUSCAR_ACTUALIZACION } from "./UpdateModal";
+import { etiquetaSync } from "./SyncModal";
 
 export function TopBar() {
   const theme = useStore((s) => s.theme);
@@ -23,6 +24,10 @@ export function TopBar() {
   const setMidi = useStore((s) => s.setMidi);
   const showToast = useStore((s) => s.showToast);
   const setDownloaderOpen = useStore((s) => s.setDownloaderOpen);
+  const sync = useStore((s) => s.sync);
+  const setSyncOpen = useStore((s) => s.setSyncOpen);
+  const modoEquipo = sync?.rol === "equipo";
+  const etiqueta = etiquetaSync(sync);
 
   const changeFolder = async () => {
     const folder = await pickFolder();
@@ -55,8 +60,18 @@ export function TopBar() {
       <span className="brand">Infiniity DJ</span>
       <span className="app-version" title="Versión instalada">v{__APP_VERSION__}</span>
 
-      <button className="btn no-drag" onClick={changeFolder} title="Cambiar carpeta de musica">
-        📁 Carpeta
+      {/* En una PC del equipo la biblioteca es la carpeta sincronizada: no se elige. */}
+      {!modoEquipo && (
+        <button className="btn no-drag" onClick={changeFolder} title="Cambiar carpeta de musica">
+          📁 Carpeta
+        </button>
+      )}
+      <button
+        className={`btn no-drag ${etiqueta.clase}`}
+        onClick={() => setSyncOpen(true)}
+        title="Sincronización de la biblioteca entre las PC"
+      >
+        🔁 {etiqueta.texto}
       </button>
       <button
         className="btn no-drag"

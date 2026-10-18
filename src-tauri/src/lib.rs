@@ -8,6 +8,7 @@ mod ddj200;
 mod downloader;
 mod library;
 mod midi;
+mod sync;
 mod sysmon;
 
 use cache::{track_key, Cache, TrackMeta};
@@ -35,8 +36,8 @@ fn modified_secs(meta: &std::fs::Metadata) -> u64 {
 
 #[tauri::command]
 fn read_library(root: String, state: tauri::State<AppState>) -> Result<library::LibraryData, String> {
-    let cache = state.cache.lock().map_err(|_| "cache ocupado".to_string())?;
-    library::read_library(&root, &cache)
+    let mut cache = state.cache.lock().map_err(|_| "cache ocupado".to_string())?;
+    library::read_library(&root, &mut cache)
 }
 
 #[tauri::command]
@@ -145,6 +146,7 @@ async fn analyze_bpm(
     {
         let mut c = state.cache.lock().map_err(|_| "cache ocupado".to_string())?;
         c.set(key, m.clone());
+        guardar_bpm_compartido(&mut c, &path, meta.len(), &m);
     }
     Ok(m)
 }
@@ -162,7 +164,18 @@ fn set_manual_bpm(
     m.bpm = Some((bpm * 10.0).round() / 10.0);
     m.manual = true;
     c.set(key, m.clone());
+    guardar_bpm_compartido(&mut c, &path, meta.len(), &m);
     Ok(m)
+}
+
+/// Si la cancion esta dentro de la biblioteca sincronizada, el BPM tambien va al
+/// archivo compartido de esta PC, para que las demas no tengan que analizarla.
+fn guardar_bpm_compartido(c: &mut Cache, path: &str, size: u64, m: &TrackMeta) {
+    if let Some(raiz) = sync::raiz_sincronizada() {
+        if let Some(rel) = cache::clave_relativa(&raiz, std::path::Path::new(path), size) {
+            c.set_relativa(rel, m.clone());
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -220,8 +233,93 @@ fn toggle_fullscreen(window: tauri::Window) -> Result<bool, String> {
 
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Sincronización de la biblioteca (ver sync.rs)
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+async fn sync_estado() -> sync::SyncEstado {
+    tauri::async_runtime::spawn_blocking(sync::estado).await.unwrap_or_default()
+}
+
+#[tauri::command]
+async fn sync_crear_grupo(raiz: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || sync::crear_grupo(&raiz))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn sync_codigo() -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(sync::codigo_actual).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn sync_cambiar_secreto() -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(sync::cambiar_secreto).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn sync_unirse(codigo: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || sync::unirse(&codigo))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Equipo: la persona autoriza sincronizar en esta sesión (o la pausa a mano).
+#[tauri::command]
+async fn sync_autorizar(autorizado: bool, pausa_manual: bool) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        sync::marcar(Some(autorizado), None, Some(pausa_manual));
+        sync::aplicar_velocidad()
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// La interfaz avisa si hay un deck sonando: con música, se frena la sincronización.
+#[tauri::command]
+async fn sync_musica(sonando: bool) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        sync::marcar(None, Some(sonando), None);
+        sync::aplicar_velocidad()
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn sync_instalar_servicio() -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(sync::instalar_servicio_agente)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn sync_salir() -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(sync::salir_del_grupo).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn sync_log() -> String {
+    sync::ultimas_lineas_log(60)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // `infiniity-dj --sync-agente`: el PC original mantiene la sincronización
+    // encendida sin ventana (lo lanza un servicio de usuario). Nunca vuelve.
+    if std::env::args().any(|a| a == "--sync-agente") {
+        sync::iniciar(sync::dir_datos_por_defecto());
+        sync::correr_agente();
+    }
+    // `infiniity-dj --sync-cli <orden>`: diagnóstico/pruebas sin ventana.
+    let args: Vec<String> = std::env::args().collect();
+    if let Some(i) = args.iter().position(|a| a == "--sync-cli") {
+        sync::iniciar(sync::dir_datos_por_defecto());
+        sync::correr_cli(&args[i + 1..]);
+    }
+
     // Antes de que GTK/WebKit arranquen: leen las variables una sola vez.
     #[cfg(target_os = "linux")]
     {
@@ -245,7 +343,10 @@ pub fn run() {
                 .app_data_dir()
                 .unwrap_or_else(|_| std::path::PathBuf::from("."));
             let cache_path = dir.join("bpm_cache.json");
-            let loaded = Cache::load(cache_path);
+            let mut loaded = Cache::load(cache_path);
+            // Capa compartida entre PC (viaja con la biblioteca sincronizada).
+            let pc = std::fs::read_to_string("/etc/hostname").map(|s| s.trim().to_string()).unwrap_or_else(|_| "pc".to_string());
+            loaded.configurar_compartido(dir.join("bpm-compartido"), &pc);
             if let Ok(mut c) = app.state::<AppState>().cache.lock() {
                 *c = loaded;
             }
@@ -253,6 +354,10 @@ pub fn run() {
             arranque::vigilar_motor_web(app.handle());
             // Buscar y reconectar la controladora sola (ver midi.rs).
             midi::vigilar(app.handle().clone());
+            // Sincronización de la biblioteca: misma carpeta de datos que el resto.
+            sync::iniciar(dir.clone());
+            sync::nueva_sesion(); // la autorización de sincronizar es por sesión
+            sync::vigilar();
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -265,6 +370,16 @@ pub fn run() {
             diag_reveal,
             modo_dibujo,
             interfaz_lista,
+            sync_estado,
+            sync_crear_grupo,
+            sync_codigo,
+            sync_cambiar_secreto,
+            sync_unirse,
+            sync_autorizar,
+            sync_musica,
+            sync_instalar_servicio,
+            sync_salir,
+            sync_log,
             downloader::ytdl_tools,
             downloader::ytdl_search,
             downloader::ytdl_download,
