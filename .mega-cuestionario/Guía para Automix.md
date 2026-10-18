@@ -5,7 +5,7 @@
 
 - **Tarea:** dos formas de mezclar sola la música: (1) una **cola Automix** manual en una barra lateral donde se arrastran canciones y el programa las encadena sin silencios y con transiciones suaves; (2) un botón **"Poner automix"** junto a "Actualizar lista" que toma la carpeta (género o artista) que se está viendo y la mezcla sola buscando la mejor ruta para que no haya golpes de ritmo.
 - **Inicio:** 2026-10-18
-- **Estado:** 🔵 Construyendo
+- **Estado:** ✅ Terminada (0.4.18, 2026-10-18) · pendiente de probar en un portátil real del equipo
 - **Proyecto:** `~/Apps Zeven/Infiniity Dj Pro` (Tauri + React) · versión actual 0.4.17
 
 ---
@@ -128,7 +128,7 @@ Cosas que decidí yo — porque las deduje del código o porque él respondió "
 - [x] 7 · `TrackList`: botón "Poner automix" junto a "Actualizar lista" (actúa sobre lo listado; si la cola tiene canciones pregunta limpiar/añadir); A/B y doble clic bloqueados con aviso.
 - [x] 8 · Bloqueos con automix encendido: DeckPanel (play, avance, volumen, soltar canción), ProgressBar (buscar), Mixer (crossfader, MEZCLAR), MIDI (deck/crossfader). VOL general sigue.
 - [x] 9 · Probar (en el navegador integrado con las canciones reales, ver bitácora) (dos canciones reales, transición alineada, cola que da vueltas, agregar en segunda vuelta, saltar, apagar a mitad).
-- [ ] 10 · Versión + publicar con `./publicar.sh`.
+- [x] 10 · Versión 0.4.18 publicada con `./publicar.sh` (2026-10-18).
 
 ---
 
@@ -146,3 +146,4 @@ Cosas que decidí yo — porque las deduje del código o porque él respondió "
   4. La barra de progreso no se repintaba al cargar una canción en pausa (mostraba 0:00/-0:00): ahora repinta al cambiar la duración.
 - **Pedidos del usuario durante la construcción (2026-10-18):** el aviso "apaga el automix" se perdía abajo → ahora sale **grande en el centro y se desvanece** (2,6 s). La barra de progreso debe seguir mostrando dónde va la canción con el automix encendido → ya lo hace (lo que vio en su pantalla fue la recarga en caliente de Vite mezclando módulos viejos y nuevos; con la app reiniciada no pasa). Al apagar el automix la canción sigue en su deck para mezclarla a mano → así funciona.
 - **Decisión sobre la marcha:** la ruta por carpeta, cuando no suena nada, empieza por la **más lenta** y va subiendo (arrancar por la mitad obligaba a bajar de golpe al final).
+- **2026-10-18 · Cierre.** Commit `ca89680` + publicación 0.4.18. Los HTML de las rondas se borraron; esta guía queda como historia. **Pendiente de la vida real:** probar en un portátil del equipo (WebKitGTK, i5-6300U) que la transición suene alineada y que el CPU no suba al precargar; y escuchar cómo cae el punto de entrada en canciones con cola floja larga.
