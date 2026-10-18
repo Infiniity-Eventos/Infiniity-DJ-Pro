@@ -191,6 +191,21 @@ export async function pickFolder(): Promise<string | null> {
   return typeof res === "string" ? res : null;
 }
 
+/** Selector de archivos de audio (varios). Devuelve las rutas elegidas. */
+export async function pickAudioFiles(): Promise<string[]> {
+  if (!isTauri()) return [];
+  const res = await tauriOpen({
+    multiple: true,
+    directory: false,
+    filters: [{ name: "Canciones", extensions: ["mp3", "wav", "MP3", "WAV"] }],
+  });
+  if (Array.isArray(res)) return res.filter((r): r is string => typeof r === "string");
+  return typeof res === "string" ? [res] : [];
+}
+/** Copia canciones del computador a `dest` (Sin clasificar). Devuelve [copiadas, saltadas]. */
+export const importTracks = (paths: string[], dest: string) =>
+  invoke<[number, number]>("import_tracks", { paths, dest });
+
 /** Convierte una ruta de archivo local en una URL que el reproductor puede usar. */
 export function fileUrl(path: string): string {
   if (!isTauri()) return path;

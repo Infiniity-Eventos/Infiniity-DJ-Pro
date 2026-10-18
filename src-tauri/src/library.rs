@@ -223,6 +223,37 @@ pub fn create_folder(parent: &str, name: &str) -> Result<String, String> {
     Ok(dir.to_string_lossy().to_string())
 }
 
+/// Copia canciones del computador a la carpeta `dest` (normalmente "Sin
+/// clasificar"), para que entren a la biblioteca sin tocar el explorador de
+/// archivos. Devuelve (copiadas, saltadas): se salta lo que no es audio y lo
+/// que ya existe con el mismo nombre (dos personas aportando la misma cancion).
+pub fn import_tracks(paths: &[String], dest: &str) -> Result<(usize, usize), String> {
+    let dest_dir = Path::new(dest);
+    std::fs::create_dir_all(dest_dir).map_err(|e| format!("No se pudo preparar la carpeta: {e}"))?;
+    let mut copiadas = 0;
+    let mut saltadas = 0;
+    for p in paths {
+        let origen = Path::new(p);
+        let Some(nombre) = origen.file_name() else { saltadas += 1; continue };
+        if !origen.is_file() || is_audio(origen).is_none() {
+            saltadas += 1;
+            continue;
+        }
+        let destino = dest_dir.join(nombre);
+        if destino.exists() {
+            saltadas += 1;
+            continue;
+        }
+        // Copiar a un nombre temporal y renombrar al final: si se corta a la
+        // mitad, Syncthing no sube un archivo incompleto.
+        let tmp = dest_dir.join(format!(".copiando-{}", nombre.to_string_lossy()));
+        std::fs::copy(origen, &tmp).map_err(|e| format!("No se pudo copiar {}: {e}", nombre.to_string_lossy()))?;
+        std::fs::rename(&tmp, &destino).map_err(|e| format!("No se pudo guardar {}: {e}", nombre.to_string_lossy()))?;
+        copiadas += 1;
+    }
+    Ok((copiadas, saltadas))
+}
+
 /// Garantiza que exista la carpeta "Sin clasificar" dentro de la raiz.
 pub fn ensure_unclassified(root: &str) -> Result<String, String> {
     let dir = Path::new(root).join("Sin clasificar");
@@ -231,4 +262,28 @@ pub fn ensure_unclassified(root: &str) -> Result<String, String> {
             .map_err(|e| format!("No se pudo crear 'Sin clasificar': {e}"))?;
     }
     Ok(dir.to_string_lossy().to_string())
+}
+
+#[cfg(test)]
+mod pruebas_import {
+    #[test]
+    fn import_copia_audio_y_salta_repetidos_y_no_audio() {
+        let dir = std::env::temp_dir().join(format!("infiniity-import-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let origen = dir.join("origen");
+        let dest = dir.join("Sin clasificar");
+        std::fs::create_dir_all(&origen).unwrap();
+        std::fs::write(origen.join("a.mp3"), b"aaa").unwrap();
+        std::fs::write(origen.join("b.wav"), b"bbb").unwrap();
+        std::fs::write(origen.join("c.txt"), b"ccc").unwrap();
+        let rutas: Vec<String> = ["a.mp3", "b.wav", "c.txt"].iter().map(|n| origen.join(n).to_string_lossy().into_owned()).collect();
+        let (c, s) = super::import_tracks(&rutas, dest.to_str().unwrap()).unwrap();
+        assert_eq!((c, s), (2, 1));
+        // Segunda vez: todo repetido.
+        let (c, s) = super::import_tracks(&rutas, dest.to_str().unwrap()).unwrap();
+        assert_eq!((c, s), (0, 3));
+        assert_eq!(std::fs::read(dest.join("a.mp3")).unwrap(), b"aaa");
+        assert!(!dest.join(".copiando-a.mp3").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

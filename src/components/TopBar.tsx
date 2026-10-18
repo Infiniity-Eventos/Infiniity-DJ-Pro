@@ -1,12 +1,16 @@
 import { useStore } from "../state/store";
 import {
   midiConnect,
+  pickAudioFiles,
+  importTracks,
+  ensureUnclassified,
   midiDisconnect,
   minimizeWindow,
   toggleFullscreen,
   quitApp,
 } from "../lib/tauri";
 import { EVENTO_BUSCAR_ACTUALIZACION } from "./UpdateModal";
+import { reloadLibrary } from "../lib/library";
 import { etiquetaSync } from "./SyncModal";
 
 export function TopBar() {
@@ -24,6 +28,26 @@ export function TopBar() {
   const sync = useStore((s) => s.sync);
   const setSyncOpen = useStore((s) => s.setSyncOpen);
   const etiqueta = etiquetaSync(sync);
+
+  // Agregar canciones del computador: van a "Sin clasificar" y, con Sync, suben
+  // al PC original y a las demas PC. Asi nadie toca el explorador de archivos.
+  const agregarCanciones = async () => {
+    if (!musicRoot) return;
+    const rutas = await pickAudioFiles();
+    if (rutas.length === 0) return;
+    try {
+      const dest = await ensureUnclassified(musicRoot);
+      const [copiadas, saltadas] = await importTracks(rutas, dest);
+      await reloadLibrary();
+      useStore.getState().setSelectedFolder(dest);
+      showToast(
+        `${copiadas} canción(es) agregadas a Sin clasificar` +
+          (saltadas > 0 ? ` · ${saltadas} saltadas (ya estaban o no son audio)` : "")
+      );
+    } catch (e) {
+      showToast(`No se pudieron agregar: ${e}`);
+    }
+  };
 
 
   const toggleMidi = async () => {
@@ -63,6 +87,14 @@ export function TopBar() {
         title="Buscar y descargar canciones de YouTube"
       >
         ⬇️ YouTube
+      </button>
+      <button
+        className="btn no-drag"
+        onClick={agregarCanciones}
+        disabled={!musicRoot}
+        title="Copiar canciones de este computador a la biblioteca (van a Sin clasificar)"
+      >
+        ＋ Agregar canciones
       </button>
       {musicRoot && <span className="path-chip">{musicRoot}</span>}
 
