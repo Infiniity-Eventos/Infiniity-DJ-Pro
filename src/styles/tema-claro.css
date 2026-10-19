@@ -1,0 +1,287 @@
+/*
+ * Tema CLARO (lavanda) — el diseño propuesto en 2026-10.
+ *
+ * Regla de este archivo: TODO OPACO y PLANO. Nada de backdrop-filter, nada de
+ * degradados radiales de fondo, sombras cortas. Es a proposito MAS barato de
+ * dibujar que el tema oscuro de vidrio: en un portatil sin GPU cada repintado
+ * (desplazar la lista, mover un slider) solo copia colores planos.
+ * Los degradados que quedan son lineales y en piezas chicas (botones, barra).
+ */
+
+:root[data-theme="light"] {
+  --l-fondo: #e9e5f8;
+  --l-panel: #f9f8ff;
+  --l-panel-2: #f1edff;
+  --l-borde: #e0d8f6;
+  --l-rosa: #e5218f;
+  --l-morado: #7c3aed;
+  --l-morado-2: #6d4ae0;
+  --l-chip: #ece6ff;
+
+  --text-1: #2a1650;
+  --text-2: #5a4785;
+  --text-dim: #8b7cb0;
+
+  --glass-bg: #ffffff;
+  --glass-bg-strong: var(--l-panel-2);
+  --glass-border: var(--l-borde);
+  --glass-highlight: transparent;
+  --shadow: 0 2px 8px rgba(76, 47, 150, 0.08);
+
+  --track-bg: var(--l-chip);
+  --slider-track: #ddd5f5;
+
+  --accent: #a855f7;
+  --accent-strong: var(--l-morado);
+  --accent-soft: #b18af5;
+}
+
+:root[data-theme="light"] body {
+  background: var(--l-fondo);
+}
+:root[data-theme="light"] .glass {
+  background: var(--l-panel);
+  border-color: var(--l-borde);
+  box-shadow: var(--shadow);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+:root[data-theme="light"] .glass-strong {
+  background: var(--l-panel);
+}
+
+/* Botones de accion principal: rosa -> morado */
+:root[data-theme="light"] .btn-accent,
+:root[data-theme="light"] .btn-accent:hover {
+  background: linear-gradient(135deg, var(--l-rosa), var(--l-morado));
+  box-shadow: 0 3px 10px rgba(229, 33, 143, 0.28);
+}
+:root[data-theme="light"] .btn:hover {
+  border-color: var(--accent-soft);
+}
+
+/* ---------------- Barra superior: franja morada ---------------- */
+:root[data-theme="light"] .topbar {
+  background: linear-gradient(90deg, #5b3fd0, #7a5ae6);
+  border-color: transparent;
+  color: #ffffff;
+}
+:root[data-theme="light"] .topbar .brand {
+  background: none;
+  -webkit-text-fill-color: #ffffff;
+  color: #ffffff;
+  text-shadow: none;
+}
+:root[data-theme="light"] .topbar .app-version {
+  color: #d9cdfb;
+}
+:root[data-theme="light"] .topbar .btn {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+}
+:root[data-theme="light"] .topbar .btn:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
+:root[data-theme="light"] .topbar .btn.lowpower-on {
+  background: linear-gradient(135deg, #f59e0b, #f97316);
+}
+:root[data-theme="light"] .topbar .path-chip {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+:root[data-theme="light"] .topbar .sync-dim {
+  color: #d9cdfb;
+}
+/* El menu de "Agregar canciones" cuelga de la barra pero es un panel normal */
+:root[data-theme="light"] .topbar .agregar-menu .btn {
+  background: #ffffff;
+  border-color: var(--l-borde);
+  color: var(--text-1);
+}
+:root[data-theme="light"] .topbar .agregar-menu .sync-dim {
+  color: var(--text-dim);
+}
+
+/* ---------------- Decks ---------------- */
+:root[data-theme="light"] .deck-badge {
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--l-rosa), #c026d3);
+  padding: 4px 14px;
+  border-radius: 999px;
+  font-size: 15px;
+}
+:root[data-theme="light"] .deck-bpm .btn {
+  background: var(--l-chip);
+  border-color: transparent;
+  color: var(--text-1);
+}
+:root[data-theme="light"] .progress .fill {
+  background: linear-gradient(90deg, #c084fc, var(--l-rosa));
+  box-shadow: none;
+}
+/* Solo el crossfader lleva degradado (morado = lado A, rosa = lado B); los
+   volumenes van planos para no aparentar un nivel que no tienen. */
+:root[data-theme="light"] .crossfader-block input[type="range"]::-webkit-slider-runnable-track {
+  background: linear-gradient(90deg, var(--l-morado), var(--l-rosa));
+}
+:root[data-theme="light"] input[type="range"]::-webkit-slider-thumb {
+  background: #ffffff;
+  border: 4px solid var(--l-morado);
+  box-shadow: 0 1px 4px rgba(76, 47, 150, 0.3);
+  width: 20px;
+  height: 20px;
+  margin-top: -7px;
+}
+:root[data-theme="light"] .perilla-cuerpo {
+  fill: #ffffff;
+  stroke: var(--l-borde);
+}
+:root[data-theme="light"] .perilla-aguja {
+  stroke: var(--l-morado);
+}
+:root[data-theme="light"] .perilla-svg.activa .perilla-aguja {
+  stroke: #ffffff;
+}
+:root[data-theme="light"] .perilla-activo {
+  stroke: var(--l-rosa);
+}
+/* Disco: queda oscuro (contraste), con el centro rosa */
+:root[data-theme="light"] .vinyl {
+  background:
+    radial-gradient(circle at 50% 50%, #c084fc 0 15%, transparent 15.5%),
+    radial-gradient(circle at 50% 50%, #7c3aed 15.5% 22%, transparent 22.5%),
+    repeating-radial-gradient(circle at 50% 50%, #1c1530 0 2px, #2a2142 2px 4px);
+  box-shadow: 0 0 0 6px #ebe5ff;
+}
+:root[data-theme="light"][data-lowpower="1"] .vinyl {
+  background:
+    radial-gradient(circle at 50% 50%, #c084fc 0 15%, transparent 15.5%),
+    radial-gradient(circle at 50% 50%, #241b38 15.5% 100%);
+  box-shadow: 0 0 0 6px #ebe5ff;
+}
+
+/* ---------------- Mezclador ---------------- */
+:root[data-theme="light"] .mix-btn:disabled {
+  opacity: 0.55;
+}
+:root[data-theme="light"] .efecto-btn {
+  background: var(--l-chip);
+  border-color: #cdbdf7;
+  color: var(--l-morado);
+}
+:root[data-theme="light"] .efecto-icono {
+  color: var(--l-rosa);
+}
+:root[data-theme="light"] .efecto-btn.sonando {
+  background: linear-gradient(135deg, var(--l-rosa), var(--l-morado));
+  color: #ffffff;
+}
+
+/* ---------------- Carpetas ---------------- */
+:root[data-theme="light"] .folder-row.active {
+  background: var(--l-chip);
+  color: var(--l-morado);
+  box-shadow: inset 3px 0 0 var(--l-rosa);
+}
+:root[data-theme="light"] .folder-tab.active {
+  background: var(--l-morado);
+}
+
+/* ---------------- Lista de canciones ---------------- */
+:root[data-theme="light"] .track-row:nth-child(even) {
+  background: #f4f1ff;
+}
+:root[data-theme="light"] .track-row:hover {
+  background: var(--l-chip);
+  border-color: #d4c6fa;
+}
+:root[data-theme="light"] .track-row .t-bpm {
+  background: var(--l-chip);
+  color: var(--text-1);
+}
+:root[data-theme="light"] .track-row .t-bpm:hover {
+  background: var(--l-morado);
+  color: #ffffff;
+}
+/* A relleno morado, B contorno rosa: se distinguen sin leer */
+:root[data-theme="light"] .load-btn.load-a {
+  background: var(--l-morado);
+  border-color: var(--l-morado);
+  color: #ffffff;
+}
+:root[data-theme="light"] .load-btn.load-b {
+  background: #fff0f8;
+  border-color: #f5a3cf;
+  color: var(--l-rosa);
+}
+:root[data-theme="light"] .load-btn:hover {
+  filter: brightness(1.08);
+}
+:root[data-theme="light"] .track-row.just-downloaded {
+  border-color: var(--l-rosa) !important;
+}
+
+/* ---------------- Automix ---------------- */
+:root[data-theme="light"] .automix-power-dot {
+  background: #d4c9ee;
+}
+:root[data-theme="light"] .automix-power.on {
+  background: linear-gradient(135deg, var(--l-rosa), var(--l-morado));
+  border-color: transparent;
+}
+:root[data-theme="light"] .automix-fila:nth-child(even) {
+  background: #f4f1ff;
+}
+:root[data-theme="light"] .automix-fila.sonando {
+  background: linear-gradient(120deg, #ecdcff, #ffe3f2);
+  border-color: #d8b4fe;
+  color: var(--text-1);
+}
+:root[data-theme="light"] .automix-fila.sonando .automix-pos {
+  color: var(--l-rosa);
+}
+:root[data-theme="light"] .automix-marca {
+  color: var(--l-rosa);
+}
+:root[data-theme="light"] .automix-vacia {
+  border-color: #cfc2f3;
+  background: #fbfaff;
+}
+
+/* ---------------- Otros ---------------- */
+:root[data-theme="light"] .modal-overlay {
+  background: rgba(42, 22, 80, 0.35);
+}
+:root[data-theme="light"] .dl-fail-msg,
+:root[data-theme="light"] .dl-error-msg {
+  color: #b91c1c;
+}
+:root[data-theme="light"] .sync-log {
+  background: var(--l-chip);
+}
+:root[data-theme="light"] .sync-peligro,
+:root[data-theme="light"] .automix-marca.mal {
+  color: #dc2626;
+}
+:root[data-theme="light"] .stats-monitor .cpu-lo b {
+  color: #16a34a;
+}
+:root[data-theme="light"] .stats-monitor .cpu-mid b {
+  color: #d97706;
+}
+:root[data-theme="light"] .stats-monitor .cpu-hi b {
+  color: #e11d48;
+}
+:root[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: #c9b8f5;
+}
+
+/* Bajo consumo en claro: ya es todo plano; solo se quitan las sombras. */
+:root[data-theme="light"][data-lowpower="1"] .glass,
+:root[data-theme="light"][data-lowpower="1"] .btn-accent {
+  box-shadow: none;
+}
+:root[data-theme="light"][data-lowpower="1"] .tracklist {
+  background: var(--l-panel);
+}

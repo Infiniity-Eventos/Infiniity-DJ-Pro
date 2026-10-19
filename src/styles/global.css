@@ -1544,3 +1544,48 @@ body {
   color: var(--text-1);
   font-weight: 600;
 }
+
+/* ---------------- Cabecera de la lista + nota en cada fila ---------------- */
+.track-head {
+  display: grid;
+  grid-template-columns: 1fr 64px 56px 66px;
+  gap: 12px;
+  padding: 0 13px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--glass-border);
+  margin-bottom: 4px;
+}
+.track-head span:nth-child(2),
+.track-head span:nth-child(3) {
+  text-align: center;
+}
+.track-row .t-name::before {
+  content: "♪";
+  margin-right: 9px;
+  color: var(--accent);
+}
+
+/* ---------------- Jimbo (mascota) en la cola vacia del automix ----------------
+   Imagen ESTATICA y chica (240 px, ~15 KB): no anima, no repinta. Solo se ve
+   con la cola vacia, que es justo cuando ese espacio sobra. */
+.automix-vacia {
+  align-content: center;
+  gap: 6px;
+  text-align: center;
+  padding: 10px;
+}
+.jimbo {
+  width: 110px;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+  pointer-events: none;
+}
+.automix-vacia small {
+  display: block;
+  font-size: 11px;
+  opacity: 0.8;
+}

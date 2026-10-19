@@ -147,7 +147,13 @@ export function AutomixBar() {
 
       <div className="automix-cola">
         {am.cola.length === 0 && (
-          <div className={`automix-vacia ${sobre !== null ? "drop" : ""}`}>Suelta aquí las canciones</div>
+          <div className={`automix-vacia ${sobre !== null ? "drop" : ""}`}>
+            <img className="jimbo" src="/jimbo.webp" alt="" width={110} height={100} decoding="async" draggable={false} />
+            <div>
+              Suelta aquí las canciones
+              <small>o arrástralas desde la biblioteca</small>
+            </div>
+          </div>
         )}
         {am.cola.map((c, i) => {
           const esSonando = c.id === am.sonandoId;

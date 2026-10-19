@@ -197,6 +197,14 @@ export function TrackList() {
         </button>
       </div>
 
+      {tracks.length > 0 && (
+        <div className="track-head">
+          <span>Título</span>
+          <span>BPM</span>
+          <span>Duración</span>
+          <span>Cargar</span>
+        </div>
+      )}
       <div className="track-rows">
         {libraryLoading && <div style={{ padding: 16, color: "var(--text-dim)" }}>Leyendo carpeta...</div>}
         {!libraryLoading && tracks.length === 0 && (
@@ -237,10 +245,10 @@ export function TrackList() {
               {t.duration ? fmtTime(t.duration) : ""}
             </span>
             <span className="t-actions">
-              <button className="btn load-btn" title="Cargar en Deck A" onClick={() => loadToDeck("A", t)}>
+              <button className="btn load-btn load-a" title="Cargar en Deck A" onClick={() => loadToDeck("A", t)}>
                 A
               </button>
-              <button className="btn load-btn" title="Cargar en Deck B" onClick={() => loadToDeck("B", t)}>
+              <button className="btn load-btn load-b" title="Cargar en Deck B" onClick={() => loadToDeck("B", t)}>
                 B
               </button>
             </span>

@@ -173,6 +173,9 @@ const LS_KEY = "infiniity-dj-prefs";
 
 interface Persisted {
   theme: Theme;
+  /** El diseño claro (2026-10) se estrena una vez en todas las PC: quien
+   *  tenia guardado "dark" de antes lo ve una vez y puede volver con el boton. */
+  temaV2?: boolean;
   lowPower: boolean;
   lowPowerAuto: boolean;
   musicRoot: string | null;
@@ -206,7 +209,7 @@ function loadPrefs(): Persisted {
     if (raw) {
       const p = JSON.parse(raw) as Partial<Persisted>;
       return {
-        theme: p.theme ?? "dark",
+        theme: p.temaV2 ? (p.theme ?? "light") : "light",
         // Si el usuario nunca lo eligió, decidimos según el equipo. Antes esta
         // bandera no existia: lo guardado era automatico, asi que se recalcula.
         lowPowerAuto: p.lowPowerAuto ?? true,
@@ -220,7 +223,7 @@ function loadPrefs(): Persisted {
     /* ignorar */
   }
   return {
-    theme: "dark",
+    theme: "light",
     lowPower: autoLow,
     lowPowerAuto: true,
     musicRoot: null,
@@ -232,6 +235,7 @@ function loadPrefs(): Persisted {
 function savePrefs(s: AppStore) {
   const p: Persisted = {
     theme: s.theme,
+    temaV2: true,
     lowPower: s.lowPower,
     lowPowerAuto: s.lowPowerAuto,
     musicRoot: s.musicRoot,
