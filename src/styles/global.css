@@ -52,6 +52,53 @@ textarea {
   background: transparent;
 }
 
+/* ---------------- Botones (base) ----------------
+   Van aqui ARRIBA, antes de los componentes: cada componente ajusta el
+   tamaño (.load-btn, .folder-tab, .mix-btn...) y tiene que ganarle a la base. */
+.btn {
+  font: inherit;
+  color: var(--text-1);
+  background: #ffffff;
+  border: 1px solid var(--borde);
+  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: transform var(--t-fast), background var(--t-fast), border-color var(--t-fast);
+  user-select: none;
+}
+.btn:hover {
+  background: var(--panel-2);
+  border-color: var(--morado-suave);
+}
+.btn:active {
+  transform: scale(0.96);
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Accion principal: rosa -> morado */
+.btn-accent,
+.btn-accent:hover {
+  background: linear-gradient(135deg, var(--rosa), var(--morado));
+  border: none;
+  color: #fff;
+}
+.btn-accent:hover {
+  filter: brightness(1.08);
+}
+
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 50%;
+}
+
 /* ---------------- Layout principal ---------------- */
 .app {
   display: flex;
@@ -336,7 +383,7 @@ input[type="range"]::-webkit-slider-thumb {
 .efecto-btn.sonando .efecto-icono {
   color: #ffffff;
 }
-:root[data-lowpower="1"] .efecto-btn.sonando {
+.efecto-btn.sonando {
   box-shadow: none;
 }
 .mixer .crossfader-block {
@@ -1458,9 +1505,9 @@ body {
   color: var(--text-dim);
 }
 
-/* Modo bajo consumo: sin sombras brillantes. */
-:root[data-lowpower="1"] .automix.encendido,
-:root[data-lowpower="1"] .automix-power.on {
+/* Sin sombras brillantes (siempre en bajo consumo). */
+.automix.encendido,
+.automix-power.on {
   box-shadow: none;
 }
 

@@ -20,7 +20,7 @@ No necesita internet: toda la música es local.
 - **Explorador de carpetas** por género. Se pueden **arrastrar canciones entre carpetas**
   (mueve el archivo real en el disco). Crea sola la carpeta **"Sin clasificar"**.
 - **Buscador** de canciones por nombre y **tiempo restante** de cada tema.
-- **Estética glassmorphism morada** con **modo claro y oscuro**. Disco giratorio (provisional).
+- **Tema único lavanda**, opaco y plano para que corra en PC lentas. Disco quieto.
 - **Controladora Pioneer DDJ-200** por MIDI nativo (mapeo fijo en el código, plug-and-play).
   ⚠️ *Pendiente de probar contra la unidad física para afinar el mapeo.*
 - Abre en **pantalla completa**.
@@ -31,7 +31,7 @@ No necesita internet: toda la música es local.
 
 Estos elementos son marcadores de posición hasta que Stiven envíe los definitivos:
 
-1. **Colores morados** → en `src/styles/theme.css` (variables `--purple-*`). Cambiar por los oficiales.
+1. **Colores** → en `src/styles/theme.css` (variables `--rosa`, `--morado`, `--fondo`...).
 2. **Logo / ícono de la app** → carpeta `src-tauri/icons/`. Reemplazar con el logo real
    (basta un PNG grande y correr `npm run tauri icon ruta-del-logo.png`).
 3. **Disco giratorio** → `src/components/vinyl.css` (hecho con CSS). Se puede cambiar por arte real.

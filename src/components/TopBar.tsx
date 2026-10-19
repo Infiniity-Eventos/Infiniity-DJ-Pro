@@ -17,11 +17,6 @@ import { reloadLibrary } from "../lib/library";
 import { etiquetaSync } from "./SyncModal";
 
 export function TopBar() {
-  const theme = useStore((s) => s.theme);
-  const setTheme = useStore((s) => s.setTheme);
-  const lowPower = useStore((s) => s.lowPower);
-  const setLowPower = useStore((s) => s.setLowPower);
-  const lowPowerAuto = useStore((s) => s.lowPowerAuto);
   const musicRoot = useStore((s) => s.musicRoot);
   const midiConnected = useStore((s) => s.midiConnected);
   const midiPort = useStore((s) => s.midiPort);
@@ -161,24 +156,6 @@ export function TopBar() {
       >
         <span className={`midi-dot ${midiConnected ? "on" : "off"}`} />
         {midiConnected ? midiPort ?? "DDJ-200" : "DDJ-200"}
-      </button>
-
-      <button
-        className={`btn no-drag ${lowPower ? "lowpower-on" : ""}`}
-        onClick={() => setLowPower(!lowPower)}
-        title={`Modo bajo consumo: ${lowPower ? "ACTIVADO" : "desactivado"}${lowPowerAuto ? " (automatico)" : ""}`}
-      >
-        ⚡
-      </button>
-
-      <button
-        className="btn no-drag"
-        onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-        title={theme === "dark" ? "Cambiar a tema claro" : "Cambiar a tema oscuro"}
-      >
-        {/* Texto, no simbolo: el sol de la fuente monocroma parecia un engranaje
-            y el equipo creia que era "configuracion". */}
-        {theme === "dark" ? "Claro" : "Oscuro"}
       </button>
 
       {/* Buscar actualizacion a mano. Existe porque si el aviso automatico no

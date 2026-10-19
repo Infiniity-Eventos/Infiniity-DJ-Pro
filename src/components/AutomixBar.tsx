@@ -148,7 +148,7 @@ export function AutomixBar() {
       <div className="automix-cola">
         {am.cola.length === 0 && (
           <div className={`automix-vacia ${sobre !== null ? "drop" : ""}`}>
-            <img className="jimbo" src="/jimbo.webp" alt="" width={110} height={100} decoding="async" draggable={false} />
+            <img className="jimbo" src="/jimbo.webp" alt="" width={110} height={108} decoding="async" draggable={false} />
             <div>
               Suelta aquí las canciones
               <small>o arrástralas desde la biblioteca</small>

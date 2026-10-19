@@ -3,7 +3,7 @@
 - Tipo A (recortable), croma verde #00FF00 (Jimbo no tiene verde).
 - Archivo final: `public/jimbo-dj.webp` (≈ 220 px de alto, se muestra a ~110 px). Estático, sin animación.
 - Adjuntar en Gemini: `~/Descargas/Jimbo-REFERENCIA-original.png`
-- Estado: pendiente
+- Estado: lista (2026-10-19, en public/jimbo.webp)
 
 ## Prompt
 ```

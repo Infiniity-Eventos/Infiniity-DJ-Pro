@@ -144,13 +144,15 @@ sudo apt install -y libwebkit2gtk-4.1-0 gstreamer1.0-plugins-good \
   - Si falla (429 de YouTube, etc.): queda con botón **🔄 Reintentar** (no se pierde).
   - Herramientas: **yt-dlp** (`~/.local/bin`), **deno** (`~/.deno/bin`, motor JS que YouTube
     ahora exige) y **ffmpeg**. Si faltan, la app las instala solas (botón "Instalar").
-- **Modo bajo consumo ⚡** (botón arriba): quita desenfoque y detiene el disco.
-  **Se auto-activa en equipos de ≤4 hilos** (como el i5 del portátil).
+- **Bajo consumo SIEMPRE** (desde la 0.4.25 no hay botón ⚡): sin desenfoque, sin sombras
+  grandes, disco quieto (sonando lleva un aro rosado). Ver la cabecera de `theme.css`.
 - **Monitor de recursos** (chip abajo-izq: RAM · CPU) + **diagnóstico** que graba a
   `~/.local/share/com.infiniityeventos.dj/diagnostico-rendimiento.csv` (clic en el chip abre
   la carpeta). Anota versión, actividad, modo ⚡ y si la ventana está visible.
 - **Visual:** iconos SVG de transporte, tarjetas de vidrio, filas de canciones pulidas,
-  paleta morado→azul→rosa (estilo referencia "LUMINA"). Modo claro/oscuro.
+  **un solo tema lavanda** (desde la 0.4.25; ya no hay claro/oscuro), todo opaco y plano.
+  La mascota **Jimbo DJ** (`public/jimbo.webp`, imagen fija) sale en la bienvenida y en la
+  cola vacía del automix.
 - **Versión visible** dentro de la app.
 - Análisis de BPM (Rust, en segundo plano, cacheado), explorador de carpetas, arrastrar entre
   carpetas, "Sin clasificar" automática, buscador local, botón MEZCLAR (transición auto).
@@ -188,7 +190,7 @@ es confirmar que la unidad física manda los mismos números de nota/CC.
 ### 🟡 3. Reemplazar visuales provisionales (cuando lleguen del cliente)
 | Qué | Dónde |
 |---|---|
-| Colores morados exactos | `src/styles/theme.css` (variables `--purple-*` y el degradado del body) |
+| Colores | `src/styles/theme.css` (variables `--rosa`, `--morado`, `--fondo`, `--panel`...) |
 | Logo / ícono | PNG grande + `npm run tauri icon ruta.png` |
 | Disco giratorio (arte real) | `src/components/vinyl.css` |
 
@@ -232,7 +234,7 @@ src/
 │   ├── ruta.ts                  Orden por ritmo para "Poner automix".
 │   └── library.ts, format.ts    Ayudas.
 ├── state/store.ts               Estado global (zustand) + auto-⚡ en equipos flojos.
-└── styles/theme.css, global.css ⭐ Colores y estilos. Incluye modo ⚡.
+└── styles/global.css (estructura) + theme.css (colores, va DESPUÉS y manda) ⭐
 
 src-tauri/src/
 ├── lib.rs                       Registra comandos.

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useStore, weakMachineDefault } from "./state/store";
+import { useStore } from "./state/store";
 import { reloadLibrary } from "./lib/library";
 import { useMidi } from "./hooks/useMidi";
 import { useSync } from "./hooks/useSync";
@@ -27,8 +27,6 @@ import { UpdateModal } from "./components/UpdateModal";
 import { onYtdlProgress, modoDibujo, interfazLista, isTauri, ytdlUpdate } from "./lib/tauri";
 
 export default function App() {
-  const theme = useStore((s) => s.theme);
-  const lowPower = useStore((s) => s.lowPower);
   const musicRoot = useStore((s) => s.musicRoot);
   const sync = useStore((s) => s.sync);
   const toast = useStore((s) => s.toast);
@@ -40,16 +38,9 @@ export default function App() {
   useMidi();
   useSync();
 
-  // Aplicar el tema (claro/oscuro) y el modo bajo consumo al documento.
-  useEffect(() => {
-    document.documentElement.setAttribute("data-theme", theme);
-  }, [theme]);
-  useEffect(() => {
-    document.documentElement.setAttribute("data-lowpower", lowPower ? "1" : "0");
-  }, [lowPower]);
-
   // Arranque: preguntar a Rust como se esta dibujando (ver arranque.rs).
-  // - Por software -> bajo consumo automatico (salvo que el usuario lo eligiera).
+  // (La app ya es siempre de bajo consumo; el modo se guarda para el CSV de
+  // diagnostico.)
   // - Avisar que la interfaz ya se pinto, para que el arranque con GPU quede
   //   como "salio bien". Se espera un poco: el fallo de GPU puede llegar en los
   //   primeros cuadros, no en el primero.
@@ -59,12 +50,10 @@ export default function App() {
     modoDibujo()
       .then((m) => {
         st.setModoDibujo(m);
-        st.setLowPowerAuto(m.software || weakMachineDefault());
       })
       .catch((err) => {
         console.error("[App] no se pudo saber el modo de dibujo", err);
-        st.showToast(`No se pudo saber el modo de dibujo (${err}); se asume bajo consumo.`);
-        st.setLowPowerAuto(true);
+        st.showToast(`No se pudo saber el modo de dibujo (${err}).`);
       });
     const t = window.setTimeout(() => {
       interfazLista().catch((err) => console.error("[App] interfaz_lista fallo", err));

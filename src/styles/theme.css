@@ -1,25 +1,52 @@
 /*
- * Infiniity DJ - Tema visual (glassmorphism morado).
- * Paleta PROVISIONAL: reemplazar los valores morados por los oficiales de
- * Infiniity cuando Stiven los envie. Soporta modo oscuro y claro.
+ * Infiniity DJ - Tema visual UNICO (lavanda), desde la 0.4.25.
+ *
+ * Antes habia tema oscuro de vidrio + tema claro + boton de bajo consumo.
+ * Ahora hay un solo diseño y es SIEMPRE el de bajo consumo. Reglas:
+ *   - Todo OPACO y PLANO: nada de backdrop-filter (desenfoque), nada de
+ *     degradados radiales de fondo, nada de sombras desenfocadas grandes.
+ *     Dibujando por software (portatiles sin GPU) cada tic de la rueda en la
+ *     lista repinta la zona entera; con colores planos solo copia pixeles.
+ *     Medido en este repo: 69% de un nucleo con vidrio+degradados -> 40% plano.
+ *   - Nada animado en bucle (el disco ya no gira).
+ *   - Los degradados que quedan son lineales y en piezas chicas (botones).
+ * Antes de añadir algo visual: ¿repinta continuamente? Si si, no va.
  */
 
 :root {
-  /* Morados de marca (provisionales) */
-  --purple-900: #1a0b2e;
-  --purple-800: #2a1250;
-  --purple-700: #3d1a6b;
-  --purple-600: #5b21b6;
-  --purple-500: #7c3aed;
-  --purple-400: #a855f7;
+  /* Marca */
+  --rosa: #e5218f;
+  --morado: #7c3aed;
+  --morado-claro: #a855f7;
+  --morado-suave: #b18af5;
+
+  /* Superficies */
+  --fondo: #e9e5f8;
+  --panel: #f9f8ff;
+  --panel-2: #f1edff;
+  --chip: #ece6ff;
+  --fila-par: #f4f1ff;
+  --borde: #e0d8f6;
+
+  /* Texto */
+  --text-1: #2a1650;
+  --text-2: #5a4785;
+  --text-dim: #8b7cb0;
+
+  /* Nombres que usa el resto de la app (vienen del tema de vidrio) */
+  --accent: var(--morado-claro);
+  --accent-strong: var(--morado);
+  --accent-soft: var(--morado-suave);
   --purple-300: #c084fc;
-  --purple-200: #ddd6fe;
+  --purple-400: var(--morado-claro);
+  --purple-500: var(--morado);
+  --bg-0: var(--fondo);
+  --glass-bg: #ffffff;
+  --glass-bg-strong: var(--panel-2);
+  --glass-border: var(--borde);
+  --track-bg: var(--chip);
+  --slider-track: #ddd5f5;
 
-  --accent: var(--purple-400);
-  --accent-strong: var(--purple-500);
-  --accent-soft: var(--purple-300);
-
-  /* Transiciones globales suaves */
   --t-fast: 120ms ease;
   --t-med: 240ms ease;
 
@@ -28,158 +55,255 @@
   --radius-sm: 9px;
 }
 
-/* ---------------- MODO OSCURO (por defecto) ---------------- */
-:root,
-:root[data-theme="dark"] {
-  --bg-0: #4a3a8c;
-  --bg-1: #46599e;
-  --bg-2: #5b4ba0;
-
-  --text-1: #ffffff;
-  --text-2: #e7ddfb;
-  --text-dim: #cbbdea;
-
-  /* Vidrio blanco esmerilado, VISIBLE (tarjetas que "flotan" como en LUMINA)
-     pero con blur bajo => se ve el efecto sin castigar la GPU. */
-  --glass-bg: rgba(255, 255, 255, 0.15);
-  --glass-bg-strong: rgba(255, 255, 255, 0.26);
-  --glass-border: rgba(255, 255, 255, 0.34);
-  --glass-highlight: rgba(255, 255, 255, 0.22);
-  --shadow: 0 10px 30px rgba(28, 14, 66, 0.32);
-
-  --track-bg: rgba(255, 255, 255, 0.10);
-  --slider-track: rgba(255, 255, 255, 0.20);
-}
-
-/* ---------------- MODO CLARO ---------------- */
-:root[data-theme="light"] {
-  --bg-0: #ece7f7;
-  --bg-1: #e2d9f5;
-  --bg-2: #d8ccf2;
-
-  --text-1: #241340;
-  --text-2: #4b3170;
-  --text-dim: #7a63a0;
-
-  --glass-bg: rgba(255, 255, 255, 0.45);
-  --glass-bg-strong: rgba(255, 255, 255, 0.62);
-  --glass-border: rgba(124, 58, 237, 0.28);
-  --glass-highlight: rgba(255, 255, 255, 0.55);
-  --shadow: 0 8px 30px rgba(80, 40, 140, 0.18);
-
-  --track-bg: rgba(124, 58, 237, 0.08);
-  --slider-track: rgba(124, 58, 237, 0.18);
-}
-
-/* Fondo vibrante (morado -> azul -> rosa) con "orbes" suaves.
- *
- * OJO: NO poner background-attachment: fixed. Se creia que "se pinta una sola
- * vez"; es al reves: con fondo fijo, WebKit tiene que repintar los cuatro
- * degradados enteros en CADA cuadro mientras se desplaza la lista de canciones
- * (medido: un nucleo al 100% sostenido dibujando por software). El body nunca
- * se desplaza (overflow: hidden), asi que el fixed no aportaba nada. */
 body {
-  background:
-    radial-gradient(1200px 800px at 8% -5%, #6f5bc4, transparent 55%),
-    radial-gradient(1000px 750px at 105% 6%, #5488cf, transparent 55%),
-    radial-gradient(900px 760px at 96% 108%, #c98bc0, transparent 52%),
-    linear-gradient(150deg, #4a3a8c, #3f5aa0);
+  background: var(--fondo);
   color: var(--text-1);
 }
 
-/* ---------------- Componentes de vidrio ---------------- */
+/* Paneles: blancos, opacos, con borde (sin sombra: es lo caro sin GPU). */
 .glass {
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
+  background: var(--panel);
+  border: 1px solid var(--borde);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow), inset 0 1px 0 var(--glass-highlight);
-  /* Desenfoque MUY leve: da el efecto vidrio sin castigar la GPU en gama baja. */
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
 }
-
 .glass-strong {
-  background: var(--glass-bg-strong);
+  background: var(--panel);
+}
+/* Los avisos flotantes SI llevan sombra corta: aparecen un momento y se van. */
+.toast,
+.aviso-central,
+.modal-box,
+.agregar-menu {
+  box-shadow: 0 6px 20px rgba(42, 22, 80, 0.18);
 }
 
-/* ---------------- MODO BAJO CONSUMO ----------------
-   Quita el desenfoque (lo mas caro en render por software) y sube la opacidad
-   del vidrio para que siga legible. Pensado para equipos flojos. */
-:root[data-lowpower="1"] {
-  --glass-bg: rgba(255, 255, 255, 0.17);
-  --glass-bg-strong: rgba(255, 255, 255, 0.3);
+/* ---------------- Barra superior: franja morada ---------------- */
+.topbar {
+  background: linear-gradient(90deg, #5b3fd0, #7a5ae6);
+  border-color: transparent;
+  color: #ffffff;
 }
-/* Dibujando por software (sin GPU) no hay composicion: cada tic de la rueda en
-   la lista de canciones REPINTA la zona entera desde el fondo. Medido en este
-   repo (rueda a 5 tics/s, un nucleo): 69% con todo -> 40% con fondo plano y sin
-   sombras. Lo caro por pixel son los degradados radiales y las sombras
-   desenfocadas; el desenfoque de vidrio ya estaba quitado aqui. */
-:root[data-lowpower="1"] body {
-  background: var(--bg-0);
+.topbar .brand {
+  background: none;
+  -webkit-text-fill-color: #ffffff;
+  color: #ffffff;
+  text-shadow: none;
 }
-:root[data-lowpower="1"] .glass {
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
+.topbar .app-version {
+  color: #d9cdfb;
 }
-:root[data-lowpower="1"] .progress .fill {
+.topbar .btn {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+}
+.topbar .btn:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
+.topbar .path-chip {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+.topbar .sync-dim {
+  color: #d9cdfb;
+}
+/* El menu de "Agregar canciones" cuelga de la barra pero es un panel normal */
+.topbar .agregar-menu .btn {
+  background: #ffffff;
+  border-color: var(--borde);
+  color: var(--text-1);
+}
+.topbar .agregar-menu .sync-dim {
+  color: var(--text-dim);
+}
+
+/* ---------------- Decks ---------------- */
+.deck-badge {
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--rosa), #c026d3);
+  padding: 4px 14px;
+  border-radius: 999px;
+  font-size: 15px;
+}
+.deck-bpm .btn {
+  background: var(--chip);
+  border-color: transparent;
+  color: var(--text-1);
+}
+.progress .fill {
+  background: linear-gradient(90deg, #c084fc, var(--rosa));
   box-shadow: none;
 }
-/* La lista de canciones OPACA: si el panel deja ver el fondo, cada cuadro del
-   desplazamiento obliga a mezclar filas + vidrio + degradado. Opaco, WebKit
-   solo mueve pixeles ya pintados. */
-:root[data-lowpower="1"] .tracklist {
-  background: var(--bg-2);
+input[type="range"]::-webkit-slider-thumb {
+  background: #ffffff;
+  border: 4px solid var(--morado);
+  width: 20px;
+  height: 20px;
+  margin-top: -7px;
+  box-shadow: none;
+}
+/* Solo el crossfader lleva degradado (morado = lado A, rosa = lado B); los
+   volumenes van planos para no aparentar un nivel que no tienen. */
+.crossfader-block input[type="range"]::-webkit-slider-runnable-track {
+  background: linear-gradient(90deg, var(--morado), var(--rosa));
+}
+.perilla-cuerpo {
+  fill: #ffffff;
+  stroke: var(--borde);
+}
+.perilla-aguja {
+  stroke: var(--morado);
+}
+.perilla-svg.activa .perilla-aguja {
+  stroke: #ffffff;
+}
+.perilla-activo {
+  stroke: var(--rosa);
 }
 
-/* Botones */
-.btn {
-  font: inherit;
+/* ---------------- Mezclador ---------------- */
+.mix-btn:disabled {
+  opacity: 0.55;
+}
+.efecto-btn {
+  background: var(--chip);
+  border-color: #cdbdf7;
+  color: var(--morado);
+}
+.efecto-icono {
+  color: var(--rosa);
+}
+.efecto-btn.sonando {
+  background: linear-gradient(135deg, var(--rosa), var(--morado));
+  color: #ffffff;
+}
+
+/* ---------------- Carpetas ---------------- */
+.folder-row.active {
+  background: var(--chip);
+  color: var(--morado);
+  box-shadow: inset 3px 0 0 var(--rosa);
+}
+.folder-tab.active {
+  background: var(--morado);
+}
+
+/* ---------------- Lista de canciones ----------------
+   Opaca a proposito: si dejara ver el fondo, cada cuadro del desplazamiento
+   mezclaria filas + panel + fondo. Opaca, WebKit solo mueve pixeles. */
+.tracklist {
+  background: var(--panel);
+}
+.track-row:nth-child(even) {
+  background: var(--fila-par);
+}
+.track-row:hover {
+  background: var(--chip);
+  border-color: #d4c6fa;
+}
+.track-row .t-bpm {
+  background: var(--chip);
   color: var(--text-1);
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-sm);
-  padding: 8px 14px;
-  cursor: pointer;
-  transition: transform var(--t-fast), background var(--t-fast), border-color var(--t-fast);
-  user-select: none;
 }
-.btn:hover {
-  background: var(--glass-bg-strong);
-  border-color: var(--accent-soft);
+.track-row .t-bpm:hover {
+  background: var(--morado);
+  color: #ffffff;
 }
-.btn:active {
-  transform: scale(0.96);
+/* A relleno morado, B contorno rosa: se distinguen sin leer */
+.load-btn.load-a {
+  background: var(--morado);
+  border-color: var(--morado);
+  color: #ffffff;
 }
-.btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
+.load-btn.load-b {
+  background: #fff0f8;
+  border-color: #f5a3cf;
+  color: var(--rosa);
 }
-
-.btn-accent {
-  background: linear-gradient(135deg, var(--accent-strong), var(--accent));
-  border: none;
-  color: #fff;
-  box-shadow: 0 6px 20px rgba(124, 58, 237, 0.45);
-}
-.btn-accent:hover {
+.load-btn:hover {
   filter: brightness(1.08);
-  background: linear-gradient(135deg, var(--accent-strong), var(--accent));
+}
+.track-row.just-downloaded {
+  border-color: var(--rosa) !important;
 }
 
-.btn-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  border-radius: 50%;
+/* ---------------- Automix ---------------- */
+.automix-power-dot {
+  background: #d4c9ee;
 }
-
-/* Boton del modo bajo consumo cuando esta ACTIVO (ambar, para que se note) */
-.btn.lowpower-on {
-  background: linear-gradient(135deg, #f59e0b, #f97316);
+.automix-power.on {
+  background: linear-gradient(135deg, var(--rosa), var(--morado));
   border-color: transparent;
-  color: #fff;
+}
+.automix-fila:nth-child(even) {
+  background: var(--fila-par);
+}
+.automix-fila.sonando {
+  background: linear-gradient(120deg, #ecdcff, #ffe3f2);
+  border-color: #d8b4fe;
+  color: var(--text-1);
+}
+.automix-fila.sonando .automix-pos {
+  color: var(--rosa);
+}
+.automix-marca {
+  color: var(--rosa);
+}
+.automix-vacia {
+  border-color: #cfc2f3;
+  background: #fbfaff;
+}
+
+/* ---------------- Otros ---------------- */
+.modal-overlay {
+  background: rgba(42, 22, 80, 0.35);
+}
+.dl-fail-msg,
+.dl-error-msg {
+  color: #b91c1c;
+}
+.sync-log {
+  background: var(--chip);
+}
+.sync-peligro,
+.automix-marca.mal {
+  color: #dc2626;
+}
+.stats-monitor .cpu-lo b {
+  color: #16a34a;
+}
+.stats-monitor .cpu-mid b {
+  color: #d97706;
+}
+.stats-monitor .cpu-hi b {
+  color: #e11d48;
+}
+::-webkit-scrollbar-thumb {
+  background: #c9b8f5;
+}
+.automix-led {
+  background: #d4c9ee;
+}
+/* Mezclador como en el diseño: el boton de efecto al centro, A y B grandes */
+.mixer .efectos-block {
+  justify-content: center;
+  align-content: center;
+}
+.crossfader-labels span:first-child,
+.crossfader-labels span:last-child {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--morado);
+}
+.crossfader-labels span:last-child {
+  color: var(--rosa);
+}
+.jimbo-welcome {
+  width: 150px;
+  margin-bottom: -14px;
+}
+.welcome h1 {
+  background: linear-gradient(120deg, var(--morado), var(--rosa));
+  -webkit-background-clip: text;
+  background-clip: text;
 }

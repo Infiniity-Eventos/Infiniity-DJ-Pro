@@ -57,6 +57,7 @@ export function Welcome() {
 
   return (
     <div className="welcome">
+      <img className="jimbo jimbo-welcome" src="/jimbo.webp" alt="" width={150} height={147} decoding="async" draggable={false} />
       <h1>Infiniity DJ</h1>
       <div className="welcome-version">
         versión {__APP_VERSION__}

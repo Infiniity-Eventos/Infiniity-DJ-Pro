@@ -20,7 +20,8 @@ export function StatsMonitor() {
         const decks = s0.decks;
         const playing = (decks.A.isPlaying ? 1 : 0) + (decks.B.isPlaying ? 1 : 0);
         const loaded = (decks.A.trackPath ? 1 : 0) + (decks.B.trackPath ? 1 : 0);
-        const modo = s0.lowPower ? "BAJO-CONSUMO-ON" : "modo-normal";
+        // Desde la 0.4.25 siempre: se deja la marca para comparar con CSV viejos.
+        const modo = "BAJO-CONSUMO-ON";
         const dibujo = s0.modoDibujo
           ? `${s0.modoDibujo.software ? "software" : "gpu"}(${s0.modoDibujo.motivo})`
           : "?";
