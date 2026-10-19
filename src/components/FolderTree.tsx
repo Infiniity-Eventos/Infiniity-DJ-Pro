@@ -84,13 +84,15 @@ export function FolderTree() {
   const [filtro, setFiltro] = useState("");
   const q = filtro.trim().toLowerCase();
 
-  // Carpetas de primer nivel: "Sin clasificar" primero, el resto por nombre.
+  // Carpetas de primer nivel: "Sin clasificar" primero (es la bandeja de
+  // entrada), el resto de MAS a MENOS canciones (pedido 2026-10-19: lo que mas
+  // se usa, arriba); a igual cantidad, por nombre.
   const carpetas = useMemo(() => {
     const hijos = library?.tree.children ?? [];
     const sin = hijos.filter((n) => n.name === SIN_CLASIFICAR);
     const resto = hijos
       .filter((n) => n.name !== SIN_CLASIFICAR)
-      .sort((a, b) => a.name.localeCompare(b.name, "es"));
+      .sort((a, b) => b.track_count - a.track_count || a.name.localeCompare(b.name, "es"));
     return [...sin, ...resto];
   }, [library]);
 
@@ -107,9 +109,10 @@ export function FolderTree() {
       }
       for (const a of partes) conteo.set(a, (conteo.get(a) ?? 0) + 1);
     }
+    // De mas a menos canciones; a igual cantidad, por nombre.
     const lista = [...conteo.entries()]
       .filter(([a]) => a !== "")
-      .sort((x, y) => x[0].localeCompare(y[0], "es"));
+      .sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0], "es"));
     const sin = conteo.get("") ?? 0;
     return { lista, sin };
   }, [library]);
