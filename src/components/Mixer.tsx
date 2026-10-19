@@ -13,7 +13,7 @@ const EFECTOS: { id: string; nombre: string; url: string; titulo: string }[] = [
     id: "infiniity",
     nombre: "Infiniity",
     url: "/efectos/infiniity-eventos.mp3",
-    titulo: "Suena «Mezclando Infiniity Eventos» encima de la musica (8 s). Vuelve a pulsar para cortarlo.",
+    titulo: "Suena «Mezclando Infiniity Eventos» encima de la musica (7 s). Vuelve a pulsar para cortarlo.",
   },
 ];
 
