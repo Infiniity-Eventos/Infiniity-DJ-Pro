@@ -138,6 +138,8 @@ class AudioEngine {
   private tokenSeq = 0;
   /** Avisa cuando una cancion termina sola (fin natural). Lo usa el automix. */
   onFinNatural: ((id: DeckId) => void) | null = null;
+  /** Efectos de un toque (drops): audio decodificado y, si suena, su fuente. */
+  private efectos = new Map<string, { buffer: AudioBuffer | null; cargando: Promise<AudioBuffer | null> | null; source: AudioBufferSourceNode | null; gain: GainNode | null }>();
 
   ensure(): void {
     if (this.ctx) return;
@@ -194,6 +196,81 @@ class AudioEngine {
   private deck(id: DeckId): Deck {
     this.ensure();
     return this.decks![id];
+  }
+
+  // -------- Efectos de un toque (drops: "Mezclando Infiniity Eventos") --------
+
+  /**
+   * Suena ENCIMA de lo que haya (va directo al master, pasa por el VOL general
+   * y el limitador), sin tocar los decks ni el automix. Si ya esta sonando,
+   * volver a disparar lo apaga con un fundido corto.
+   * El archivo viene dentro del programa (public/efectos): esta en todas las
+   * PC apenas actualizan, sin depender de Sync.
+   */
+  async dispararEfecto(id: string, url: string): Promise<void> {
+    this.ensure();
+    if (!(await this.despertar())) return;
+    const ctx = this.ctx!;
+    let e = this.efectos.get(id);
+    if (!e) {
+      e = { buffer: null, cargando: null, source: null, gain: null };
+      this.efectos.set(id, e);
+    }
+    const st = useStore.getState();
+    if (e.source) {
+      // Ya suena: apagarlo suave.
+      const g = e.gain!.gain;
+      const now = ctx.currentTime;
+      g.cancelScheduledValues(now);
+      g.setValueAtTime(g.value, now);
+      g.linearRampToValueAtTime(0, now + 0.3);
+      const src = e.source;
+      e.source = null;
+      window.setTimeout(() => {
+        try {
+          src.stop();
+        } catch {
+          /* ya termino */
+        }
+      }, 320);
+      st.setEfectoSonando(id, false);
+      return;
+    }
+    if (!e.buffer) {
+      if (!e.cargando) {
+        e.cargando = fetch(url)
+          .then((r) => {
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            return r.arrayBuffer();
+          })
+          .then((bytes) => ctx.decodeAudioData(bytes))
+          .catch((err) => {
+            console.error("[AudioEngine.dispararEfecto] no se pudo cargar", id, err);
+            useStore.getState().showToast(`No se pudo cargar el efecto (${err})`);
+            return null;
+          });
+      }
+      e.buffer = await e.cargando;
+      e.cargando = null;
+      if (!e.buffer) return;
+    }
+    const gain = ctx.createGain();
+    gain.gain.value = 1;
+    gain.connect(this.master!);
+    const src = ctx.createBufferSource();
+    src.buffer = e.buffer;
+    src.connect(gain);
+    src.onended = () => {
+      if (e!.source === src) {
+        e!.source = null;
+        useStore.getState().setEfectoSonando(id, false);
+      }
+      gain.disconnect();
+    };
+    e.source = src;
+    e.gain = gain;
+    src.start();
+    st.setEfectoSonando(id, true);
   }
 
   // -------- Efectos --------

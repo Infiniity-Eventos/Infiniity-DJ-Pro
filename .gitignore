@@ -18,3 +18,4 @@ npm-debug.log*
 *.bpmcache.json
 __pycache__/
 .claude/launch.json
+.claude/biblioteca-prueba.json

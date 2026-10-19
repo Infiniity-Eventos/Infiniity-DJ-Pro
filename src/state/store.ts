@@ -115,6 +115,7 @@ interface AppStore {
   syncOpen: boolean; // panel de Sync abierto
   syncAviso: boolean; // aviso "te falta sincronizar" (equipo, una vez por sesion)
   automix: EstadoAutomix;
+  efectosSonando: Record<string, boolean>; // botones de efecto (drops) que estan sonando
 
   setTheme: (t: Theme) => void;
   setLowPower: (v: boolean) => void;
@@ -151,6 +152,7 @@ interface AppStore {
   setSyncOpen: (v: boolean) => void;
   setSyncAviso: (v: boolean) => void;
   patchAutomix: (p: Partial<EstadoAutomix>) => void;
+  setEfectoSonando: (id: string, on: boolean) => void;
 }
 
 const emptyDeck = (): DeckInfo => ({
@@ -287,6 +289,7 @@ export const useStore = create<AppStore>((set, get) => ({
     mensaje: null,
     plegada: false,
   },
+  efectosSonando: {},
 
   setTheme: (t) => {
     set({ theme: t });
@@ -366,6 +369,7 @@ export const useStore = create<AppStore>((set, get) => ({
   setSyncOpen: (v) => set({ syncOpen: v }),
   setSyncAviso: (v) => set({ syncAviso: v }),
   patchAutomix: (p) => set((st) => ({ automix: { ...st.automix, ...p } })),
+  setEfectoSonando: (id, on) => set((st) => ({ efectosSonando: { ...st.efectosSonando, [id]: on } })),
   setAnalyzing: (path, on) =>
     set((st) => {
       const next = new Set(st.analyzing);

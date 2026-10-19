@@ -3,6 +3,20 @@ import { engine } from "../audio/AudioEngine";
 import { automixBloquea } from "../audio/Automix";
 import { useStore } from "../state/store";
 
+/**
+ * Botones de efecto (drops) que suenan encima de la musica. El archivo viaja
+ * dentro del programa (public/efectos). Para agregar otro: un archivo mas y
+ * una linea mas aqui.
+ */
+const EFECTOS: { id: string; nombre: string; url: string; titulo: string }[] = [
+  {
+    id: "infiniity",
+    nombre: "Infiniity",
+    url: "/efectos/infiniity-eventos.mp3",
+    titulo: "Suena «Mezclando Infiniity Eventos» encima de la musica (8 s). Vuelve a pulsar para cortarlo.",
+  },
+];
+
 export function Mixer() {
   const crossfader = useStore((s) => s.crossfader);
   const masterVolume = useStore((s) => s.masterVolume);
@@ -10,6 +24,7 @@ export function Mixer() {
   const decks = useStore((s) => s.decks);
   const showToast = useStore((s) => s.showToast);
   const automixOn = useStore((s) => s.automix.encendido);
+  const efectosSonando = useStore((s) => s.efectosSonando);
 
   // El slider vertical va girado: su ANCHO tiene que ser el ALTO de la columna.
   const trackRef = useRef<HTMLDivElement>(null);
@@ -52,6 +67,20 @@ export function Mixer() {
           {automixOn ? "lo maneja el automix" : autoMixing ? "mezcla en curso..." : "transición automática"}
         </span>
       </button>
+
+      <div className="efectos-block">
+        {EFECTOS.map((e) => (
+          <button
+            key={e.id}
+            className={`btn efecto-btn ${efectosSonando[e.id] ? "sonando" : ""}`}
+            title={e.titulo}
+            onClick={() => void engine.dispararEfecto(e.id, e.url)}
+          >
+            <span className="efecto-icono">{efectosSonando[e.id] ? "■" : "▶"}</span>
+            {e.nombre}
+          </button>
+        ))}
+      </div>
 
       <div className="crossfader-block">
         <div className="crossfader-labels">
