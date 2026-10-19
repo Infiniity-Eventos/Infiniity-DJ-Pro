@@ -68,6 +68,29 @@ export function Mixer() {
         </span>
       </button>
 
+      <div className="mixer-medio">
+        <Canal deckId="A" />
+        {/* Vertical a proposito: arriba = mas volumen, y no se confunde con el
+            crossfader, que es horizontal. */}
+        <div className="master-block" title="Volumen general">
+          <span className="master-value">{Math.round(masterVolume * 100)}%</span>
+          <div className="master-track" ref={trackRef}>
+            <input
+              className="vol-slider master-slider"
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={masterVolume}
+              onChange={(e) => engine.setMasterVolume(parseFloat(e.target.value))}
+              aria-label="Volumen general"
+            />
+          </div>
+          <span className="master-label">VOL</span>
+        </div>
+        <Canal deckId="B" />
+      </div>
+
       <div className="efectos-block">
         {EFECTOS.map((e) => (
           <button
@@ -83,11 +106,7 @@ export function Mixer() {
       </div>
 
       <div className="crossfader-block">
-        <div className="crossfader-labels">
-          <span>A</span>
-          <span>Crossfader</span>
-          <span>B</span>
-        </div>
+        <span className="xf-letra xf-a">A</span>
         <input
           className="vol-slider"
           type="range"
@@ -98,27 +117,35 @@ export function Mixer() {
           onChange={(e) => !automixBloquea() && engine.setCrossfader(parseFloat(e.target.value))}
           onDoubleClick={() => !automixBloquea() && engine.setCrossfader(0.5)}
           onMouseDown={() => automixOn && automixBloquea()}
-          title={automixOn ? "Lo mueve el automix" : "Doble clic para volver al centro"}
+          title={automixOn ? "Lo mueve el automix" : "Crossfader. Doble clic para volver al centro"}
+          aria-label="Crossfader"
         />
+        <span className="xf-letra xf-b">B</span>
       </div>
+    </div>
+  );
+}
 
-      {/* Vertical a proposito: arriba = mas volumen, y no se confunde con el
-          crossfader, que es horizontal. */}
-      <div className="master-block" title="Volumen general">
-        <span className="master-value">{Math.round(masterVolume * 100)}%</span>
-        <div className="master-track" ref={trackRef}>
-          <input
-            className="vol-slider master-slider"
-            type="range"
-            min={0}
-            max={1}
-            step={0.01}
-            value={masterVolume}
-            onChange={(e) => engine.setMasterVolume(parseFloat(e.target.value))}
-            aria-label="Volumen general"
-          />
-        </div>
-        <span className="master-label">VOL</span>
+/**
+ * Columna de cada deck: cuanto SUENA (su volumen por el crossfader, con el
+ * mismo corte que applyCrossfader en AudioEngine). NO es un medidor de audio:
+ * medir la señal obliga a leerla y repintar sin parar, y la app vive en bajo
+ * consumo. Solo cambia cuando cambia el volumen o el crossfader (durante una
+ * mezcla, a la cadencia con que el motor actualiza el crossfader).
+ */
+function Canal({ deckId }: { deckId: "A" | "B" }) {
+  const deck = useStore((s) => s.decks[deckId]);
+  const x = useStore((s) => s.crossfader);
+  const corte = deckId === "A" ? (x <= 0.5 ? 1 : 2 * (1 - x)) : x >= 0.5 ? 1 : 2 * x;
+  const nivel = deck.trackPath ? deck.volume * corte : 0;
+  return (
+    <div
+      className={`canal canal-${deckId.toLowerCase()} ${deck.isPlaying ? "" : "quieto"}`}
+      title={`Cuánto suena el Deck ${deckId}: su volumen por el crossfader (${Math.round(nivel * 100)}%)`}
+    >
+      <span className="canal-letra">{deckId}</span>
+      <div className="canal-barra">
+        <div className="canal-nivel" style={{ height: `${Math.round(nivel * 100)}%` }} />
       </div>
     </div>
   );

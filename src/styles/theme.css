@@ -284,19 +284,16 @@ input[type="range"]::-webkit-slider-thumb {
 .automix-led {
   background: #d4c9ee;
 }
-/* Mezclador como en el diseño: el boton de efecto al centro, A y B grandes */
-.mixer .efectos-block {
-  justify-content: center;
-  align-content: center;
+/* Mezclador: A morado, B rosa (columnas y letras del crossfader) */
+.canal-b .canal-letra,
+.xf-b {
+  color: var(--rosa);
 }
-.crossfader-labels span:first-child,
-.crossfader-labels span:last-child {
-  font-size: 15px;
-  font-weight: 800;
+.xf-a {
   color: var(--morado);
 }
-.crossfader-labels span:last-child {
-  color: var(--rosa);
+.canal-b .canal-nivel {
+  background: linear-gradient(to top, var(--rosa), #f472b6);
 }
 .jimbo-welcome {
   width: 150px;
@@ -306,4 +303,7 @@ input[type="range"]::-webkit-slider-thumb {
   background: linear-gradient(120deg, var(--morado), var(--rosa));
   -webkit-background-clip: text;
   background-clip: text;
+}
+.efecto-btn.sonando .efecto-icono {
+  color: #ffffff;
 }
