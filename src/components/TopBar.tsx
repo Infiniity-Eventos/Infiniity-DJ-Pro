@@ -15,6 +15,7 @@ import {
 import { EVENTO_BUSCAR_ACTUALIZACION } from "./UpdateModal";
 import { reloadLibrary } from "../lib/library";
 import { etiquetaSync } from "./SyncModal";
+import { IconInfinito } from "./Icons";
 
 export function TopBar() {
   const musicRoot = useStore((s) => s.musicRoot);
@@ -90,7 +91,10 @@ export function TopBar() {
 
   return (
     <div className="glass topbar">
-      <span className="brand">Infiniity DJ</span>
+      <span className="brand-wrap">
+        <IconInfinito />
+        <span className="brand">Infiniity DJ</span>
+      </span>
       <span className="app-version" title="Versión instalada">v{__APP_VERSION__}</span>
 
       {/* Sin boton "Carpeta": la biblioteca es siempre la sincronizada (en el

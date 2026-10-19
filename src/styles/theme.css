@@ -78,10 +78,50 @@ body {
 }
 
 /* ---------------- Barra superior: franja morada ---------------- */
+/* Barra de borde a borde, pegada arriba y sin esquinas redondas (como el
+   diseño): se come el margen de .app con margenes negativos. Botones en
+   pastilla y los de la ventana sin fondo, solo el simbolo. */
 .topbar {
-  background: linear-gradient(90deg, #5b3fd0, #7a5ae6);
-  border-color: transparent;
+  margin: -12px -12px 0;
+  min-height: 58px;
+  padding: 8px 14px 8px 18px;
+  border: none;
+  border-radius: 0;
+  background: linear-gradient(90deg, #4a3aae, #6448d4 55%, #7656e2);
   color: #ffffff;
+}
+.brand-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+.brand-wrap svg {
+  display: block;
+}
+.topbar .brand {
+  font-size: 21px;
+}
+.topbar .btn {
+  border-radius: 999px;
+  padding: 7px 16px;
+}
+.topbar .path-chip {
+  border-radius: 999px;
+  padding: 7px 14px;
+}
+.topbar .win-controls .btn-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: transparent;
+  border-color: transparent;
+  font-size: 15px;
+}
+.topbar .win-controls .btn-icon:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+.topbar .win-controls .btn-icon[title="Salir"]:hover {
+  background: #e11d48;
 }
 .topbar .brand {
   background: none;
