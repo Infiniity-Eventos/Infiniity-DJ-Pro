@@ -101,6 +101,10 @@ la ignoran… Sync NO la ignora: es pequeña, no importa).
   <título>"). Solo un mix o un beat instrumental sin autor lleva "Infiniity Eventos". Si de verdad
   no aparece, pregunta al usuario (él suele saberlo) antes de aplicar.
 
+- **La duración manda sobre el nombre.** Si `duracion_coincide` es `false`, internet encontró OTRA
+  canción con el mismo título (pasó con "Abusadora": Deezer dio Wisin & Yandel 3:00, el archivo era
+  el merengue de Oro Sólido 4:39). No la recomiendes así: busca "<título> <artista de iTunes>" o en la
+  web hasta que la duración cuadre (±8 s), y en la lista del chat dilo explícito.
 - **Nunca** correr sobre la biblioteca sin el `--simular` previo del paso 3.
 - **Nunca** borrar una canción sin que el usuario lo haya dicho para ESA canción.
 - Si `identificar.py` falla por internet (muchos `AVISO:`), no inventes: repite más tarde.

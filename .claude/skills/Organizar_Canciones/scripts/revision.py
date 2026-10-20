@@ -40,6 +40,10 @@ def main():
         extra = ""
         if rep:
             extra = f'<div class="rep">Parece REPETIDA de: <code>{html.escape(rep)}</code><br><audio controls preload="none" src="file://{html.escape(rep)}"></audio></div>'
+        if c.get("duracion_coincide") is False:
+            it = c.get("itunes") or {}
+            alt = f' iTunes dice: <b>{html.escape(it.get("titulo") or "")}</b> — {html.escape(it.get("artista") or "")} ({html.escape(it.get("genero") or "")}).' if it else ""
+            extra += f'<div class="rep">⚠ OJO: lo que encontró internet dura {dz.get("duracion")} s y el archivo {int(c["segundos"])} s. Seguramente es OTRA canción con el mismo nombre.{alt}</div>'
         if c["mix"]:
             extra += f'<div class="rep">Es un MIX ({int(c["segundos"]//60)} min). Se nombrará "Mix Infiniity &lt;Género&gt; NN".</div>'
         opciones = "".join(

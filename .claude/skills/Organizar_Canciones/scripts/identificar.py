@@ -86,17 +86,44 @@ def consulta_limpia(q: str) -> str:
     return re.sub(r"[?!¿¡\"'()\[\]]", " ", q).strip()
 
 
-def deezer(query: str) -> dict | None:
+# Tolerancia para decir "es la misma grabacion" por duracion.
+TOLERANCIA_SEG = 8
+
+
+def elegir(candidatos: list, sim_de, dur_de, seg: float | None):
+    """El mejor candidato por NOMBRE, pero entre los que se parecen casi igual
+    (hasta 0.1 menos) gana el que DURA lo mismo que el archivo.
+
+    Por que: con un nombre corto ("Abusadora") todos los resultados empatan en
+    nombre y ganaba el primero, una cancion distinta de otro artista (Wisin &
+    Yandel, 3:00) en vez del merengue de Oro Solido (4:39) que era el archivo.
+    """
+    puntuados = [(sim_de(c), c) for c in candidatos]
+    if not puntuados:
+        return None, 0.0
+    mejor_sim = max(x[0] for x in puntuados)
+    if mejor_sim <= 0:
+        return None, 0.0
+    cerca = [x for x in puntuados if x[0] >= mejor_sim - 0.1]
+    if seg:
+        iguales = [x for x in cerca if dur_de(x[1]) and abs(dur_de(x[1]) - seg) <= TOLERANCIA_SEG]
+        if iguales:
+            return max(iguales, key=lambda x: x[0])[1], max(iguales, key=lambda x: x[0])[0]
+    sim, c = max(cerca, key=lambda x: x[0])
+    return c, sim
+
+
+def deezer(query: str, seg: float | None = None) -> dict | None:
     query = consulta_limpia(query)
-    d = http_json("https://api.deezer.com/search?limit=5&q=" + urllib.parse.quote(query))
+    d = http_json("https://api.deezer.com/search?limit=10&q=" + urllib.parse.quote(query))
     if not d or not d.get("data"):
         return None
-    mejor, mejor_sim = None, 0.0
-    for c in d["data"][:5]:
-        cadena = f"{c['title']} {c['artist']['name']}"
-        sim = similitud(query, cadena)
-        if sim > mejor_sim:
-            mejor, mejor_sim = c, sim
+    mejor, mejor_sim = elegir(
+        d["data"][:10],
+        lambda c: similitud(query, f"{c['title']} {c['artist']['name']}"),
+        lambda c: c.get("duration"),
+        seg,
+    )
     if not mejor:
         return None
     t = http_json(f"https://api.deezer.com/track/{mejor['id']}") or {}
@@ -120,16 +147,17 @@ def deezer(query: str) -> dict | None:
     }
 
 
-def itunes(query: str) -> dict | None:
+def itunes(query: str, seg: float | None = None) -> dict | None:
     query = consulta_limpia(query)
-    d = http_json("https://itunes.apple.com/search?entity=song&limit=3&term=" + urllib.parse.quote(query))
+    d = http_json("https://itunes.apple.com/search?entity=song&limit=8&country=co&term=" + urllib.parse.quote(query))
     if not d or not d.get("results"):
         return None
-    mejor, mejor_sim = None, 0.0
-    for c in d["results"][:3]:
-        sim = similitud(query, f"{c.get('trackName','')} {c.get('artistName','')}")
-        if sim > mejor_sim:
-            mejor, mejor_sim = c, sim
+    mejor, mejor_sim = elegir(
+        d["results"][:8],
+        lambda c: similitud(query, f"{c.get('trackName','')} {c.get('artistName','')}"),
+        lambda c: (c.get("trackTimeMillis") or 0) / 1000 or None,
+        seg,
+    )
     if not mejor:
         return None
     return {
@@ -138,8 +166,13 @@ def itunes(query: str) -> dict | None:
         "artista": mejor.get("artistName"),
         "genero": mejor.get("primaryGenreName"),
         "fecha": (mejor.get("releaseDate") or "")[:10],
+        "duracion": round((mejor.get("trackTimeMillis") or 0) / 1000) or None,
         "similitud": round(mejor_sim, 2),
     }
+
+
+def dura_igual(r: dict | None, seg: float | None) -> bool:
+    return bool(r and r.get("duracion") and seg and abs(r["duracion"] - seg) <= TOLERANCIA_SEG)
 
 
 def similitud(a: str, b: str) -> float:
@@ -242,8 +275,16 @@ def main():
         print(f"[{i}/{len(archivos)}] {p.name[:70]}", file=sys.stderr)
         dz = it = None
         if not mix and nombre:
-            dz = deezer(nombre)
-            it = itunes(nombre)
+            dz = deezer(nombre, seg)
+            it = itunes(nombre, seg)
+            # Deezer no cuadra en duracion pero iTunes si: casi siempre es otra
+            # cancion con el mismo titulo. Se busca en Deezer con el artista de
+            # iTunes (ahi suele aparecer la buena, con ISRC y todo).
+            if dz and it and seg and dura_igual(it, seg) and not dura_igual(dz, seg):
+                otro = deezer(f"{it['titulo']} {it['artista']}", seg)
+                if otro and dura_igual(otro, seg):
+                    otro["similitud"] = max(otro["similitud"], dz["similitud"])
+                    dz = otro
         actuales = etiquetas_actuales(p)
         yt = next((c for c in actuales["comentarios"] if len(c) == 11 and " " not in c), None)
         genero, motivo, seguro = proponer_genero(dz, it, nombre) if not mix else ("?", "mix: genero por el nombre", False)
@@ -289,6 +330,9 @@ def main():
             "deezer": dz,
             "itunes": it,
             "confianza": round(confianza, 2),
+            # False = lo que dijo internet NO dura lo mismo que el archivo: es muy
+            # probable que sea otra cancion. Nunca aceptarla sin revisar.
+            "duracion_coincide": (dura_igual(dz, seg) if dz and dz.get("duracion") else None),
             "genero_propuesto": genero,
             "motivo_genero": motivo,
             "genero_seguro": seguro,
