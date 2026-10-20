@@ -88,7 +88,7 @@ export function SyncModal() {
 
   return (
     <div className="modal-overlay" onClick={ocupado ? undefined : cerrar}>
-      <div className="modal-box sync-box" onClick={(e) => e.stopPropagation()}>
+      <div className="glass glass-strong modal-box sync-box" onClick={(e) => e.stopPropagation()}>
         <div className="dl-title">🔁 Sincronización de la biblioteca</div>
 
         {!sync && <div className="modal-msg">Leyendo estado...</div>}

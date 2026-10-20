@@ -1655,3 +1655,40 @@ body {
   font-size: 11px;
   opacity: 0.8;
 }
+
+/* Ventana minima (1024 px): los decks se pasaban 34 px por la derecha. */
+@media (max-width: 1100px) {
+  .decks-row {
+    grid-template-columns: minmax(0, 1fr) 220px minmax(0, 1fr);
+  }
+  .vinyl-wrap {
+    width: 96px;
+    height: 96px;
+  }
+  .deck-main {
+    gap: 12px;
+  }
+}
+.search-bar .btn {
+  white-space: nowrap;
+}
+.search-bar input {
+  min-width: 0;
+}
+/* La lista (columna del medio) tiene que poder encogerse: sin minmax(0, ...)
+   los nombres largos la ensanchaban y empujaban el automix fuera de la ventana. */
+.tracklist,
+.track-row .t-name {
+  min-width: 0;
+}
+.track-row {
+  grid-template-columns: minmax(0, 1fr) 64px 56px auto;
+}
+@media (max-width: 1100px) {
+  .library-area {
+    grid-template-columns: 190px minmax(0, 1fr) 240px;
+  }
+  .library-area.automix-plegada-area {
+    grid-template-columns: 190px minmax(0, 1fr) 44px;
+  }
+}

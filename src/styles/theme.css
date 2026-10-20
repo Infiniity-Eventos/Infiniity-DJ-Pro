@@ -296,7 +296,14 @@ input[type="range"]::-webkit-slider-thumb {
 
 /* ---------------- Otros ---------------- */
 .modal-overlay {
-  background: rgba(42, 22, 80, 0.35);
+  background: rgba(42, 22, 80, 0.45);
+}
+/* Toda ventana va SOLIDA aunque olvide la clase .glass (la de Sync no la
+   tenia y se veia transparente, con las canciones de fondo atravesandola). */
+.modal-box {
+  background: var(--panel);
+  border: 1px solid var(--borde);
+  border-radius: var(--radius-lg);
 }
 .dl-fail-msg,
 .dl-error-msg {
@@ -346,4 +353,28 @@ input[type="range"]::-webkit-slider-thumb {
 }
 .efecto-btn.sonando .efecto-icono {
   color: #ffffff;
+}
+/* Ventana angosta: los textos de la barra no se parten en dos lineas; lo que
+   cede es la ruta de la carpeta (se corta con "..."). */
+.topbar .btn,
+.topbar .brand,
+.topbar .app-version {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.topbar .path-chip {
+  min-width: 60px;
+  flex-shrink: 1;
+}
+@media (max-width: 1280px) {
+  .topbar {
+    gap: 8px;
+  }
+  .topbar .btn {
+    padding: 7px 11px;
+  }
+  /* La ruta es informativa (tambien esta en Sync): es lo primero que sobra. */
+  .topbar .path-chip {
+    display: none;
+  }
 }
