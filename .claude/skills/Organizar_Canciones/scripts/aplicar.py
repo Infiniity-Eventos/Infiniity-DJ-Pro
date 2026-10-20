@@ -10,7 +10,8 @@ plan.json = lista de objetos:
     "titulo": "Los Infieles", "artistas": ["Aventura"],
     "genero": "Bachata",            # carpeta del catalogo, o "Otros"
     "genero_sugerido": "Bachata",   # solo si genero == "Otros": lo que se cree que es
-    "fecha": "2006-12-19", "isrc": "US...", "bpm": 132.9, "youtube_id": "abc",
+    "fecha": "2006-12-19", "isrc": "US...", "youtube_id": "abc",
+    "bpm_manual": 170,              # opcional: solo si se midio a mano; si no, se ANALIZA (bpm_real.py)
     "mix": false }
 Para un mix:  "mix": true, "genero": "Merengue"  -> se nombra "Mix Infiniity Merengue NN".
 
@@ -77,6 +78,27 @@ def bpm_local(ruta: Path) -> float | None:
         return None
 
 
+def bpm_analizado(ruta: Path, genero: str) -> float | None:
+    """BPM REAL con bpm_real.py (analisis propio, llevado al rango del genero).
+    Deezer y el detector rapido de la app se equivocan de octava (merengue a
+    85 en vez de 170, reggaeton a 190 en vez de 95). Va en otro proceso con
+    -P y no -I: numpy esta en los paquetes del usuario, que -I no ve."""
+    script = Path(__file__).parent / "bpm_real.py"
+    r = subprocess.run([sys.executable, "-P", str(script), str(ruta), "--genero", genero],
+                       capture_output=True, text=True, timeout=300)
+    try:
+        res = json.loads(r.stdout.strip())
+    except Exception:
+        print(f"  AVISO: fallo el analisis de BPM de {ruta.name} ({r.stderr.strip()[:160]}); se usa el detector de la app",
+              file=sys.stderr)
+        return bpm_local(ruta)
+    if not res["estable"]:
+        rapido = bpm_local(ruta)
+        print(f"  AVISO BPM: {ruta.name} analisis={res['bpm']} (tramos no coinciden: {res['tramos']}) app={rapido}."
+              f" Revisar a mano.", file=sys.stderr)
+    return res["bpm"]
+
+
 def escribir_etiquetas(ruta: Path, c: dict, gain: float | None, bpm: float | None, estado: dict, simular: bool) -> None:
     from mutagen.id3 import (APIC, COMM, ID3, ID3NoHeaderError, TALB, TBPM, TCOM, TCON, TCOP, TDRC, TENC, TIT2,
                              TLEN, TPE1, TPE2, TPUB, TSRC, TXXX)
@@ -96,7 +118,7 @@ def escribir_etiquetas(ruta: Path, c: dict, gain: float | None, bpm: float | Non
     t.add(TPE1(encoding=3, text=" x ".join(artistas)))
     t.add(TCON(encoding=3, text=c["genero"]))
     if bpm:
-        t.add(TBPM(encoding=3, text=str(int(round(bpm)))))
+        t.add(TBPM(encoding=3, text=str(int(bpm)) if bpm == int(bpm) else f"{bpm:.1f}"))
     if c.get("fecha"):
         t.add(TDRC(encoding=3, text=str(c["fecha"])[:10]))
     try:
@@ -217,7 +239,16 @@ def main():
                 artistas = ["Infiniity Eventos"]
                 c = {**c, "titulo": titulo, "artistas": artistas}
             gain = None if a.simular else replaygain_db(mp3)
-            bpm = c.get("bpm") or (None if a.simular else bpm_local(mp3))
+            # El "bpm" de Deezer NO se usa (suele venir a la mitad o al doble).
+            # Solo manda un "bpm_manual" puesto a proposito en el plan.
+            if c.get("bpm_manual"):
+                bpm = c["bpm_manual"]
+            elif a.simular:
+                bpm = None
+            elif c.get("mix"):
+                bpm = bpm_local(mp3)  # un mix no tiene UN tempo; el de la app basta
+            else:
+                bpm = bpm_analizado(mp3, genero)
             nuevo = nombre_archivo(c["titulo"], c["artistas"])
             destino_dir = bib / genero
             destino = destino_dir / nuevo

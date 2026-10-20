@@ -41,7 +41,8 @@ Reglas de criterio (tú decides cuando el script dice `genero_seguro: false` o `
 
 ## Procedimiento (cada corrida)
 
-Scripts en `scripts/` (Python 3 + mutagen + ffmpeg; el BPM local lo da el AppImage con `--bpm-cli`).
+Scripts en `scripts/` (Python 3 + mutagen + numpy + ffmpeg). El BPM lo **analiza** `bpm_real.py`
+(ver "BPM real" abajo); el `--bpm-cli` del AppImage queda solo de respaldo y para los mixes.
 `BIB="$HOME/Música/Infiniity Dj Pro"`; carpeta de trabajo `$BIB/.organizar/` (oculta: la app y Sync
 la ignoran… Sync NO la ignora: es pequeña, no importa).
 
@@ -53,7 +54,8 @@ la ignoran… Sync NO la ignora: es pequeña, no importa).
 2. **Leer el JSON y armar el plan** (`plan-<fecha>.json`, formato en la cabecera de `aplicar.py`):
    - **Seguras** → al plan sin preguntar: `confianza >= 0.75` **y** `genero_seguro: true` **y**
      `deezer` presente **y** sin `repetida_de`. Título/artistas de Deezer (`titulo`, `colaboradores`),
-     `fecha`, `isrc`, `bpm`, `youtube_id`, `genero = genero_propuesto`.
+     `fecha`, `isrc`, `youtube_id`, `genero = genero_propuesto`. **Sin `bpm`**: el de Deezer viene a
+     la mitad o al doble; `aplicar.py` lo analiza solo (`bpm_manual` solo si lo mediste a mano).
    - **Dudosas** (todo lo demás, incluidos mixes y repetidas): NO van al plan todavía. Para las que
      internet no reconoció usa `desde_nombre` (artista/título del propio nombre de YouTube) como
      propuesta.
@@ -65,7 +67,7 @@ la ignoran… Sync NO la ignora: es pequeña, no importa).
    python3 -I .claude/skills/Organizar_Canciones/scripts/aplicar.py "$BIB/.organizar/plan-<fecha>.json" --biblioteca "$BIB"
    ```
    Convierte a MP3 lo que no lo sea, escribe etiquetas (borra carátula, firma los campos vacíos),
-   ReplayGain, BPM si falta y **copia** la versión organizada a su carpeta; la original queda en
+   ReplayGain, BPM analizado (si dice `AVISO BPM`, ponlo en la lista del chat) y **copia** la versión organizada a su carpeta; la original queda en
    "Sin clasificar" **a propósito** (fase 1): así las PC del equipo arman la copia nueva a partir
    de la vieja sin volver a bajar ~5 MB por canción. Las ya firmadas se saltan.
    **Fase 2 — limpiar, EN LA MISMA CORRIDA**: espera a que las PC **conectadas** lleguen al 100 %
@@ -112,6 +114,22 @@ la ignoran… Sync NO la ignora: es pequeña, no importa).
   `estado.json → alias_artistas`. Si ves dos formas para el mismo artista en la biblioteca
   (`--lib-cli` o pestaña Artistas de la app), corrige el alias y re-etiqueta con `--forzar`.
 - Las carpetas las crea **esta skill** (o Camilo con el explorador). La app ya no tiene "Nueva carpeta".
+
+## BPM real (`bpm_real.py`)
+
+Mide el pulso con el audio (flujo espectral + autocorrelación, primeros 6 min, por bloques: ~80 MB
+de RAM aunque sea un mix de una hora) y lo lleva al rango normal del género (`RANGOS`: merengue
+115–185, salsa 150–230, reggaetón 78–135…). Comprueba tramos de 30 s; si no coinciden, "inestable".
+- Una canción: `python3 -P scripts/bpm_real.py "<archivo>" --genero Merengue`
+- Revisar toda la biblioteca: `python3 -P scripts/bpm_real.py --auditar "$BIB"` y, para escribir,
+  `--corregir`. Solo corrige los errores de **doble/mitad** estables; lo que dé "otro tempo" (3/2,
+  4/3) o "inestable" se lista para revisar a mano, nunca se toca solo.
+- **`-P`, no `-I`**: numpy está en los paquetes del usuario y `-I` no los ve.
+- La app usa el `TBPM` de la etiqueta antes que su propio análisis (salvo BPM puesto a mano en la
+  app), así que escribirlo en el MP3 basta y viaja por Sync.
+- 2026-10-19: primera auditoría, 22 corregidas (merengues a 170/163/155, reggaetones de 190 a 95,
+  salsas al doble, etc.). La primera versión cargaba la canción entera en RAM y al auditar tumbó el PC:
+  no volver a hacer la STFT de un archivo completo.
 
 ## Diagnóstico rápido
 
