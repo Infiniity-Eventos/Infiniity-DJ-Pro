@@ -8,6 +8,7 @@ mod ddj200;
 mod downloader;
 mod library;
 mod midi;
+mod salida_audio;
 mod sync;
 mod sysmon;
 
@@ -458,6 +459,8 @@ pub fn run() {
             midi_list,
             midi_connect,
             midi_disconnect,
+            salida_audio::audio_outputs,
+            salida_audio::audio_set_output,
             quit_app,
             minimize_window,
             toggle_fullscreen

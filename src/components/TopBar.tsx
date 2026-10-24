@@ -27,6 +27,7 @@ export function TopBar() {
   const sync = useStore((s) => s.sync);
   const setSyncOpen = useStore((s) => s.setSyncOpen);
   const etiqueta = etiquetaSync(sync);
+  const setAudioModalOpen = useStore((s) => s.setAudioModalOpen);
 
   // Agregar canciones del computador: van a "Sin clasificar" y, con Sync, suben
   // al PC original y a las demas PC. Asi nadie toca el explorador de archivos.
@@ -148,6 +149,16 @@ export function TopBar() {
       {musicRoot && <span className="path-chip">{musicRoot}</span>}
 
       <span className="spacer" />
+
+      {/* Salida de audio: sin esto, al conectar la cabina el sonido se queda
+          en los parlantes del portatil y no hay forma de cambiarlo. */}
+      <button
+        className="btn no-drag"
+        onClick={() => setAudioModalOpen(true)}
+        title="Elegir por dónde suena: cabina, HDMI, Bluetooth..."
+      >
+        Audio
+      </button>
 
       <button
         className="btn no-drag"

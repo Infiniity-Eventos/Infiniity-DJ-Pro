@@ -24,6 +24,7 @@ import { StatsMonitor } from "./components/StatsMonitor";
 import { DownloadModal } from "./components/DownloadModal";
 import { DownloadIndicator } from "./components/DownloadIndicator";
 import { UpdateModal } from "./components/UpdateModal";
+import { AudioOutputModal } from "./components/AudioOutputModal";
 import { onYtdlProgress, modoDibujo, interfazLista, isTauri, ytdlUpdate } from "./lib/tauri";
 
 export default function App() {
@@ -34,6 +35,8 @@ export default function App() {
   const downloaderOpen = useStore((s) => s.downloaderOpen);
   const automixPlegada = useStore((s) => s.automix.plegada);
   const setDownloaderOpen = useStore((s) => s.setDownloaderOpen);
+  const audioModalOpen = useStore((s) => s.audioModalOpen);
+  const setAudioModalOpen = useStore((s) => s.setAudioModalOpen);
 
   useMidi();
   useSync();
@@ -152,6 +155,7 @@ export default function App() {
       <StatsMonitor />
       <DownloadIndicator />
       {downloaderOpen && <DownloadModal onClose={() => setDownloaderOpen(false)} />}
+      {audioModalOpen && <AudioOutputModal onClose={() => setAudioModalOpen(false)} />}
     </div>
   );
 }
