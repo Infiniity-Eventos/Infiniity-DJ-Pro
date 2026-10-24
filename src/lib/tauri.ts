@@ -99,6 +99,17 @@ export const onYtdlProgress = (
   return tauriListen<YtdlProgress>("ytdl://progress", (e) => handler(e.payload));
 };
 
+// --- Salida de audio (por donde suena la app) ---
+export interface AudioOutput {
+  name: string; // nombre tecnico
+  description: string; // nombre para mostrar
+  kind: string; // "bluetooth" | "hdmi" | "usb" | "analogica" | "digital" | "otra"
+  active: boolean; // true en la salida por la que suena la app ahora
+}
+export const audioOutputs = () => invoke<AudioOutput[]>("audio_outputs");
+/** Devuelve cuantos flujos de sonido se movieron (0 = la app aun no sonaba). */
+export const audioSetOutput = (sink: string) => invoke<number>("audio_set_output", { sink });
+
 // --- Monitor de recursos ---
 export interface SystemStats {
   ram_mb: number;

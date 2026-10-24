@@ -51,6 +51,27 @@ bytes → `ctx.decodeAudioData` → se reproduce con **`AudioBufferSourceNode` +
 `playbackRate`. **Costo: ~80-170 MB RAM por canción decodificada** (máx 2 decks). No volver a
 intentar `<audio>`/asset para audio.
 
+### 2.2-bis La salida de audio NO se puede cambiar desde el frontend
+WebKitGTK **no implementa `setSinkId()`** ni enumera salidas de audio (eso solo existe en
+Chrome). Desde JavaScript no hay NINGUNA forma de elegir por dónde suena.
+
+El síntoma real: al conectar el portátil a una cabina, otros programas sí sonaban por la
+cabina y **este seguía sonando por los parlantes del portátil**. La causa es que el servidor
+de sonido (PulseAudio/PipeWire) recuerda la salida **por programa**
+(`module-stream-restore`), y el nuestro había quedado marcado con los parlantes internos.
+
+**Solución (en `src-tauri/src/salida_audio.rs`):** se habla con el servidor de sonido por
+fuera, con `pactl`, y se **mueve nuestro flujo** (`move-sink-input`) a la salida elegida. El
+sistema lo recuerda para las próximas veces. Detalles que importan:
+- `pactl` se lanza con `LC_ALL=C`: traduce sus etiquetas al idioma del equipo, y el análisis
+  del texto se rompía según en qué PC corriera ("Nombre:" vs "Name:").
+- El flujo lo abre el **proceso del navegador interno** (hijo nuestro), no el principal: para
+  saber si un flujo es nuestro se sube por la cadena de padres en `/proc`.
+- **No** se toca la salida general del sistema: eso no arreglaría el problema (el sistema
+  seguiría recordando la salida vieja para este programa) y además afectaría a todo el equipo.
+- Se reaplica al crear el motor y en cada play: el navegador interno rehace su conexión de
+  sonido cuando quiere, y entonces vuelve sola al portátil (`src/lib/salidaAudio.ts`).
+
 ### 2.3 NADA de diálogos nativos (pausan la música)
 `window.prompt`, `window.confirm`, `window.alert` en WebKitGTK **BLOQUEAN el proceso y PAUSAN
 el audio**. Prohibidos. Ya se reemplazaron por modales propios de React:
@@ -195,7 +216,7 @@ confirmar con la unidad real). Conectar por USB → botón "DDJ-200" arriba → 
 src/
 ├── App.tsx                      Arma la pantalla + listeners globales.
 ├── components/
-│   ├── TopBar.tsx               Barra: carpeta, ⬇️YouTube, DDJ-200, ⚡, tema, versión, 🔄(dev).
+│   ├── TopBar.tsx               Barra: carpeta, ⬇️YouTube, Audio, DDJ-200, ⚡, tema, versión, 🔄(dev).
 │   ├── DeckPanel.tsx            Cada bandeja (drop de canción, editar BPM).
 │   ├── Mixer.tsx                MEZCLAR, crossfader (corte lineal + doble clic), master.
 │   ├── FolderTree.tsx           Carpetas (crear con PromptModal).
@@ -207,11 +228,13 @@ src/
 │   ├── PromptModal.tsx          🆕 Pedir dato propio (reemplaza window.prompt).
 │   ├── StatsMonitor.tsx         🆕 Chip RAM/CPU + graba diagnóstico.
 │   ├── DownloadModal.tsx        🆕 Buscador de YouTube.
-│   └── DownloadIndicator.tsx    🆕 Descargas en 2do plano + reintento.
+│   ├── DownloadIndicator.tsx    🆕 Descargas en 2do plano + reintento.
+│   └── AudioOutputModal.tsx     🆕 Elegir salida (cabina/HDMI/Bluetooth) + pitido de prueba.
 ├── audio/AudioEngine.ts         ⭐ Motor con AudioBuffer (ver 2.2) + auto-nivelación.
 ├── lib/
 │   ├── tauri.ts                 Puente con Rust (read_media, ytdl_*, system_stats, etc.).
 │   ├── downloads.ts             🆕 Orquesta descargas en 2do plano + reintento.
+│   ├── salidaAudio.ts           🆕 Mantiene el sonido en la salida elegida (ver 2.2-bis).
 │   └── library.ts, format.ts    Ayudas.
 ├── state/store.ts               Estado global (zustand) + auto-⚡ en equipos flojos.
 └── styles/theme.css, global.css ⭐ Colores y estilos. Incluye modo ⚡.
@@ -222,6 +245,7 @@ src-tauri/src/
 ├── bpm.rs / cache.rs            Análisis de BPM (rango 70–180) + caché.
 ├── midi.rs / ddj200.rs          ⭐ Controladora DDJ-200 (falta probar con hardware).
 ├── downloader.rs                🆕 yt-dlp: buscar, descargar (nice), instalar tools.
+├── salida_audio.rs              🆕 Salida de audio por `pactl` (ver 2.2-bis). NO tocar LC_ALL=C.
 └── sysmon.rs                    🆕 Monitor RAM/CPU (lee /proc) + diagnóstico a CSV.
 ```
 
@@ -237,6 +261,10 @@ src-tauri/src/
 - **Re-analizar BPM desde cero:** borrar `~/.local/share/com.infiniityeventos.dj/bpm_cache.json`.
 - **Confirmar qué versión corre:** mirar el número junto al logo dentro de la app.
 - **Herramientas de YouTube ya instaladas en la PC dev:** yt-dlp, deno, ffmpeg (no reinstalar).
+- **Suena por el portátil y no por la cabina:** botón **Audio** de la barra superior → elegir la
+  salida → *Probar sonido*. Si la lista sale vacía o da error, al equipo le falta `pactl`
+  (paquete `pulseaudio-utils` o `pipewire-pulse`). Un parlante Bluetooth tiene que estar
+  emparejado y conectado desde el sistema para aparecer en la lista.
 
 ---
 

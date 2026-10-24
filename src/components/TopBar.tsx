@@ -22,6 +22,7 @@ export function TopBar() {
   const setMidi = useStore((s) => s.setMidi);
   const showToast = useStore((s) => s.showToast);
   const setDownloaderOpen = useStore((s) => s.setDownloaderOpen);
+  const setAudioModalOpen = useStore((s) => s.setAudioModalOpen);
 
   const changeFolder = async () => {
     const folder = await pickFolder();
@@ -66,6 +67,16 @@ export function TopBar() {
       {musicRoot && <span className="path-chip">{musicRoot}</span>}
 
       <span className="spacer" />
+
+      {/* Salida de audio: sin esto, al conectar la cabina el sonido se queda
+          en los parlantes del portatil y no hay forma de cambiarlo. */}
+      <button
+        className="btn no-drag"
+        onClick={() => setAudioModalOpen(true)}
+        title="Elegir por dónde suena: cabina, HDMI, Bluetooth..."
+      >
+        Audio
+      </button>
 
       <button className="btn no-drag" onClick={toggleMidi} title="Conectar la DDJ-200">
         <span className={`midi-dot ${midiConnected ? "on" : "off"}`} />

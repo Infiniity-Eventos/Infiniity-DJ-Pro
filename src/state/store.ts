@@ -52,6 +52,8 @@ interface AppStore {
   search: string;
   selectedFolder: string | null;
   settings: Settings;
+  audioSink: string | null; // salida de audio elegida (nombre tecnico de pactl)
+  audioModalOpen: boolean; // ventana de "Salida de audio" abierta
   midiConnected: boolean;
   midiPort: string | null;
   toast: string | null;
@@ -74,6 +76,8 @@ interface AppStore {
   setSearch: (s: string) => void;
   setSelectedFolder: (p: string | null) => void;
   setSettings: (s: Partial<Settings>) => void;
+  setAudioSink: (name: string | null) => void;
+  setAudioModalOpen: (v: boolean) => void;
   setMidi: (connected: boolean, port: string | null) => void;
   showToast: (msg: string) => void;
   askConfirm: (message: string, onYes: () => void) => void;
@@ -109,6 +113,7 @@ interface Persisted {
   musicRoot: string | null;
   settings: Settings;
   masterVolume: number;
+  audioSink: string | null;
 }
 
 const defaultSettings: Settings = {
@@ -140,12 +145,20 @@ function loadPrefs(): Persisted {
         musicRoot: p.musicRoot ?? null,
         settings: { ...defaultSettings, ...(p.settings ?? {}) },
         masterVolume: p.masterVolume ?? 1,
+        audioSink: p.audioSink ?? null,
       };
     }
   } catch {
     /* ignorar */
   }
-  return { theme: "dark", lowPower: autoLow, musicRoot: null, settings: defaultSettings, masterVolume: 1 };
+  return {
+    theme: "dark",
+    lowPower: autoLow,
+    musicRoot: null,
+    settings: defaultSettings,
+    masterVolume: 1,
+    audioSink: null,
+  };
 }
 
 function savePrefs(s: AppStore) {
@@ -155,6 +168,7 @@ function savePrefs(s: AppStore) {
     musicRoot: s.musicRoot,
     settings: s.settings,
     masterVolume: s.masterVolume,
+    audioSink: s.audioSink,
   };
   try {
     localStorage.setItem(LS_KEY, JSON.stringify(p));
@@ -178,6 +192,8 @@ export const useStore = create<AppStore>((set, get) => ({
   search: "",
   selectedFolder: null,
   settings: initial.settings,
+  audioSink: initial.audioSink,
+  audioModalOpen: false,
   midiConnected: false,
   midiPort: null,
   toast: null,
@@ -216,6 +232,11 @@ export const useStore = create<AppStore>((set, get) => ({
     set((st) => ({ settings: { ...st.settings, ...s } }));
     savePrefs(get());
   },
+  setAudioSink: (name) => {
+    set({ audioSink: name });
+    savePrefs(get());
+  },
+  setAudioModalOpen: (v) => set({ audioModalOpen: v }),
   setMidi: (connected, port) => set({ midiConnected: connected, midiPort: port }),
   showToast: (msg) => {
     set({ toast: msg });

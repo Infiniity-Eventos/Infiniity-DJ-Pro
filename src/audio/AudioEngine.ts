@@ -20,6 +20,7 @@
 
 import { useStore, type DeckId } from "../state/store";
 import { readMediaBytes } from "../lib/tauri";
+import { aplicarSalidaGuardada } from "../lib/salidaAudio";
 
 /**
  * Le pone un limite de tiempo a una promesa.
@@ -113,6 +114,11 @@ class AudioEngine {
     this.master = master;
     this.decks = { A: makeDeck(), B: makeDeck() };
     this.applyCrossfader(useStore.getState().crossfader);
+
+    // Recien creado el motor ya existe la conexion con el sonido del sistema:
+    // es el momento de mandarla a la salida elegida (la cabina), ANTES de que
+    // suene la primera cancion por los parlantes del portatil.
+    void aplicarSalidaGuardada();
   }
 
   private deck(id: DeckId): Deck {
@@ -275,8 +281,48 @@ class AudioEngine {
       return;
     }
 
+    // Asegurar la salida elegida: si el motor se durmio y rehizo su conexion
+    // con el sonido del sistema, volvio sola a los parlantes del portatil.
+    void aplicarSalidaGuardada();
+
     this.startFrom(id, d.offset);
     useStore.getState().patchDeck(id, { isPlaying: true });
+  }
+
+  /**
+   * Pitido corto de prueba, para comprobar POR DONDE esta saliendo el sonido
+   * sin tener que poner una cancion delante de la gente. Sale por el volumen
+   * general, igual que la musica.
+   */
+  async probarSalida(): Promise<void> {
+    this.ensure();
+    const ctx = this.ctx!;
+    if (ctx.state !== "running") {
+      await ctx.resume();
+    }
+    if (ctx.state !== "running") {
+      throw new Error(`el motor de sonido no arranco (está «${ctx.state}»)`);
+    }
+
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.frequency.value = 440;
+    osc.connect(g);
+    g.connect(this.master!);
+
+    // Entrada y salida suaves: un tono que arranca de golpe da un chasquido
+    // seco, y en una cabina con parlantes grandes eso suena fatal.
+    const t = ctx.currentTime;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.25, t + 0.05);
+    g.gain.setValueAtTime(0.25, t + 0.7);
+    g.gain.linearRampToValueAtTime(0, t + 0.85);
+    osc.start(t);
+    osc.stop(t + 0.9);
+    osc.onended = () => {
+      osc.disconnect();
+      g.disconnect();
+    };
   }
 
   pause(id: DeckId): void {

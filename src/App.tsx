@@ -14,6 +14,7 @@ import { StatsMonitor } from "./components/StatsMonitor";
 import { DownloadModal } from "./components/DownloadModal";
 import { DownloadIndicator } from "./components/DownloadIndicator";
 import { UpdateModal } from "./components/UpdateModal";
+import { AudioOutputModal } from "./components/AudioOutputModal";
 import { onYtdlProgress } from "./lib/tauri";
 
 export default function App() {
@@ -23,6 +24,8 @@ export default function App() {
   const toast = useStore((s) => s.toast);
   const downloaderOpen = useStore((s) => s.downloaderOpen);
   const setDownloaderOpen = useStore((s) => s.setDownloaderOpen);
+  const audioModalOpen = useStore((s) => s.audioModalOpen);
+  const setAudioModalOpen = useStore((s) => s.setAudioModalOpen);
 
   useMidi();
 
@@ -78,6 +81,7 @@ export default function App() {
       <StatsMonitor />
       <DownloadIndicator />
       {downloaderOpen && <DownloadModal onClose={() => setDownloaderOpen(false)} />}
+      {audioModalOpen && <AudioOutputModal onClose={() => setAudioModalOpen(false)} />}
     </div>
   );
 }
