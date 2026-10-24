@@ -197,6 +197,14 @@ reciben todo en `~/Infiniity DJ/Biblioteca` y solo pueden agregar descargas. Mot
 `src-tauri/src/sync.rs` (Syncthing manejado por API REST). Para diagnosticar en cualquier PC:
 `/home/USUARIO/Applications/Infiniity-DJ.AppImage --sync-cli estado` (también `log`, `codigo`).
 
+**Códigos viejos (0.4.30).** Si una PC entra con un código que ya no sirve, el original NO la acepta.
+Eso antes solo se escribía en el registro y la PC del equipo mostraba "sin conexión", que se lee como
+falta de internet: una PC estuvo un día entero esperando algo que no iba a pasar. Ahora el original la
+lista en `estado().rechazadas` (nombre y desde cuándo, sin el secreto) y la muestra en el panel encima
+del código; la PC del equipo marca `codigo_rechazado` a los 2 minutos y lo dice en pantalla. Solo se
+acusa al código si el original **nunca** conectó con esa PC (`conecto_alguna_vez` en `sync.json`): si ya
+conectó una vez, una caída posterior es otra cosa y no hay que mandar a pedir código nuevo.
+
 ### ✅ 2. Controladora DDJ-200: CONFIRMADA con la unidad real (2026-10-17)
 El equipo la usó en un evento con la 0.3.9 y respondió. El mapeo de `ddj200.rs` es
 correcto. (Lo de abajo queda como historia.)
