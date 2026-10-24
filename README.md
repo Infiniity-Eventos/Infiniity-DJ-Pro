@@ -1,4 +1,5 @@
-# 🎧 Infiniity DJ
+<img src="public/logo-readme.webp" alt="Infiniity DJ" width="420">
+
 
 Mezclador de música liviano y estable para eventos en vivo, de **Infiniity Eventos**.
 Pensado para que lo use el personal (sin experiencia en DJ) en portátiles de gama baja.
