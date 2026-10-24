@@ -80,6 +80,20 @@ pub struct SyncConfig {
     /// Equipo: nombre con el que esta PC se presenta ("Portátil Sharon"). Vacío = nombre del equipo.
     #[serde(default)]
     pub nombre_pc: String,
+    /// Equipo: cuándo se metió el código (segundos desde 1970). 0 = no se sabe.
+    ///
+    /// Hace falta para poder decir "este código no lo aceptaron": sin la hora
+    /// de entrada no hay forma de distinguir "acaba de entrar, espera" de
+    /// "lleva horas esperando algo que no va a pasar".
+    #[serde(default)]
+    pub unido_en: u64,
+    /// Equipo: alguna vez llegó a conectar con el original.
+    ///
+    /// Si ya conectó una vez, el código era bueno y una caída posterior es
+    /// otra cosa (original apagado, sin internet); no hay que mandar a nadie a
+    /// pedir un código nuevo por una desconexión normal.
+    #[serde(default)]
+    pub conecto_alguna_vez: bool,
 }
 
 static DATOS: OnceLock<PathBuf> = OnceLock::new();
@@ -750,6 +764,8 @@ pub fn unirse(codigo_texto: &str, nombre_pc: &str) -> Result<(), String> {
     c.secreto = secreto.to_string();
     c.id_original = id_original.to_string();
     c.nombre_pc = nombre_pc.trim().to_string();
+    c.unido_en = ahora_segundos();
+    c.conecto_alguna_vez = false;
     guardar_config(&c)?;
     asegurar_syncthing()?;
     let c = leer_config(); // la clave de la API pudo generarse recién
@@ -928,6 +944,19 @@ pub struct PcConectada {
     pub completado: f64,
 }
 
+/// Original: una PC que esta tocando la puerta con un codigo que no sirve.
+///
+/// POR QUE SE MUESTRA: antes esto solo se escribia en un registro que nadie
+/// mira (una linea cada 5 segundos, miles al cabo del dia). La persona del
+/// portatil veia "sin conexion" y la del original no veia nada, asi que nadie
+/// podia saber que lo unico que faltaba era pasar el codigo nuevo.
+#[derive(Serialize, Clone)]
+pub struct PcRechazada {
+    pub nombre: String,
+    /// Desde cuándo lo está intentando (como lo da Syncthing).
+    pub desde: String,
+}
+
 #[derive(Serialize, Clone, Default)]
 pub struct SyncEstado {
     pub rol: Rol,
@@ -946,7 +975,26 @@ pub struct SyncEstado {
     pub raiz: String,
     /// Original: el servicio "siempre encendida" ya está instalado y activo.
     pub servicio_activo: bool,
+    /// Original: PC intentando entrar con un código que ya no sirve.
+    pub rechazadas: Vec<PcRechazada>,
+    /// Equipo: se metió el código, pasó el tiempo de gracia y el original no
+    /// aceptó nunca. O el código ya no sirve, o el original está apagado.
+    pub codigo_rechazado: bool,
 }
+
+/// Segundos desde 1970. Si el reloj del equipo estuviera antes de esa fecha,
+/// devuelve 0 (y entonces no se juzga: mejor callar que acusar en falso).
+fn ahora_segundos() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Cuánto se le da al original para aceptar un código antes de decir que no
+/// sirve. Dos minutos: lo normal es que conecte en segundos, y asi se cubre el
+/// arranque de Syncthing y una red lenta sin asustar a nadie.
+const GRACIA_CODIGO_SEGUNDOS: u64 = 120;
 
 /// ¿Está corriendo el servicio de usuario del agente? (solo tiene sentido en el original)
 fn servicio_agente_activo() -> bool {
@@ -993,6 +1041,13 @@ pub fn estado() -> SyncEstado {
             let conectado = con["connected"].as_bool().unwrap_or(false);
             if id == c.id_original {
                 e.original_conectado = conectado;
+                if conectado && !c.conecto_alguna_vez {
+                    // Se apunta UNA vez, no en cada vuelta: a partir de aqui
+                    // una caida ya no es culpa del codigo.
+                    let mut g = leer_config();
+                    g.conecto_alguna_vez = true;
+                    let _ = guardar_config(&g);
+                }
             }
             let completado = api_get(&c.apikey, &format!("/rest/db/completion?folder={CARPETA_BIBLIOTECA}&device={id}"))
                 .ok()
@@ -1013,6 +1068,49 @@ pub fn estado() -> SyncEstado {
             });
         }
     }
+    // Las dos caras de "el codigo no sirve". Ninguna de las dos se veia: la
+    // del equipo salia como "sin conexion" (parece falta de internet) y la del
+    // original no salia en ningun lado.
+    if c.rol == Rol::Original {
+        if let Ok(pendientes) = api_get(&c.apikey, "/rest/cluster/pending/devices") {
+            if let Some(mapa) = pendientes.as_object() {
+                for (id, info) in mapa {
+                    if c.bloqueados.contains(id) {
+                        continue; // quitada a mano: no es un codigo viejo
+                    }
+                    let nombre = info["name"].as_str().unwrap_or("");
+                    if !nombre.starts_with("Infiniity DJ|") {
+                        continue; // ni siquiera es una PC nuestra
+                    }
+                    if nombre.ends_with(&format!("|{}", c.secreto)) {
+                        continue; // trae el codigo bueno: entra sola en la otra vuelta
+                    }
+                    e.rechazadas.push(PcRechazada {
+                        // Sin el secreto, que es privado.
+                        nombre: nombre.split('|').nth(1).unwrap_or(nombre).to_string(),
+                        desde: info["time"].as_str().unwrap_or("").to_string(),
+                    });
+                }
+            }
+        }
+    } else if c.rol == Rol::Equipo && !e.original_conectado && !c.conecto_alguna_vez {
+        let ahora = ahora_segundos();
+        if c.unido_en == 0 {
+            // PC que se unio ANTES de que existiera este campo (al actualizar).
+            // Se le pone la hora de ahora para que el reloj empiece a correr:
+            // si no, la PC que hoy esta atascada nunca veria el aviso, que es
+            // justo para la que se hizo. A una PC sana no la acusa: conecta en
+            // segundos y entonces se apunta "conecto_alguna_vez" primero.
+            if ahora > 0 {
+                let mut g = leer_config();
+                g.unido_en = ahora;
+                let _ = guardar_config(&g);
+            }
+        } else {
+            e.codigo_rechazado = ahora > c.unido_en && ahora - c.unido_en > GRACIA_CODIGO_SEGUNDOS;
+        }
+    }
+
     // Lo que a ESTA PC le falta por recibir (equipo: Biblioteca + Sin
     // clasificar; original: Sin clasificar, lo que el equipo agrego).
     let carpetas: &[&str] = if c.rol == Rol::Equipo {

@@ -129,6 +129,14 @@ export function SyncModal() {
                 ⬇ Recibiendo <b>{sync.pendientes}</b> canciones ({sync.pendientes_mb.toFixed(0)} MB) que agregó el equipo...
               </div>
             )}
+            {sync.rechazadas.length > 0 && (
+              <div className="dl-warn" style={{ marginBottom: 12 }}>
+                ⚠ {sync.rechazadas.length === 1 ? "Una PC está intentando entrar" : `${sync.rechazadas.length} PC están intentando entrar`} con un
+                código que ya no sirve:{" "}
+                <b>{sync.rechazadas.map((r) => r.nombre || "sin nombre").join(", ")}</b>. Mándale el código de
+                abajo; mientras tanto se queda esperando sin recibir nada.
+              </div>
+            )}
             <div className="sync-sub">Código para las demás PC (cópialo y mándalo por WhatsApp):</div>
             <div className="sync-codigo">{codigo || "..."}</div>
             <div className="sync-acciones">
@@ -210,6 +218,13 @@ export function SyncModal() {
 
         {sync && sync.rol === "equipo" && (
           <div className="dl-section">
+            {sync.codigo_rechazado && (
+              <div className="dl-warn" style={{ marginBottom: 12 }}>
+                ⚠ El PC original no ha aceptado este código. Puede ser que el código ya no sirva (si en el PC
+                original le dieron a «Cambiar código») o que el PC original esté apagado o sin internet. Pídele a
+                Camilo el código de ahora y vuelve a entrar con él.
+              </div>
+            )}
             {aviso && (
               <div className="dl-warn" style={{ marginBottom: 12 }}>
                 Te falta sincronizar con la carpeta madre de la música: <b>{sync.pendientes}</b> canciones (
@@ -301,10 +316,18 @@ export function etiquetaSync(e: ReturnType<typeof useStore.getState>["sync"]): {
   if (!e || e.rol === "ninguno") return { texto: "Sync", clase: "" };
   if (!e.activo) return { texto: "Sync: arrancando", clase: "sync-off" };
   if (e.rol === "original") {
-    if (e.pendientes > 0) return { texto: `Sync: recibiendo ${e.pendientes}`, clase: "sync-on" };
     const n = e.pcs.filter((p) => p.conectado).length;
+    // Lo de "sin entrar" manda sobre el resto: es lo unico que pide algo de
+    // quien mira (pasar el codigo nuevo), y antes no se veia en ningun lado.
+    if (e.rechazadas.length > 0) {
+      return { texto: `Sync: ${n} PC · ${e.rechazadas.length} sin entrar`, clase: "sync-warn" };
+    }
+    if (e.pendientes > 0) return { texto: `Sync: recibiendo ${e.pendientes}`, clase: "sync-on" };
     return { texto: `Sync: ${n} PC`, clase: "sync-on" };
   }
+  // Antes esto salia como "sin conexion" y parecia un problema de internet,
+  // asi que nadie iba a pedir un codigo nuevo.
+  if (e.codigo_rechazado) return { texto: "Sync: código no aceptado", clase: "sync-warn" };
   if (!e.original_conectado) return { texto: "Sync: sin conexión", clase: "sync-off" };
   if (e.por_subir > 0 && !e.musica && !e.pausa_manual) return { texto: `Sync: subiendo ${e.por_subir}`, clase: "sync-on" };
   if (e.pendientes === 0) return { texto: "Sync: al día", clase: "sync-on" };

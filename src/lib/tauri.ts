@@ -92,6 +92,11 @@ export interface PcConectada {
   ultimo_visto: string;
   completado: number; // % de la Biblioteca que esa PC ya tiene
 }
+/** Original: una PC intentando entrar con un código que ya no sirve. */
+export interface PcRechazada {
+  nombre: string;
+  desde: string; // desde cuándo lo intenta
+}
 export interface SyncEstado {
   rol: SyncRol;
   activo: boolean; // Syncthing responde
@@ -108,6 +113,8 @@ export interface SyncEstado {
   pcs: PcConectada[];
   raiz: string; // carpeta de la biblioteca según el rol
   servicio_activo: boolean; // original: el servicio "siempre encendida" ya corre
+  rechazadas: PcRechazada[]; // original: PC tocando la puerta con un código viejo
+  codigo_rechazado: boolean; // equipo: el original nunca aceptó este código
 }
 export const syncEstado = () => invoke<SyncEstado>("sync_estado");
 export const syncCrearGrupo = (raiz: string) => invoke<string>("sync_crear_grupo", { raiz });
