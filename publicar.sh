@@ -9,6 +9,7 @@
 #   2. Compila DENTRO de un contenedor Ubuntu 22.04 (para que corra en Mint).
 #   3. Firma el paquete con tu llave privada.
 #   4. Sube el AppImage + latest.json a GitHub Releases.
+#   5. Guarda el numero de version y sube el CODIGO a GitHub (git push).
 #
 # Desde ese momento, cada PC que abra el programa vera el aviso de
 # "Hay una version nueva".
@@ -194,6 +195,54 @@ if [[ "$CODIGO" != "200" ]]; then
   exit 1
 fi
 echo "   ✅ Descarga verificada (HTTP 200)"
+
+# ------------------------------------------- Subir el CODIGO a GitHub
+# POR QUE EXISTE ESTO: hasta la 0.4.30 este guion subia el AppImage a Releases
+# pero NUNCA hacia "git push". El codigo de GitHub se quedo parado en la 0.3.4
+# del 17 de agosto mientras salian versiones nuevas, y nadie lo noto porque
+# publicar "funcionaba". Dos danos reales:
+#   - Alguien trabajo desde otro PC sobre codigo de dos meses atras; hubo que
+#     reaplicar su arreglo a mano, con 7 conflictos.
+#   - El instalador de PC nuevas se sirve desde esta rama en
+#     raw.githubusercontent.com, asi que tambien era viejo.
+# Va AL FINAL a proposito: si la publicacion falla antes, no se sube nada.
+echo "→ Subiendo el codigo a GitHub..."
+
+RAMA="$(git -C "$AQUI" symbolic-ref --short -q HEAD || true)"
+if [[ -z "$RAMA" ]]; then
+  echo "⚠ No estas parado en ninguna rama, asi que el CODIGO no subio."
+  echo "   El programa v$VERSION SI quedo publicado y las PC lo van a recibir."
+  exit 1
+fi
+
+# Se agregan SOLO los archivos del numero de version, uno por uno: si tienes
+# otra cosa a medias sin guardar, no se sube de paquete sin que lo sepas.
+git -C "$AQUI" add -- package.json package-lock.json \
+  src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/tauri.conf.json
+if ! git -C "$AQUI" diff --cached --quiet; then
+  git -C "$AQUI" commit -q -m "chore: version $VERSION"
+  echo "   Guardado el numero de version."
+fi
+
+if ! git -C "$AQUI" push -q origin "$RAMA"; then
+  echo
+  echo "⚠ El programa v$VERSION SI se publico, pero el CODIGO no subio a GitHub."
+  echo "   Si se queda asi, GitHub vuelve a quedar desfasado. Corrigelo con:"
+  echo "   cd \"$AQUI\" && git push origin $RAMA"
+  exit 1
+fi
+echo "   ✅ Codigo subido a la rama $RAMA"
+
+# Lo que quedo sin guardar SI viaja dentro del AppImage que acaban de recibir
+# las PC, pero NO esta en GitHub. Decirlo, que es justo el fallo que esto vino
+# a cerrar.
+SUELTO="$(git -C "$AQUI" status --porcelain)"
+if [[ -n "$SUELTO" ]]; then
+  echo
+  echo "⚠ OJO: esto quedo sin guardar, asi que NO esta en GitHub aunque SI va"
+  echo "   dentro del programa que acabas de publicar:"
+  echo "$SUELTO" | sed 's/^/     /'
+fi
 
 echo
 echo "════════════════════════════════════════════"

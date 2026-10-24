@@ -25,8 +25,9 @@ reinicia por software y lo recuerda (`~/.cache/infiniity-dj/gpu-prohibida`).
 ./publicar.sh 0.3.5 "Qué cambió en esta versión"
 ```
 
-Compila dentro de un contenedor Ubuntu 22.04, firma y sube a GitHub Releases.
-Las PC instaladas ven un aviso y se actualizan solas.
+Compila dentro de un contenedor Ubuntu 22.04, firma, sube a GitHub Releases y
+**sube el código con `git push`**. Las PC instaladas ven un aviso y se
+actualizan solas.
 
 **Antes de tocar nada de esto, lee [LEEME-ACTUALIZACIONES.md](LEEME-ACTUALIZACIONES.md).**
 Explica el porqué de cada pieza y los fallos que ya se pagaron caros.
@@ -63,6 +64,14 @@ Cada una salió de un fallo real en el equipo de alguien:
    automix quedó a medias con los dos decks a todo volumen. Crossfader y
    velocidad van como curvas en los `AudioParam` (`AudioEngine.ts`), que corren
    en el hilo de audio pase lo que pase con la pantalla.
+
+8. **No quitar el `git push` del final de `publicar.sh`.** Durante dos meses el
+   guion publicaba el programa pero no subía el código, y nadie lo notó porque
+   publicar "funcionaba". GitHub se quedó en la 0.3.4 de agosto mientras salían
+   versiones nuevas: alguien trabajó desde otro PC sobre código de dos meses
+   atrás y hubo que reaplicarle el arreglo a mano, y el instalador de PC nuevas
+   —que se sirve desde esta rama— también estaba viejo. Si el push falla, el
+   guion lo dice y termina con error: el programa ya salió, pero el código no.
 
 ## Probar el automix sin la ventana nativa
 

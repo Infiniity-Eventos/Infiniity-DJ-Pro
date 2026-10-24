@@ -18,7 +18,28 @@ El número tiene que ser **más alto** que el anterior, o las PC no lo verán co
 actualización. El texto entre comillas es lo que la gente lee en el aviso.
 
 El script hace todo solo: pone el número de versión en los 3 archivos que lo
-llevan, compila, firma y sube a GitHub. Tarda unos minutos.
+llevan, compila, firma, sube el programa a GitHub Releases y por último sube el
+**código** con `git push`. Tarda unos minutos.
+
+### Por qué el `git push` al final
+
+Durante dos meses el script publicaba el programa pero **no subía el código**, y
+nadie se dio cuenta porque publicar seguía funcionando. GitHub se quedó en la
+0.3.4 del 17 de agosto mientras salían versiones nuevas. Lo que costó:
+
+- Alguien quiso hacer un arreglo desde otro PC, clonó de GitHub y recibió código
+  de dos meses atrás. Su trabajo no entraba solo al código de verdad: hubo que
+  reaplicarlo a mano, con 7 conflictos.
+- El instalador de PC nuevas se sirve desde esta rama en
+  `raw.githubusercontent.com`, así que las PC nuevas recibían el de agosto.
+
+Por eso el push va **al final**: si algo falla antes, no se sube nada. Si falla
+el push, el script lo dice claro y termina con error — el programa ya salió,
+pero el código no, y eso hay que arreglarlo a mano antes de seguir.
+
+Si tienes cosas a medias sin guardar, el script **no las sube de paquete**: solo
+guarda los archivos del número de versión y al terminar te lista lo que quedó
+fuera, porque eso sí viaja dentro del programa que acaban de recibir las PC.
 
 ## 2. Instalar en una PC nueva
 
