@@ -78,7 +78,12 @@ struct Sink {
 }
 
 fn list_sinks() -> Result<Vec<Sink>, String> {
-    let text = pactl(&["list", "sinks"])?;
+    Ok(parse_sinks(&pactl(&["list", "sinks"])?))
+}
+
+/// El analisis del texto, aparte de la llamada: asi se puede probar sin
+/// depender de que el equipo tenga `pactl` ni de que salidas tenga enchufadas.
+fn parse_sinks(text: &str) -> Vec<Sink> {
     let mut out: Vec<Sink> = Vec::new();
     for line in text.lines() {
         let t = line.trim();
@@ -106,7 +111,7 @@ fn list_sinks() -> Result<Vec<Sink>, String> {
         }
     }
     out.retain(|s| s.index != u32::MAX && !s.name.is_empty());
-    Ok(out)
+    out
 }
 
 /// Salida general del equipo (la que usan los programas que no eligieron otra).
@@ -127,7 +132,10 @@ struct Stream {
 }
 
 fn list_streams() -> Result<Vec<Stream>, String> {
-    let text = pactl(&["list", "sink-inputs"])?;
+    Ok(parse_streams(&pactl(&["list", "sink-inputs"])?))
+}
+
+fn parse_streams(text: &str) -> Vec<Stream> {
     let mut out: Vec<Stream> = Vec::new();
     for line in text.lines() {
         let t = line.trim();
@@ -154,7 +162,7 @@ fn list_streams() -> Result<Vec<Stream>, String> {
         }
     }
     out.retain(|s| s.index != u32::MAX);
-    Ok(out)
+    out
 }
 
 /// ¿`pid` es nuestro proceso o un descendiente?
@@ -291,4 +299,103 @@ pub fn audio_set_output(sink: String) -> Result<u32, String> {
         }
     }
     Ok(movidos)
+}
+
+#[cfg(test)]
+mod pruebas {
+    use super::*;
+
+    /// Salida real de `LC_ALL=C pactl list sinks` (recortada) en un equipo con
+    /// salidas virtuales, HDMI e interna. Se guarda tal cual, con la seccion
+    /// Properties incluida, porque ahi vuelven a aparecer campos parecidos
+    /// (`alsa.name`, `device.icon_name`) y el analisis no debe confundirse.
+    const SINKS: &str = r#"Sink #40
+	State: RUNNING
+	Name: salida_parlantes
+	Description: Parlantes (verde)
+	Properties:
+		device.icon_name = "audio-card-analog"
+		alsa.name = "no es esta"
+Sink #63
+	State: SUSPENDED
+	Name: alsa_output.pci-0000_01_00.1.hdmi-stereo
+	Description: GB206 High Definition Audio Controller Digital Stereo (HDMI)
+	Properties:
+		alsa.card_name = "HDA NVidia"
+		alsa.name = "HP Z27n G2"
+	Active Port: hdmi-output-0
+"#;
+
+    /// Salida real de `pactl list sink-inputs`: el primer flujo es una salida
+    /// virtual (NO trae ningun `application.*`, caso que se vio de verdad) y el
+    /// segundo es un programa con su PID.
+    const STREAMS: &str = r#"Sink Input #39
+	Driver: protocol-native.c
+	Sink: 64
+Sink Input #210
+	Driver: protocol-native.c
+	Sink: 40
+	Properties:
+		application.name = "paplay"
+		application.process.id = "1267609"
+		application.process.binary = "pacat"
+"#;
+
+    #[test]
+    fn parse_sinks_toma_el_primer_name_y_no_el_de_properties() {
+        let s = parse_sinks(SINKS);
+        assert_eq!(s.len(), 2);
+        assert_eq!(s[0].index, 40);
+        assert_eq!(s[0].name, "salida_parlantes");
+        assert_eq!(s[0].description, "Parlantes (verde)");
+        assert_eq!(s[1].index, 63);
+        assert_eq!(s[1].name, "alsa_output.pci-0000_01_00.1.hdmi-stereo");
+        assert!(
+            s[1].description.contains("HDMI"),
+            "la descripcion no debe venir de alsa.name: {}",
+            s[1].description
+        );
+    }
+
+    #[test]
+    fn parse_streams_saca_pid_y_aguanta_flujos_sin_aplicacion() {
+        let f = parse_streams(STREAMS);
+        assert_eq!(f.len(), 2);
+        // Las salidas virtuales no traen application.*: ni PID ni nombre.
+        assert_eq!(f[0].index, 39);
+        assert_eq!(f[0].sink, 64);
+        assert_eq!(f[0].pid, None);
+        assert!(f[0].app.is_empty());
+        // Un programa de verdad: PID sin las comillas y nombre en minusculas.
+        assert_eq!(f[1].index, 210);
+        assert_eq!(f[1].sink, 40);
+        assert_eq!(f[1].pid, Some(1_267_609));
+        assert_eq!(f[1].app, "paplay");
+    }
+
+    #[test]
+    fn kind_of_reconoce_cada_tipo_de_salida() {
+        assert_eq!(kind_of("bluez_output.AC_12_2F.1"), "bluetooth");
+        assert_eq!(kind_of("alsa_output.pci-0000_01_00.1.hdmi-stereo"), "hdmi");
+        assert_eq!(kind_of("alsa_output.usb-Generic_USB_Audio-00.analog-stereo"), "usb");
+        assert_eq!(kind_of("alsa_output.pci-0000_00_1f.3.iec958-stereo"), "digital");
+        assert_eq!(kind_of("alsa_output.pci-0000_00_1f.3.analog-surround-40"), "analogica");
+        // Las salidas que crea el usuario a mano no dicen de que son.
+        assert_eq!(kind_of("salida_parlantes"), "otra");
+    }
+
+    /// Habla con el `pactl` DE VERDAD de este equipo. Pesada y depende de que
+    /// haya pulseaudio-utils y alguna salida: solo con `cargo test -- --ignored`.
+    #[test]
+    #[ignore]
+    fn audio_outputs_real_lista_las_salidas_del_equipo() {
+        let salidas = audio_outputs().expect("hace falta pactl (pulseaudio-utils)");
+        assert!(!salidas.is_empty(), "el equipo deberia tener alguna salida");
+        let activas = salidas.iter().filter(|s| s.active).count();
+        assert!(activas <= 1, "no puede haber dos salidas activas a la vez");
+        for s in &salidas {
+            assert!(!s.name.is_empty());
+            assert!(!s.description.is_empty(), "{} sin descripcion", s.name);
+        }
+    }
 }
