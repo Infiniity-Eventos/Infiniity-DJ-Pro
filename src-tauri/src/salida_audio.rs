@@ -725,6 +725,22 @@ fn reavivar_bluetooth(sink: &str) -> Option<String> {
     if sana(sink) == Some(true) {
         return None; // tiene transporte: esta bien
     }
+    // Hace poco ya se intento con esta cabina: no repetir la escalada (ver
+    // ULTIMO_REAVIVADO). Se avisa igual, porque el fallo sigue ahi.
+    {
+        let mut ultimo = ULTIMO_REAVIVADO.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((cual, cuando)) = ultimo.as_ref() {
+            if cual == sink && cuando.elapsed() < ESPERA_ENTRE_REAVIVADOS {
+                let faltan = (ESPERA_ENTRE_REAVIVADOS - cuando.elapsed()).as_secs() / 60 + 1;
+                return Some(format!(
+                    "La cabina sigue conectada a medias (sin canal de sonido). Ya se intentó \
+                     reavivarla hace poco; no se repite hasta dentro de {faltan} min. Apaga la \
+                     cabina, enciéndela y conéctala otra vez, o pruébala por cable."
+                ));
+            }
+        }
+        *ultimo = Some((sink.to_string(), std::time::Instant::now()));
+    }
     let mac = dir.replace('_', ":");
     let mut pasos: Vec<&str> = Vec::new();
 
@@ -864,6 +880,18 @@ pub fn reavivar_por_direccion(mac: &str) -> Option<String> {
 /// «modo manos libres» que no existia. Y dos reavivados a la vez son peores
 /// que ninguno.
 static CANDADO_SALIDA: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Cuando se intento por ultima vez reavivar cada cabina.
+///
+/// POR QUE: la interfaz aplica la salida varias veces seguidas, y en un evento
+/// el escalon fuerte (reiniciar el sonido del equipo) se disparo CINCO veces en
+/// dos minutos: cada reinicio mataba la conexion de sonido de la propia app,
+/// que al rehacerla volvia a aplicar la salida, que volvia a escalar. Un
+/// remedio que se repite en bucle es peor que el fallo. Una vez cada diez
+/// minutos por cabina, y punto.
+static ULTIMO_REAVIVADO: std::sync::Mutex<Option<(String, std::time::Instant)>> =
+    std::sync::Mutex::new(None);
+const ESPERA_ENTRE_REAVIVADOS: std::time::Duration = std::time::Duration::from_secs(600);
 
 /// 100% en la escala del servidor de sonido.
 const VOLUMEN_NORMAL: u32 = 65536;
