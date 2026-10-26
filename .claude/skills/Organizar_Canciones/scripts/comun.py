@@ -14,7 +14,8 @@ from pathlib import Path
 CATALOGO = [
     "Merengue", "Salsa", "Salsa Choque", "Bachata", "Vallenato", "Reggaeton",
     "Champeta", "Boleros", "Viejoteca", "Cumbia", "Pop", "Rock", "Electronica",
-    "Crossover", "Trap", "Hora Loca", "Mexicana", "Carranga",
+    "Crossover", "Trap", "Hora Loca", "Mexicana", "Carranga", "Popular", "Infantil",
+    "Cristiana",
 ]
 COMODIN = "Otros"           # carpeta comodin (D4): lo que no encaja todavia
 SIN_CLASIFICAR = "Sin clasificar"

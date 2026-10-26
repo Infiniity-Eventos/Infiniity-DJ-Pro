@@ -28,6 +28,9 @@ from pathlib import Path
 
 import numpy as np
 
+sys.path.insert(0, str(Path(__file__).parent))
+from comun import SIN_CLASIFICAR  # noqa: E402
+
 SR = 22050
 HOP = 64
 
@@ -48,6 +51,10 @@ RANGOS = {
     "Viejoteca": (80, 170),
     "Electronica": (110, 150),
     "Boleros": (60, 130),
+    "Popular": (70, 150),
+    "Infantil": (90, 180),
+    "Cristiana": (60, 150),
+    "Mexicana": (70, 180),
 }
 RANGO_POR_DEFECTO = (70, 180)
 
@@ -178,7 +185,10 @@ def tipo_diferencia(actual: float | None, nuevo: float) -> str:
 def auditar(bib: Path, corregir: bool) -> None:
     from mutagen.id3 import ID3, TBPM
     cambios = []
-    for carpeta in sorted(p for p in bib.iterdir() if p.is_dir() and not p.name.startswith(".")):
+    # "Sin clasificar" no se audita: esas canciones aun no tienen etiquetas ni
+    # genero, asi que no hay BPM que comparar ni rango con el que ajustarlo.
+    for carpeta in sorted(p for p in bib.iterdir()
+                          if p.is_dir() and not p.name.startswith(".") and p.name != SIN_CLASIFICAR):
         for f in sorted(carpeta.glob("*.mp3")):
             if f.name.lower().startswith("mix infiniity"):
                 continue  # un mix no tiene UN tempo

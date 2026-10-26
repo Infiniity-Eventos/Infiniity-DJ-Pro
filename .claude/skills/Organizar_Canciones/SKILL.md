@@ -20,8 +20,13 @@ Léela si algo de aquí no cuadra: **la guía manda**.
 ## Catálogo de carpetas (D14) — "colombianizado", muy por encima
 
 `Merengue · Salsa · Salsa Choque · Bachata · Vallenato · Reggaeton · Champeta · Boleros ·
-Viejoteca · Cumbia · Pop · Rock · Electronica · Crossover · Trap · Hora Loca · Mexicana · Carranga` y la comodín `Otros`.
-(Mexicana y Carranga se crearon el 2026-10-18 al juntar 6 y 4 canciones.)
+Viejoteca · Cumbia · Pop · Rock · Electronica · Crossover · Trap · Hora Loca · Mexicana · Carranga ·
+Popular · Infantil · Cristiana` y la comodín `Otros`.
+(Mexicana y Carranga se crearon el 2026-10-18 al juntar 6 y 4 canciones. Popular e Infantil el
+2026-10-24, con 71 y 33: **Popular** = despecho/popular colombiana — Alzate, Jessi Uribe, Yeison
+Jiménez, Paola Jara, Darío Gómez, Luis Alberto Posada, Luis Alfonso, Arelys Henao; **Infantil** =
+música para niños — Dúo Tiempo de Sol, La Granja de Zenón, El Reino Infantil, CantaJuego. Un
+cumpleaños o algo de animación sigue yendo a Hora Loca. **Cristiana** el 2026-10-26, con 4.)
 
 Reglas de criterio (tú decides cuando el script dice `genero_seguro: false` o `?`):
 - Nada de subgéneros: "Trap Dark", "Trap Soul", "Drill" → **Trap**. "Rap/hip hop" latino → Trap.
@@ -103,10 +108,27 @@ la ignoran… Sync NO la ignora: es pequeña, no importa).
   <título>"). Solo un mix o un beat instrumental sin autor lleva "Infiniity Eventos". Si de verdad
   no aparece, pregunta al usuario (él suele saberlo) antes de aplicar.
 
+- **Si el nombre del archivo dice el artista, ese artista manda.** Buscando por texto libre,
+  Deezer devuelve otra grabación del mismo título y se cuela como buena: "Elvis Crespo - Tu Sonrisa"
+  salió de Martin Moreno, "Aniceto Molina - Cumbia Sampuesana" de Celso Piña, "Bad Bunny - Amorfoda"
+  de un DJ de bachata. Antes de dar una canción por segura, comprueba que el artista del nombre
+  aparezca en el resultado (artista o colaboradores); si no, repite la búsqueda como
+  "Artista Título" y **descarta los resultados de otro artista**. Dos trampas del nombre: separa
+  por el guion aunque no tenga espacio a los dos lados ("Arcangel- Me Prefieres A Mi"), y **nunca
+  busques solo el artista**, porque devuelve cualquier canción suya.
 - **La duración manda sobre el nombre.** Si `duracion_coincide` es `false`, internet encontró OTRA
   canción con el mismo título (pasó con "Abusadora": Deezer dio Wisin & Yandel 3:00, el archivo era
   el merengue de Oro Sólido 4:39). No la recomiendes así: busca "<título> <artista de iTunes>" o en la
   web hasta que la duración cuadre (±8 s), y en la lista del chat dilo explícito.
+- **Antes de borrar una repetida, demuestra que la copia está bien**: que exista en su carpeta,
+  que pese y suene (en este lote había 20 archivos enteros a ceros), que esté firmada y que **dure
+  casi lo mismo** (±20 s). De 259 marcadas como repetidas, 90 no lo eran: Deezer les había dado otra
+  canción ("Cali Ají" salió marcada como repetida de "Cali Pachanguero"). Sin esa comprobación se
+  borran canciones que no están en ningún otro sitio.
+- **Dos archivos de la misma canción con duración distinta son versiones distintas** (D12): no se
+  borra ninguna, y la segunda va con `<Título> Otra Version` en vez de quedar como `(2)`, que en
+  mitad de un evento no dice nada. Si duran lo mismo al milisegundo, es la misma: se queda la de
+  más calidad (más bytes) y la otra se borra.
 - **Nunca** correr sobre la biblioteca sin el `--simular` previo del paso 3.
 - **Nunca** borrar una canción sin que el usuario lo haya dicho para ESA canción.
 - Si `identificar.py` falla por internet (muchos `AVISO:`), no inventes: repite más tarde.

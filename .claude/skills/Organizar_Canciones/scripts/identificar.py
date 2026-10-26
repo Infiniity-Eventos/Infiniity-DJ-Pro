@@ -126,6 +126,11 @@ def deezer(query: str, seg: float | None = None) -> dict | None:
     )
     if not mejor:
         return None
+    return detalle_deezer(mejor, mejor_sim)
+
+
+def detalle_deezer(mejor: dict, sim: float) -> dict:
+    """Pide el track y el album del candidato elegido (ISRC, fecha, generos)."""
     t = http_json(f"https://api.deezer.com/track/{mejor['id']}") or {}
     time.sleep(0.25)  # Deezer tolera ~50 llamadas/5 s; sin prisa
     album = http_json(f"https://api.deezer.com/album/{mejor['album']['id']}") or {}
@@ -141,9 +146,9 @@ def deezer(query: str, seg: float | None = None) -> dict | None:
         "bpm": t.get("bpm") or None,
         "isrc": t.get("isrc"),
         "generos": generos,
-        "duracion": t.get("duration"),
+        "duracion": t.get("duration") or mejor.get("duration"),
         "url": mejor.get("link"),
-        "similitud": round(mejor_sim, 2),
+        "similitud": round(sim, 2),
     }
 
 
@@ -169,6 +174,71 @@ def itunes(query: str, seg: float | None = None) -> dict | None:
         "duracion": round((mejor.get("trackTimeMillis") or 0) / 1000) or None,
         "similitud": round(mejor_sim, 2),
     }
+
+
+def sin_colaboradores(s: str) -> str:
+    return re.split(r"\s+x\s+|\s+ft\.?\s+|\s+feat\.?\s+|\s+con\s+", s, flags=re.IGNORECASE)[0].strip()
+
+
+def partes_nombre(nombre: str) -> dict | None:
+    """{artistas, titulo} del nombre del archivo, que casi siempre viene
+    "Artista - Titulo x Colaborador".
+
+    Parte por el guion EXIGIENDO espacio a un lado: asi "Arcangel- Me Prefieres
+    A Mi" se parte bien (si no, la busqueda acaba usando solo "Arcangel" y
+    devuelve cualquier cancion suya) y "J-Balvin" no se parte."""
+    base = re.sub(r"^\d{1,3}[\s.\-]+", "", nombre).strip()
+    base = re.sub(r"\s*\(\d+\)\s*$", "", base).strip()
+    p = [x.strip() for x in re.split(r"\s+-\s*|\s*-\s+", base) if x.strip()]
+    if len(p) < 2:
+        return None
+    izq = sin_colaboradores(p[0])
+    return {"artistas": [x.strip() for x in izq.replace(" y ", ",").split(",") if x.strip()],
+            "titulo": sin_colaboradores(p[1])}
+
+
+def artista_cuadra(artista: str | None, dz: dict | None) -> bool:
+    """El artista que dice el nombre del archivo aparece en el resultado."""
+    if not artista or not dz:
+        return False
+    k = clave_normal(artista)
+    if len(k) < 3:
+        return False
+    for cand in [dz.get("artista", "")] + list(dz.get("colaboradores") or []):
+        kc = clave_normal(cand)
+        if kc and (k in kc or kc in k):
+            return True
+    return False
+
+
+def deezer_del_artista(artista: str, titulo: str, seg: float | None) -> dict | None:
+    """Busca "Artista Titulo" y SOLO acepta resultados de ese artista.
+
+    Por que: con texto libre, Deezer devuelve otra grabacion del mismo titulo y
+    se cuela como buena ("Elvis Crespo - Tu Sonrisa" salio de Martin Moreno,
+    "Bad Bunny - Amorfoda" de un DJ de bachata). La sintaxis avanzada
+    artist:"..." track:"..." de Deezer no sirve: devuelve 0 resultados."""
+    for q in (f"{artista} {titulo}", f"{titulo} {artista}"):
+        d = http_json("https://api.deezer.com/search?limit=25&q=" + urllib.parse.quote(consulta_limpia(q)))
+        datos = (d or {}).get("data") or []
+        if not datos:
+            continue
+        ka = clave_normal(artista)
+        mejor = None
+        for c in datos:
+            kart = clave_normal(c["artist"]["name"])
+            if not (ka in kart or kart in ka):
+                continue
+            sim = similitud(titulo, c["title"])
+            if sim < 0.55:
+                continue
+            igual = bool(c.get("duration") and seg and abs(c["duration"] - seg) <= TOLERANCIA_SEG)
+            clave = (igual, round(sim, 2), c.get("rank") or 0)
+            if mejor is None or clave > mejor[0]:
+                mejor = (clave, c, sim)
+        if mejor:
+            return detalle_deezer(mejor[1], mejor[2])
+    return None
 
 
 def dura_igual(r: dict | None, seg: float | None) -> bool:
@@ -285,6 +355,14 @@ def main():
                 if otro and dura_igual(otro, seg):
                     otro["similitud"] = max(otro["similitud"], dz["similitud"])
                     dz = otro
+        desde = partes_nombre(nombre)
+        art_nombre = (desde or {}).get("artistas", [None])[0]
+        cuadra = artista_cuadra(art_nombre, dz)
+        forzado = False
+        if art_nombre and desde and desde.get("titulo") and not cuadra and not mix:
+            otro = deezer_del_artista(art_nombre, desde["titulo"], seg)
+            if otro:
+                dz, cuadra, forzado = otro, True, True
         actuales = etiquetas_actuales(p)
         yt = next((c for c in actuales["comentarios"] if len(c) == 11 and " " not in c), None)
         genero, motivo, seguro = proponer_genero(dz, it, nombre) if not mix else ("?", "mix: genero por el nombre", False)
@@ -295,10 +373,7 @@ def main():
                     break
         # Respaldo cuando internet no reconoce: el nombre de YouTube suele venir
         # "Artista - Titulo" (o "Artista, Otro - Titulo").
-        desde_nombre = None
-        if " - " in nombre:
-            izq, der = nombre.split(" - ", 1)
-            desde_nombre = {"artistas": [x.strip() for x in izq.replace(" y ", ",").split(",") if x.strip()], "titulo": der.strip()}
+        desde_nombre = desde
         confianza = 0.0
         if dz:
             confianza = dz["similitud"]
@@ -333,6 +408,11 @@ def main():
             # False = lo que dijo internet NO dura lo mismo que el archivo: es muy
             # probable que sea otra cancion. Nunca aceptarla sin revisar.
             "duracion_coincide": (dura_igual(dz, seg) if dz and dz.get("duracion") else None),
+            # El artista que dice el NOMBRE del archivo aparece en el resultado.
+            # Si es False, lo que trajo internet es muy probablemente otra
+            # cancion del mismo titulo: no darla por buena sin revisar.
+            "artista_cuadra": cuadra,
+            "artista_forzado": forzado,
             "genero_propuesto": genero,
             "motivo_genero": motivo,
             "genero_seguro": seguro,
