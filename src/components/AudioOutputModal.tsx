@@ -207,6 +207,9 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
   const guardarInformeDeFallo = async () => {
     setOcupado(true);
     setError(null);
+    // Tarda unos segundos a proposito: mide el sonido que sale del motor y
+    // GRABA la salida elegida para ver si le llega. Sin avisar, parece colgada.
+    showToast("Midiendo el sonido... tarda unos segundos");
     try {
       let estadoSalida = "(no se pudo consultar)";
       try {
@@ -228,7 +231,7 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
         historialAvisos.length > 0 ? historialAvisos.join("\n") : "(ninguno)",
       ].join("\n");
 
-      const ruta = await guardarInforme(musicRoot ?? "", estadoApp);
+      const ruta = await guardarInforme(musicRoot ?? "", estadoApp, audioSink ?? "");
       showToast("Informe guardado. Llega solo al PC original por Sync.");
       setError(null);
       console.info("[informe] guardado en", ruta);

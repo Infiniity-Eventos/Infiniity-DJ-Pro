@@ -81,7 +81,76 @@ fn detalle_bluetooth() -> String {
     out
 }
 
-fn armar_informe(estado_app: &str) -> String {
+/// ¿LLEGA SONIDO DE VERDAD A LA SALIDA ELEGIDA?
+///
+/// Esta es la medida que parte el problema en dos, y la unica que no se puede
+/// deducir mirando estados: se graba un segundo de lo que sale POR esa salida
+/// (su "monitor") y se mide el pico.
+///   - Si el motor saca sonido y aqui tambien llega: el sonido SI se esta
+///     enviando al aparato, y lo que falla esta en el aparato.
+///   - Si el motor saca sonido y aqui no llega: se pierde por el camino, entre
+///     el navegador interno y el sonido del sistema.
+/// Sin esto solo se puede adivinar, y adivinar desde otra ciudad cuesta dias.
+fn medir_llegada(sink: &str) -> String {
+    if sink.trim().is_empty() {
+        return "(no hay salida elegida)".to_string();
+    }
+    let archivo = std::env::temp_dir().join(format!("infiniity-dj-medida-{}.raw", std::process::id()));
+    let Ok(salida) = std::fs::File::create(&archivo) else {
+        return "(no se pudo preparar la medicion)".to_string();
+    };
+    let mut cmd = clean_command("parecord");
+    cmd.env("LC_ALL", "C");
+    cmd.args([
+        &format!("--device={sink}.monitor"),
+        "--raw",
+        "--format=s16le",
+        "--rate=48000",
+        "--channels=2",
+    ]);
+    cmd.stdout(std::process::Stdio::from(salida));
+    cmd.stderr(std::process::Stdio::null());
+    let Ok(mut hijo) = cmd.spawn() else {
+        let _ = std::fs::remove_file(&archivo);
+        return "(falta «parecord»: instala pulseaudio-utils)".to_string();
+    };
+    // TRES SEGUNDOS Y MEDIO, y no menos: medido en este equipo, `parecord`
+    // tarda unos dos segundos en soltar lo primero que graba. Con un segundo y
+    // medio devolvia CERO bytes aunque la salida estuviera reproduciendo, y se
+    // habria leido como "no llega sonido" cuando si llegaba. Una medida que
+    // miente es peor que no medir.
+    std::thread::sleep(std::time::Duration::from_millis(3500));
+    let _ = hijo.kill();
+    let _ = hijo.wait();
+
+    let datos = std::fs::read(&archivo).unwrap_or_default();
+    let _ = std::fs::remove_file(&archivo);
+    if datos.len() < 64 {
+        // Una salida en reposo no produce nada en su monitor. Si la app cree
+        // que esta sonando por ahi, esto ya dice que no es verdad.
+        return format!(
+            "NO LLEGA NADA — «{sink}» no esta reproduciendo (no se pudo grabar ni un instante de ella)"
+        );
+    }
+    let mut pico: i32 = 0;
+    for trozo in datos.chunks_exact(2) {
+        let v = i16::from_le_bytes([trozo[0], trozo[1]]).unsigned_abs() as i32;
+        if v > pico {
+            pico = v;
+        }
+    }
+    let frac = f64::from(pico) / 32768.0;
+    if frac < 0.0005 {
+        format!("SILENCIO — por «{sink}» no esta saliendo nada (pico {frac:.5})")
+    } else {
+        format!(
+            "LLEGA SONIDO por «{sink}»: {:.1} dB (pico {frac:.4})",
+            20.0 * frac.log10()
+        )
+    }
+}
+
+fn armar_informe(estado_app: &str, salida: &str) -> String {
     let ahora = chrono_simple();
     let mut t = String::new();
     let _ = write!(
@@ -99,6 +168,11 @@ fn armar_informe(estado_app: &str) -> String {
     );
 
     let _ = write!(t, "=== LO QUE DICE EL PROGRAMA ===\n{estado_app}\n\n");
+    let _ = write!(
+        t,
+        "=== ¿LLEGA SONIDO A LA SALIDA ELEGIDA? ===\n{}\n\n",
+        medir_llegada(salida)
+    );
     let _ = write!(t, "=== SISTEMA ===\n{}\n\n", sistema());
     let _ = write!(
         t,
@@ -150,11 +224,16 @@ fn limpiar_nombre(s: &str) -> String {
 pub async fn guardar_informe(
     carpeta_musica: String,
     estado_app: String,
+    salida: String,
 ) -> Result<String, String> {
-    en_otro_hilo(move || guardar_informe_sinc(&carpeta_musica, &estado_app)).await
+    en_otro_hilo(move || guardar_informe_sinc(&carpeta_musica, &estado_app, &salida)).await
 }
 
-fn guardar_informe_sinc(carpeta_musica: &str, estado_app: &str) -> Result<String, String> {
+fn guardar_informe_sinc(
+    carpeta_musica: &str,
+    estado_app: &str,
+    salida: &str,
+) -> Result<String, String> {
     if carpeta_musica.trim().is_empty() {
         return Err(
             "Todavia no hay carpeta de musica elegida, asi que el informe no tendria por donde \
@@ -172,7 +251,7 @@ fn guardar_informe_sinc(carpeta_musica: &str, estado_app: &str) -> Result<String
         limpiar_nombre(&nombre_del_equipo()),
         limpiar_nombre(&chrono_simple()),
     ));
-    let texto = armar_informe(estado_app);
+    let texto = armar_informe(estado_app, salida);
     std::fs::write(&archivo, texto)
         .map_err(|e| format!("No se pudo guardar el informe: {e}"))?;
     Ok(archivo.to_string_lossy().to_string())
@@ -195,8 +274,72 @@ mod pruebas {
                 .to_string_lossy()
                 .into_owned()
         });
-        let ruta = guardar_informe_sinc(&destino, "salida elegida: (prueba)\nmotor de sonido: running").unwrap();
+        let ruta = guardar_informe_sinc(&destino, "salida elegida: (prueba)\nmotor de sonido: running", "").unwrap();
         println!("INFORME EN: {ruta}");
+    }
+
+    /// Herramienta de la prueba: un WAV con un tono, para tener algo que medir.
+    fn tono_wav(ruta: &std::path::Path) {
+        let (tasa, segundos) = (48_000u32, 12u32);
+        let muestras = tasa * segundos;
+        let datos = muestras * 2;
+        let mut w: Vec<u8> = Vec::new();
+        w.extend(b"RIFF");
+        w.extend(&(36 + datos).to_le_bytes());
+        w.extend(b"WAVEfmt ");
+        w.extend(&16u32.to_le_bytes());
+        w.extend(&1u16.to_le_bytes());
+        w.extend(&1u16.to_le_bytes());
+        w.extend(&tasa.to_le_bytes());
+        w.extend(&(tasa * 2).to_le_bytes());
+        w.extend(&2u16.to_le_bytes());
+        w.extend(&16u16.to_le_bytes());
+        w.extend(b"data");
+        w.extend(&datos.to_le_bytes());
+        for n in 0..muestras {
+            let t = f64::from(n) / f64::from(tasa);
+            let v = (t * 440.0 * std::f64::consts::TAU).sin() * 9000.0;
+            w.extend(&(v as i16).to_le_bytes());
+        }
+        std::fs::write(ruta, w).unwrap();
+    }
+
+    /// Contra el sonido real del equipo: medir una salida en silencio y luego
+    /// con un tono sonando. Si no distinguiera, la medida no serviria de nada.
+    /// Suena en una salida de pega, asi que no se oye.
+    #[test]
+    #[ignore = "necesita pactl/parecord y el sonido del equipo"]
+    fn medir_llegada_distingue_silencio_de_sonido() {
+        let modulo = recoger("pactl", &["load-module", "module-null-sink", "sink_name=djmedida"]);
+        let modulo = modulo.trim().to_string();
+        assert!(
+            modulo.chars().all(|c| c.is_ascii_digit()) && !modulo.is_empty(),
+            "no se pudo crear la salida de pega: {modulo}"
+        );
+
+        let en_silencio = medir_llegada("djmedida");
+
+        let wav = std::env::temp_dir().join("infiniity-dj-medida-tono.wav");
+        tono_wav(&wav);
+        let mut hijo = clean_command("paplay")
+            .env("PULSE_SINK", "djmedida")
+            .arg(&wav)
+            .spawn()
+            .expect("hace falta paplay (pulseaudio-utils)");
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        let con_sonido = medir_llegada("djmedida");
+
+        let _ = hijo.kill();
+        let _ = hijo.wait();
+        let _ = std::fs::remove_file(&wav);
+        let _ = recoger("pactl", &["unload-module", &modulo]);
+
+        println!("  sin nada sonando: {en_silencio}");
+        println!("  con un tono     : {con_sonido}");
+        // Sin nada sonando, la salida esta en reposo: lo que NO puede decir es
+        // que llega sonido.
+        assert!(!en_silencio.contains("LLEGA SONIDO"), "{en_silencio}");
+        assert!(con_sonido.contains("LLEGA SONIDO"), "{con_sonido}");
     }
 
     #[test]
@@ -209,7 +352,7 @@ mod pruebas {
 
     #[test]
     fn el_informe_lleva_lo_que_dice_el_programa() {
-        let t = armar_informe("salida elegida: cabina bluetooth\nmotor: running");
+        let t = armar_informe("salida elegida: cabina bluetooth\nmotor: running", "");
         assert!(t.contains("salida elegida: cabina bluetooth"));
         assert!(t.contains("INFORME DE INFINIITY DJ"));
         // Las secciones que de verdad explican un "no suena".
@@ -220,7 +363,7 @@ mod pruebas {
 
     #[test]
     fn sin_carpeta_de_musica_lo_dice_en_vez_de_perder_el_informe() {
-        let e = guardar_informe_sinc("", "lo que sea").unwrap_err();
+        let e = guardar_informe_sinc("", "lo que sea", "").unwrap_err();
         assert!(e.contains("carpeta de musica"), "{e}");
     }
 
@@ -228,7 +371,7 @@ mod pruebas {
     fn el_informe_queda_dentro_de_sin_clasificar() {
         let tmp = std::env::temp_dir().join(format!("dj-informe-prueba-{}", std::process::id()));
         std::fs::create_dir_all(&tmp).unwrap();
-        let ruta = guardar_informe_sinc(&tmp.to_string_lossy(), "estado de prueba").unwrap();
+        let ruta = guardar_informe_sinc(&tmp.to_string_lossy(), "estado de prueba", "").unwrap();
         assert!(ruta.contains("Sin clasificar"), "{ruta}");
         let texto = std::fs::read_to_string(&ruta).unwrap();
         assert!(texto.contains("estado de prueba"));

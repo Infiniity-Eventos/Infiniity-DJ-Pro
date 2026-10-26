@@ -237,8 +237,11 @@ export const btDesconectar = (mac: string) => invoke<void>("bt_desconectar", { m
  * Guarda un informe de fallo dentro de la carpeta de musica, que es la que ya
  * viaja sola entre las PC por Sync. Devuelve donde quedo guardado.
  */
-export const guardarInforme = (carpetaMusica: string, estadoApp: string) =>
-  invoke<string>("guardar_informe", { carpetaMusica, estadoApp });
+export const guardarInforme = (
+  carpetaMusica: string,
+  estadoApp: string,
+  salida: string
+) => invoke<string>("guardar_informe", { carpetaMusica, estadoApp, salida });
 
 // --- Monitor de recursos ---
 export interface SystemStats {

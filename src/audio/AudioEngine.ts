@@ -675,10 +675,14 @@ class AudioEngine {
   async resumen(): Promise<string> {
     const st = useStore.getState();
     const nivel = await this.medirNivelSalida();
+    // Umbral MUY bajo a proposito: con el volumen general bajito, un pasaje
+    // suave de una cancion mide poquisimo, y llamar a eso "silencio" mandaria
+    // la busqueda del fallo justo al lado contrario. El pico se escribe
+    // siempre, haya o no sonido, para no tener que fiarse de la etiqueta.
     const nivelTexto =
-      nivel < 0.0005
-        ? "SILENCIO — el motor NO está sacando sonido"
-        : `${(20 * Math.log10(nivel)).toFixed(1)} dB (pico ${nivel.toFixed(4)}) — el motor SÍ saca sonido`;
+      nivel < 0.00005
+        ? `SILENCIO — el motor NO está sacando sonido (pico ${nivel.toFixed(6)})`
+        : `${(20 * Math.log10(nivel)).toFixed(1)} dB (pico ${nivel.toFixed(5)}) — el motor SÍ saca sonido`;
     const lineas = [
       `nivel que sale del motor: ${nivelTexto}`,
       `motor de sonido: ${this.ctx ? this.ctx.state : "sin crear todavia"}`,
