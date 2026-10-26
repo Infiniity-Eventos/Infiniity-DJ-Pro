@@ -448,27 +448,6 @@ fn conectar_sinc(mac: &str) -> Result<String, String> {
     Ok(crate::salida_audio::reavivar_por_direccion(&mac).unwrap_or_default())
 }
 
-/// Apaga y enciende el Bluetooth del EQUIPO y vuelve a conectar la cabina.
-///
-/// Es el segundo escalon cuando la cabina queda "conectada a medias" (ver
-/// `salida_audio::reavivar_bluetooth`): reiniciar el adaptador borra el estado
-/// atascado del controlador, que reabrir el perfil no toca. Devuelve que paso.
-pub(crate) fn reiniciar_adaptador_y_conectar(mac: &str) -> Result<(), String> {
-    bluetoothctl(&["power", "off"], PLAZO_CONSULTA)?;
-    std::thread::sleep(Duration::from_millis(1500));
-    bluetoothctl(&["power", "on"], PLAZO_CONSULTA)?;
-    std::thread::sleep(Duration::from_millis(1500));
-    bluetoothctl(&["connect", mac], PLAZO_CONEXION)?;
-    Ok(())
-}
-
-/// Vuelve a conectar la cabina sin tocar el adaptador (tras reiniciar el
-/// servidor de sonido hace falta, porque la conexion de audio se pierde).
-pub(crate) fn reconectar(mac: &str) -> Result<(), String> {
-    bluetoothctl(&["connect", mac], PLAZO_CONEXION)?;
-    Ok(())
-}
-
 /// Desconecta una cabina (sigue emparejada, para reconectarla de un toque).
 #[tauri::command]
 pub async fn bt_desconectar(mac: String) -> Result<(), String> {

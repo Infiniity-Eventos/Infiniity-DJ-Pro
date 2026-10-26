@@ -767,61 +767,26 @@ fn reavivar_bluetooth(sink: &str) -> Option<String> {
         pasos.push("reabrir la conexión");
     }
 
-    // ESCALON 2: apagar y encender el Bluetooth del equipo y reconectar. Borra
-    // el estado atascado del controlador, que el perfil no toca.
-    match crate::bluetooth::reiniciar_adaptador_y_conectar(&mac) {
-        Ok(()) => {
-            if esperar_sana(sink, 25) {
-                return Some(
-                    "La cabina estaba conectada a medias (sin canal de sonido). Se reinició el \
-                     Bluetooth del equipo, se reconectó, y ya tiene por dónde sonar."
-                        .to_string(),
-                );
-            }
-            pasos.push("reiniciar el Bluetooth del equipo");
-        }
-        Err(e) => {
-            eprintln!("[salida_audio] reiniciar el adaptador fallo: {e}");
-            pasos.push("reiniciar el Bluetooth del equipo (no se pudo)");
-        }
-    }
-
-    // ESCALON 3: reiniciar los servicios de sonido del usuario. Es lo que haria
-    // un tecnico a mano. Corta el sonido de TODO el equipo un par de segundos
-    // (la app rehace su conexion sola despues), y por eso va el ultimo y solo
-    // con el nodo confirmado fantasma.
-    let reinicio = clean_command("systemctl")
-        .args(["--user", "restart", "wireplumber", "pipewire", "pipewire-pulse"])
-        .output();
-    match reinicio {
-        Ok(out) if out.status.success() => {
-            std::thread::sleep(std::time::Duration::from_millis(2500));
-            let _ = crate::bluetooth::reconectar(&mac);
-            if esperar_sana(sink, 30) {
-                return Some(
-                    "La cabina estaba conectada a medias (sin canal de sonido). Hubo que \
-                     reiniciar el sonido del equipo y reconectarla; ya tiene por dónde sonar."
-                        .to_string(),
-                );
-            }
-            pasos.push("reiniciar el sonido del equipo");
-        }
-        Ok(out) => {
-            let e = String::from_utf8_lossy(&out.stderr).trim().to_string();
-            eprintln!("[salida_audio] reiniciar los servicios de sonido fallo: {e}");
-            pasos.push("reiniciar el sonido del equipo (no se pudo)");
-        }
-        Err(e) => {
-            eprintln!("[salida_audio] no se pudo ejecutar systemctl: {e}");
-            pasos.push("reiniciar el sonido del equipo (no se pudo)");
-        }
-    }
+    // NO HAY ESCALON 2 NI 3. Los hubo (0.4.43: apagar y encender el Bluetooth
+    // del equipo; reiniciar los servicios de sonido del usuario) y se quitaron
+    // en la 0.4.45 por dos razones medidas en un evento:
+    //   - No sirven para esto. El registro de wireplumber mostro que el canal
+    //     de audio SI se crea cada vez y se destruye enseguida («Failed to
+    //     release transport ... doesn't exist», «proxy destroyed»): la cabina
+    //     suelta el canal nada mas abrirse. Reiniciar cosas del equipo no
+    //     cambia lo que hace la cabina.
+    //   - Son peligrosos. Reiniciar el sonido del equipo mata la conexion de la
+    //     propia app, que al rehacerla volvia a escalar (cinco reinicios en dos
+    //     minutos), y el portatil acabo trabado. En un evento eso es peor que
+    //     una cabina muda: se pierde tambien el cable.
+    // Lo que queda es decir la verdad y que hacer a mano.
+    let _ = &mac; // (la direccion se conserva por si vuelve a hacer falta)
 
     Some(format!(
-        "La cabina sigue conectada a medias (sin canal de sonido) después de: {}. \
-         Apaga la cabina, enciéndela y conéctala otra vez; si sigue igual, reinicia el \
-         portátil y guarda un informe.",
-        pasos.join(", ")
+        "La cabina sigue conectada a medias (sin canal de sonido) después de {}. \
+         Es la cabina la que suelta el canal de audio nada más abrirse. Apágala, \
+         enciéndela y conéctala otra vez; si sigue igual, usa esa cabina por cable.",
+        if pasos.is_empty() { "intentarlo".to_string() } else { pasos.join(", ") }
     ))
 }
 
