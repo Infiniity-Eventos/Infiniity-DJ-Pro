@@ -147,6 +147,8 @@ class AudioEngine {
   onFinNatural: ((id: DeckId) => void) | null = null;
   /** Efectos de un toque (drops): audio decodificado y, si suena, su fuente. */
   private efectos = new Map<string, { buffer: AudioBuffer | null; cargando: Promise<AudioBuffer | null> | null; source: AudioBufferSourceNode | null; gain: GainNode | null }>();
+  /** Mide lo que de verdad sale del motor. Solo para el informe de fallos. */
+  private medidor: AnalyserNode | null = null;
   /** Esta en marcha un intento de levantar el motor (no solapar dos). */
   private levantando = false;
   /** Temporizador que comprueba que el sonido siga saliendo por donde debe. */
@@ -173,6 +175,22 @@ class AudioEngine {
     limiter.release.value = 0.1;
     master.connect(limiter);
     limiter.connect(ctx.destination);
+
+    // MEDIDOR DE SALIDA (para el informe de fallos).
+    //
+    // POR QUE: cuando desde otra PC dicen "no suena", la pregunta que lo parte
+    // todo en dos es si el motor esta sacando sonido o esta sacando SILENCIO.
+    // Si saca sonido, el fallo esta de la salida hacia afuera (la cabina, el
+    // Bluetooth); si saca silencio, esta aqui dentro (un volumen a cero, una
+    // perilla, el crossfader). Sin este dato solo se puede adivinar, y adivinar
+    // desde otra ciudad cuesta dias.
+    //
+    // Va DESPUES del limitador: mide lo mismo que sale por el cable, no lo que
+    // se cree que deberia salir. Un nodo de analisis no cambia el sonido.
+    const medidor = ctx.createAnalyser();
+    medidor.fftSize = 2048;
+    limiter.connect(medidor);
+    this.medidor = medidor;
 
     const makeDeck = (): Deck => {
       const normGain = ctx.createGain();
@@ -619,9 +637,50 @@ class AudioEngine {
    * no avanza entre dos informes, el sonido esta parado por debajo aunque todo
    * parezca correcto.
    */
-  resumen(): string {
+  /**
+   * Nivel que sale del motor AHORA (0 = silencio absoluto). Se mira varias
+   * veces: una cancion tiene silencios, y una sola lectura podria caer justo
+   * en uno y hacer creer que no sale nada.
+   */
+  async medirNivelSalida(ms = 700): Promise<number> {
+    const medidor = this.medidor;
+    if (!medidor) return 0;
+    // El motor empaquetado es viejo y puede no tener la lectura en decimales.
+    // Si falta, se usa la de bytes: menos fina, pero distingue perfectamente
+    // sonido de silencio, que es lo unico que hace falta aqui.
+    const enDecimales = typeof medidor.getFloatTimeDomainData === "function";
+    const bufF = new Float32Array(medidor.fftSize);
+    const bufB = new Uint8Array(medidor.fftSize);
+    let pico = 0;
+    const hasta = Date.now() + ms;
+    while (Date.now() < hasta) {
+      if (enDecimales) {
+        medidor.getFloatTimeDomainData(bufF);
+        for (const v of bufF) {
+          const a = Math.abs(v);
+          if (a > pico) pico = a;
+        }
+      } else {
+        medidor.getByteTimeDomainData(bufB);
+        for (const v of bufB) {
+          const a = Math.abs(v - 128) / 128;
+          if (a > pico) pico = a;
+        }
+      }
+      await new Promise((listo) => window.setTimeout(listo, 50));
+    }
+    return pico;
+  }
+
+  async resumen(): Promise<string> {
     const st = useStore.getState();
+    const nivel = await this.medirNivelSalida();
+    const nivelTexto =
+      nivel < 0.0005
+        ? "SILENCIO — el motor NO está sacando sonido"
+        : `${(20 * Math.log10(nivel)).toFixed(1)} dB (pico ${nivel.toFixed(4)}) — el motor SÍ saca sonido`;
     const lineas = [
+      `nivel que sale del motor: ${nivelTexto}`,
       `motor de sonido: ${this.ctx ? this.ctx.state : "sin crear todavia"}`,
       `frecuencia del motor: ${this.ctx ? this.ctx.sampleRate : "?"} Hz`,
       `reloj del motor: ${this.ctx ? this.ctx.currentTime.toFixed(2) : "?"} s`,
@@ -633,7 +692,11 @@ class AudioEngine {
       const e = st.decks[id];
       lineas.push(
         `deck ${id}: ${e.trackName || "(vacio)"} | sonando=${d?.playing ?? false}` +
-          ` | posicion=${this.getPosition(id).toFixed(1)}s | velocidad=${(d?.rate ?? 1).toFixed(3)}`
+          ` | posicion=${this.getPosition(id).toFixed(1)}s | velocidad=${(d?.rate ?? 1).toFixed(3)}` +
+          ` | volumen=${Math.round((d?.volumeGain.gain.value ?? 0) * 100)}%` +
+          ` | nivelacion=${(d?.normGain.gain.value ?? 0).toFixed(2)}` +
+          ` | mezcla=${(d?.xfadeGain.gain.value ?? 0).toFixed(2)}` +
+          ` | perillas=${d ? JSON.stringify(d.fx.valores) : "?"}`
       );
     });
     return lineas.join("\n");

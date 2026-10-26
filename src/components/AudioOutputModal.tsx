@@ -222,7 +222,7 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
         `salida elegida: ${audioSink ?? "(ninguna)"}`,
         `salida de verdad: ${estadoSalida}`,
         "",
-        engine.resumen(),
+        await engine.resumen(),
         "",
         "ultimos avisos que salieron en pantalla:",
         historialAvisos.length > 0 ? historialAvisos.join("\n") : "(ninguno)",
