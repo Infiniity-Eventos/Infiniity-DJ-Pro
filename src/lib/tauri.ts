@@ -203,6 +203,8 @@ export interface EstadoBt {
 export const btEstado = (): Promise<EstadoBt> => {
   // En el navegador no hay Bluetooth que valga: se dice, en vez de dejar la
   // lista vacia como si el equipo no tuviera ninguna cabina.
+  // En el navegador no hay Bluetooth que valga: se dice, en vez de dejar la
+  // lista vacia como si el equipo no tuviera ninguna cabina.
   if (!isTauri())
     return Promise.resolve({
       hay: false,
@@ -218,8 +220,10 @@ export const btDispositivos = (): Promise<DispositivoBt[]> => {
   return invoke<DispositivoBt[]>("bt_dispositivos");
 };
 /** Busca cabinas encendidas alrededor durante unos segundos. */
-export const btBuscar = (segundos: number) =>
-  invoke<DispositivoBt[]>("bt_buscar", { segundos });
+export const btBuscar = (segundos: number): Promise<DispositivoBt[]> => {
+  if (!isTauri()) return Promise.resolve([]);
+  return invoke<DispositivoBt[]>("bt_buscar", { segundos });
+};
 /** Empareja (si hace falta), marca de confianza y conecta. */
 export const btConectar = (mac: string) => invoke<void>("bt_conectar", { mac });
 export const btDesconectar = (mac: string) => invoke<void>("bt_desconectar", { mac });

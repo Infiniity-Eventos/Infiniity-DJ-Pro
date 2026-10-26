@@ -15,6 +15,9 @@ import {
 import { aplicarSalida } from "../lib/salidaAudio";
 import { engine } from "../audio/AudioEngine";
 
+/** Cuanto busca cabinas. Menos no da tiempo a que una cabina conteste. */
+const SEGUNDOS_BUSQUEDA = 12;
+
 /** Etiqueta corta del tipo de salida, para reconocerla de un vistazo. */
 const ETIQUETA: Record<string, string> = {
   bluetooth: "Bluetooth",
@@ -78,6 +81,10 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
   const [buscando, setBuscando] = useState(false);
   /** Direccion de la cabina que se esta conectando ahora (null si ninguna). */
   const [conectando, setConectando] = useState<string | null>(null);
+  /** Segundos que le quedan a la busqueda (la cuenta atras se ve en pantalla). */
+  const [restan, setRestan] = useState(0);
+  /** Como fue la ultima busqueda. Sin esto, "no encontre nada" era silencio. */
+  const [avisoBusqueda, setAvisoBusqueda] = useState<string | null>(null);
 
   const cargar = useCallback(async () => {
     try {
@@ -118,6 +125,23 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
     void cargar();
     void cargarBt();
   }, [cargar, cargarBt]);
+
+  /**
+   * Cuenta atras mientras busca.
+   *
+   * No es un adorno: buscar cabinas tarda doce segundos, y sin NADA moviendose
+   * en pantalla la app parece colgada. Que el numero baje cada segundo es la
+   * prueba a la vista de que sigue viva y de cuanto falta.
+   */
+  useEffect(() => {
+    if (!buscando) return;
+    setRestan(SEGUNDOS_BUSQUEDA);
+    const t = window.setInterval(
+      () => setRestan((v) => (v > 0 ? v - 1 : 0)),
+      1000
+    );
+    return () => window.clearInterval(t);
+  }, [buscando]);
 
   const elegir = async (salida: AudioOutput) => {
     setOcupado(true);
@@ -185,8 +209,31 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
   const buscarCabinas = async () => {
     setBuscando(true);
     setError(null);
+    setAvisoBusqueda(null);
+    const conocidas = new Set(cabinas.map((c) => c.mac));
     try {
-      setCabinas((await btBuscar(12)).filter((d) => d.altavoz));
+      const encontradas = (await btBuscar(SEGUNDOS_BUSQUEDA)).filter(
+        (d) => d.altavoz
+      );
+      setCabinas(encontradas);
+      // Decir SIEMPRE como fue. Que la busqueda termine sin novedades y la
+      // pantalla se quede igual que antes no se distingue de que haya fallado.
+      const nuevas = encontradas.filter((d) => !conocidas.has(d.mac)).length;
+      if (encontradas.length === 0) {
+        setAvisoBusqueda(
+          "No apareció ninguna cabina. Comprueba que esté encendida, cerca, y en modo emparejar (normalmente dejando pulsado su botón de Bluetooth)."
+        );
+      } else if (nuevas === 0) {
+        setAvisoBusqueda(
+          `No apareció ninguna cabina nueva. Siguen las de siempre (${encontradas.length}).`
+        );
+      } else {
+        setAvisoBusqueda(
+          nuevas === 1
+            ? "Apareció 1 cabina nueva."
+            : `Aparecieron ${nuevas} cabinas nuevas.`
+        );
+      }
     } catch (e) {
       setError(
         `No se pudo buscar cabinas: ${e instanceof Error ? e.message : String(e)}`
@@ -287,12 +334,22 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
           )}
 
           {buscando && (
-            <div className="out-bt-nota">
-              Buscando cabinas encendidas cerca... (unos segundos)
+            <div className="out-bt-nota out-bt-buscando">
+              <span className="out-bt-girando" aria-hidden="true" />
+              <span>
+                Buscando cabinas encendidas cerca...{" "}
+                {restan > 0 ? `faltan ${restan} s` : "terminando"}
+              </span>
             </div>
           )}
 
-          {bt?.encendido && !buscando && cabinas.length === 0 && (
+          {!buscando && avisoBusqueda && (
+            <div className="out-bt-nota">{avisoBusqueda}</div>
+          )}
+
+          {/* Solo si no hay ya un aviso de la ultima busqueda: dos mensajes
+              diciendo casi lo mismo, uno debajo del otro, es ruido. */}
+          {bt?.encendido && !buscando && cabinas.length === 0 && !avisoBusqueda && (
             <div className="out-bt-nota">
               Ninguna cabina conocida todavía. Enciende la cabina, ponla en modo
               emparejar (normalmente dejando pulsado su botón de Bluetooth) y dale

@@ -24,6 +24,7 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 
 use crate::downloader::clean_command;
+use crate::en_otro_hilo;
 
 /// Un aparato Bluetooth, como se lo muestra al usuario.
 #[derive(Serialize, Clone)]
@@ -260,7 +261,15 @@ pub struct EstadoBt {
 }
 
 #[tauri::command]
-pub fn bt_estado() -> EstadoBt {
+pub async fn bt_estado() -> EstadoBt {
+    en_otro_hilo(|| Ok(estado_sinc())).await.unwrap_or(EstadoBt {
+        hay: false,
+        encendido: false,
+        motivo: "No se pudo consultar el Bluetooth del equipo.".to_string(),
+    })
+}
+
+fn estado_sinc() -> EstadoBt {
     match bluetoothctl(&["show"], PLAZO_CONSULTA) {
         Err(e) => EstadoBt {
             hay: false,
@@ -293,9 +302,12 @@ pub fn bt_estado() -> EstadoBt {
 
 /// Enciende el Bluetooth del equipo (si estaba apagado).
 #[tauri::command]
-pub fn bt_encender() -> Result<(), String> {
-    bluetoothctl(&["power", "on"], PLAZO_CONSULTA)?;
-    Ok(())
+pub async fn bt_encender() -> Result<(), String> {
+    en_otro_hilo(|| {
+        bluetoothctl(&["power", "on"], PLAZO_CONSULTA)?;
+        Ok(())
+    })
+    .await
 }
 
 /// Detalles de cada aparato conocido. Se consulta uno por uno porque la lista
@@ -338,7 +350,11 @@ fn detallar(parejas: Vec<(String, String)>) -> Vec<DispositivoBt> {
 
 /// Cabinas que el equipo ya conoce (emparejadas o vistas hace poco).
 #[tauri::command]
-pub fn bt_dispositivos() -> Result<Vec<DispositivoBt>, String> {
+pub async fn bt_dispositivos() -> Result<Vec<DispositivoBt>, String> {
+    en_otro_hilo(dispositivos_sinc).await
+}
+
+fn dispositivos_sinc() -> Result<Vec<DispositivoBt>, String> {
     let texto = bluetoothctl(&["devices"], PLAZO_CONSULTA)?;
     Ok(detallar(parse_dispositivos(&texto)))
 }
@@ -349,16 +365,19 @@ pub fn bt_dispositivos() -> Result<Vec<DispositivoBt>, String> {
 /// trozos y lleno de colores): se deja que busque, y al terminar se vuelve a
 /// pedir la lista completa, que ya incluye lo recien encontrado.
 #[tauri::command]
-pub fn bt_buscar(segundos: u32) -> Result<Vec<DispositivoBt>, String> {
-    let segundos = segundos.clamp(3, 30);
-    let tiempo = segundos.to_string();
-    // El plazo propio va por encima del de la busqueda: el que manda es el de
-    // `bluetoothctl`, y este solo esta por si se cuelga.
-    bluetoothctl(
-        &["--timeout", &tiempo, "scan", "on"],
-        Duration::from_secs(u64::from(segundos) + 10),
-    )?;
-    bt_dispositivos()
+pub async fn bt_buscar(segundos: u32) -> Result<Vec<DispositivoBt>, String> {
+    en_otro_hilo(move || {
+        let segundos = segundos.clamp(3, 30);
+        let tiempo = segundos.to_string();
+        // El plazo propio va por encima del de la busqueda: el que manda es el
+        // de `bluetoothctl`, y este solo esta por si se cuelga.
+        bluetoothctl(
+            &["--timeout", &tiempo, "scan", "on"],
+            Duration::from_secs(u64::from(segundos) + 10),
+        )?;
+        dispositivos_sinc()
+    })
+    .await
 }
 
 /// Conecta una cabina: la empareja si hace falta, la marca de confianza y la
@@ -368,7 +387,12 @@ pub fn bt_buscar(segundos: u32) -> Result<Vec<DispositivoBt>, String> {
 /// no deja que la cabina se reconecte sola cuando se apaga y se vuelve a
 /// encender, y habria que repetir todo esto delante de la gente.
 #[tauri::command]
-pub fn bt_conectar(mac: String) -> Result<(), String> {
+pub async fn bt_conectar(mac: String) -> Result<(), String> {
+    en_otro_hilo(move || conectar_sinc(&mac)).await
+}
+
+fn conectar_sinc(mac: &str) -> Result<(), String> {
+    let mac = mac.to_string();
     let info = bluetoothctl(&["info", &mac], PLAZO_CONSULTA)
         .map(|t| parse_info(&t))
         .unwrap_or(Info {
@@ -415,9 +439,12 @@ pub fn bt_conectar(mac: String) -> Result<(), String> {
 
 /// Desconecta una cabina (sigue emparejada, para reconectarla de un toque).
 #[tauri::command]
-pub fn bt_desconectar(mac: String) -> Result<(), String> {
-    bluetoothctl(&["disconnect", &mac], PLAZO_CONEXION)?;
-    Ok(())
+pub async fn bt_desconectar(mac: String) -> Result<(), String> {
+    en_otro_hilo(move || {
+        bluetoothctl(&["disconnect", &mac], PLAZO_CONEXION)?;
+        Ok(())
+    })
+    .await
 }
 
 #[cfg(test)]
@@ -512,7 +539,7 @@ Device F4:73:35:88:AF:C7 Keyboard K380
     #[test]
     #[ignore = "necesita bluetoothctl y el Bluetooth del equipo"]
     fn bt_dispositivos_real_separa_cabinas_de_lo_demas() {
-        let lista = bt_dispositivos().expect("hace falta bluetoothctl (bluez)");
+        let lista = dispositivos_sinc().expect("hace falta bluetoothctl (bluez)");
         for d in &lista {
             println!(
                 "  {} [{}] cabina={} emparejado={} conectado={}",
@@ -531,7 +558,7 @@ Device F4:73:35:88:AF:C7 Keyboard K380
     #[test]
     #[ignore = "necesita bluetoothctl y el Bluetooth del equipo"]
     fn bt_estado_real_responde() {
-        let e = bt_estado();
+        let e = estado_sinc();
         assert!(e.hay, "deberia haber Bluetooth: {}", e.motivo);
         if !e.encendido {
             assert!(!e.motivo.is_empty(), "si esta apagado hay que decir por que");

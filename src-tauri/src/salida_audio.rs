@@ -23,6 +23,7 @@
 use serde::Serialize;
 
 use crate::downloader::clean_command;
+use crate::en_otro_hilo;
 
 /// Una salida de audio del equipo, como se la muestra al usuario.
 #[derive(Serialize, Clone)]
@@ -251,7 +252,11 @@ fn kind_of(name: &str) -> &'static str {
 /// Un parlante Bluetooth aparece aqui solo si ya esta emparejado y conectado
 /// desde el sistema; el emparejamiento no se hace desde la app.
 #[tauri::command]
-pub fn audio_outputs() -> Result<Vec<AudioOutput>, String> {
+pub async fn audio_outputs() -> Result<Vec<AudioOutput>, String> {
+    en_otro_hilo(audio_outputs_sinc).await
+}
+
+fn audio_outputs_sinc() -> Result<Vec<AudioOutput>, String> {
     let sinks = list_sinks()?;
     // Por donde suena la app AHORA: manda su propio flujo. Si todavia no esta
     // sonando, la referencia es la salida general del equipo.
@@ -287,7 +292,11 @@ pub fn audio_outputs() -> Result<Vec<AudioOutput>, String> {
 /// se vuelve a intentar). Se devuelve el numero en vez de callarlo para que la
 /// interfaz pueda decir la verdad: "ya suena por ahi" o "dale play".
 #[tauri::command]
-pub fn audio_set_output(sink: String) -> Result<u32, String> {
+pub async fn audio_set_output(sink: String) -> Result<u32, String> {
+    en_otro_hilo(move || audio_set_output_sinc(&sink)).await
+}
+
+fn audio_set_output_sinc(sink: &str) -> Result<u32, String> {
     let sinks = list_sinks()?;
     if !sinks.iter().any(|s| s.name == sink) {
         return Err(format!(
@@ -300,7 +309,7 @@ pub fn audio_set_output(sink: String) -> Result<u32, String> {
     let mut ultimo_error: Option<String> = None;
     for s in streams.iter().filter(|s| stream_is_ours(s)) {
         let idx = s.index.to_string();
-        match pactl(&["move-sink-input", idx.as_str(), sink.as_str()]) {
+        match pactl(&["move-sink-input", idx.as_str(), sink]) {
             Ok(_) => movidos += 1,
             Err(e) => ultimo_error = Some(e),
         }
@@ -336,7 +345,11 @@ pub struct EstadoSalida {
 
 /// Comprueba por donde va el sonido de la app y si de verdad esta saliendo.
 #[tauri::command]
-pub fn audio_output_status() -> Result<EstadoSalida, String> {
+pub async fn audio_output_status() -> Result<EstadoSalida, String> {
+    en_otro_hilo(audio_output_status_sinc).await
+}
+
+fn audio_output_status_sinc() -> Result<EstadoSalida, String> {
     let streams = list_streams()?;
     let Some(nuestro) = streams
         .iter()
@@ -511,7 +524,7 @@ Sink Input #210
         let mut estado = None;
         for _ in 0..40 {
             std::thread::sleep(std::time::Duration::from_millis(100));
-            let e = audio_output_status().unwrap();
+            let e = audio_output_status_sinc().unwrap();
             if e.hay_flujo && e.salida.as_deref() == Some("djprueba1") {
                 estado = Some(e);
                 break;
@@ -525,12 +538,12 @@ Sink Input #210
         );
 
         // Y ahora lo que hace la app al cambiar de salida.
-        let movidos = audio_set_output("djprueba2".to_string()).unwrap();
+        let movidos = audio_set_output_sinc("djprueba2").unwrap();
         assert!(movidos >= 1, "deberia haber movido al menos un flujo");
         let mut llego = false;
         for _ in 0..30 {
             std::thread::sleep(std::time::Duration::from_millis(100));
-            if audio_output_status().unwrap().salida.as_deref() == Some("djprueba2") {
+            if audio_output_status_sinc().unwrap().salida.as_deref() == Some("djprueba2") {
                 llego = true;
                 break;
             }
@@ -543,7 +556,7 @@ Sink Input #210
         let mut sin_flujo = false;
         for _ in 0..30 {
             std::thread::sleep(std::time::Duration::from_millis(100));
-            if !audio_output_status().unwrap().hay_flujo {
+            if !audio_output_status_sinc().unwrap().hay_flujo {
                 sin_flujo = true;
                 break;
             }
@@ -568,7 +581,7 @@ Sink Input #210
     #[test]
     #[ignore]
     fn audio_outputs_real_lista_las_salidas_del_equipo() {
-        let salidas = audio_outputs().expect("hace falta pactl (pulseaudio-utils)");
+        let salidas = audio_outputs_sinc().expect("hace falta pactl (pulseaudio-utils)");
         assert!(!salidas.is_empty(), "el equipo deberia tener alguna salida");
         let activas = salidas.iter().filter(|s| s.active).count();
         assert!(activas <= 1, "no puede haber dos salidas activas a la vez");
@@ -584,7 +597,7 @@ Sink Input #210
     #[test]
     #[ignore = "necesita pactl y el sonido del equipo"]
     fn audio_output_status_real_cuadra_consigo_mismo() {
-        let e = audio_output_status().expect("hace falta pactl (pulseaudio-utils)");
+        let e = audio_output_status_sinc().expect("hace falta pactl (pulseaudio-utils)");
         if !e.hay_flujo {
             // La app no esta sonando: entonces no hay salida ni estado que dar.
             assert!(e.salida.is_none(), "sin flujo no puede haber salida");

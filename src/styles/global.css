@@ -1139,6 +1139,28 @@ input[type="range"]::-webkit-slider-thumb {
   justify-content: space-between;
   gap: 10px;
 }
+/* Mientras busca: una ruedita girando al lado del texto. Es lo unico que se
+   mueve en esa pantalla, y es lo que distingue "trabajando" de "colgada". */
+.out-bt-buscando {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.out-bt-girando {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--glass-border);
+  border-top-color: var(--accent);
+  animation: out-bt-giro 0.8s linear infinite;
+}
+@keyframes out-bt-giro {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* Una fila de cabina no es un boton entero (lleva el suyo dentro): no debe
    parecer pulsable ni reaccionar como tal. */
 .out-row-fija {

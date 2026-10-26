@@ -18,6 +18,27 @@ use std::sync::Mutex;
 use std::time::UNIX_EPOCH;
 use tauri::Manager;
 
+/// Ejecuta en OTRO HILO algo que tarda, y devuelve su resultado.
+///
+/// POR QUE EXISTE: Tauri ejecuta los comandos normales (`fn`) en el hilo de la
+/// VENTANA. Cualquier cosa que tarde ahi congela la interfaz entera: no se
+/// repinta, no responde, y el sistema llega a sacar el cartel «la aplicacion
+/// no responde». Paso de verdad con la busqueda de cabinas Bluetooth, que dura
+/// doce segundos: la app quedaba tiesa y parecia colgada.
+///
+/// Los comandos que hablan con programas del sistema (`bluetoothctl`, `pactl`)
+/// van TODOS por aqui: aunque casi siempre contesten rapido, pueden tardar o
+/// colgarse, y el hilo de la ventana no puede quedarse esperando.
+pub(crate) async fn en_otro_hilo<T, F>(trabajo: F) -> Result<T, String>
+where
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+    T: Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(trabajo)
+        .await
+        .map_err(|e| format!("La tarea no llego a terminar: {e}"))?
+}
+
 pub struct AppState {
     pub cache: Mutex<Cache>,
     pub midi: Mutex<midi::MidiState>,
