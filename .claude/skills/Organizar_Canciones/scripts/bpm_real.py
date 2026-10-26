@@ -39,17 +39,17 @@ HOP = 64
 # mezclados (ahi manda el pico mas fuerte si ya cae dentro).
 RANGOS = {
     "Merengue": (115, 185),
-    "Salsa": (150, 230),
-    "Salsa Choque": (150, 230),
+    "Salsa": (115, 230),
+    "Salsa Choque": (115, 230),
     "Bachata": (105, 150),
-    "Reggaeton": (78, 135),  # Limbo / Si Antes Te Hubiera Conocido van a ~125-128 de verdad
+    "Reggaeton": (70, 150),  # Limbo va a ~125-128 y Amorfoda a 74 de verdad
     "Trap": (65, 150),
     "Champeta": (95, 140),
     "Cumbia": (78, 130),
     "Carranga": (95, 160),
     "Vallenato": (90, 185),
     "Viejoteca": (80, 170),
-    "Electronica": (110, 150),
+    "Electronica": (90, 185),   # la guaracha va a 128-132; el zapateo pasa de 170
     "Boleros": (60, 130),
     "Popular": (70, 150),
     "Infantil": (90, 180),
