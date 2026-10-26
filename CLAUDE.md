@@ -65,15 +65,29 @@ Cada una salió de un fallo real en el equipo de alguien:
    velocidad van como curvas en los `AudioParam` (`AudioEngine.ts`), que corren
    en el hilo de audio pase lo que pase con la pantalla.
 
-8. **La salida de audio no se cambia arrastrando el flujo que ya suena.** Con
-   cable funciona; con Bluetooth, no. El parlante va a otra frecuencia (44100
-   contra los 48000 del equipo) y con mucho más retardo, así que al llegar hay
-   que renegociar el búfer: medido, eso deja más de dos segundos de silencio
-   total, y el motor de WebKitGTK no lo aguanta — se queda en `interrupted` (un
-   estado propio suyo) y la música se para en seco. Hay que REHACER la conexión
-   de sonido (`AudioEngine.rehacerConexion()`), que reusa el audio ya
-   decodificado y reanuda donde iba. Y hay que COMPROBAR que suena de verdad
-   (`audio_output_status`): que `pactl` acepte la orden no significa que se oiga.
+8. **Con una cabina Bluetooth, "conectada" no significa "con sonido".** Un día
+   entero (2026-10-26, trece versiones) se fue en esto. El servidor de sonido
+   puede crear la salida de la cabina **sin canal hacia el aparato**: existe,
+   está en RUNNING, acepta el flujo de la app (y el de cualquier otro programa),
+   y por ella no sale nada. Se reconoce en `pactl list sinks` por
+   `api.bluez5.transport = ""` y `api.bluez5.connection = "disconnected"`
+   (`es_fantasma` en `salida_audio.rs`); el informe lo marca como `FANTASMA`.
+   El registro de wireplumber dice por qué: el canal se crea y la cabina lo
+   suelta nada más abrirse. Pasa tras una desconexión espontánea seguida de
+   reconexión. Lecciones pagadas:
+   - **Medir, no deducir.** `pactl` decía que todo estaba bien. Lo que destapó
+     el fallo fue grabar la salida (`medir_llegada`) y medir lo que sale del
+     motor (`medirNivelSalida`): sonido dentro, silencio fuera. Si no suena, el
+     primer paso es el botón **Guardar informe**, que viaja solo por Sync.
+   - **Nada de reiniciar el sonido del equipo ni el adaptador desde la app.**
+     No reabre el canal (es la cabina la que lo suelta) y en un evento dejó el
+     portátil trabado tras cinco reinicios en bucle. Peor que una cabina muda.
+   - **No mandar versiones a ciegas al equipo.** Sin poder reproducir aquí, cada
+     versión le cuesta al que prueba. Primero el informe, luego el cambio.
+   - Sigue siendo cierto que la salida no se cambia arrastrando el flujo
+     (`AudioEngine.rehacerConexion()` la rehace y reanuda donde iba) y que hay
+     que comprobar que suena de verdad (`audio_output_status`), pero eso NO
+     era la causa del fallo de la cabina.
 
 9. **Nada que tarde corre en el hilo de la ventana, y lo que tarda se ve.** Los
    comandos de Tauri declarados `fn` se ejecutan en el hilo de la ventana: si
