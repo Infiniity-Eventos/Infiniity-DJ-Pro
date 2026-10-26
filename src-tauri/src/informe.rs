@@ -91,6 +91,31 @@ fn detalle_bluetooth() -> String {
 ///   - Si el motor saca sonido y aqui no llega: se pierde por el camino, entre
 ///     el navegador interno y el sonido del sistema.
 /// Sin esto solo se puede adivinar, y adivinar desde otra ciudad cuesta dias.
+/// Comprobacion de si el sonido llega a la salida, para la interfaz.
+#[derive(serde::Serialize, Clone)]
+pub struct Llegada {
+    /// Llega sonido de verdad a esa salida.
+    pub llega: bool,
+    /// Explicacion para mostrar o para el informe.
+    pub detalle: String,
+    /// El programa arranco preparado para una cabina Bluetooth.
+    pub preparado_bluetooth: bool,
+}
+
+/// ¿Esta llegando sonido a `salida`? Tarda unos segundos: graba de ella.
+#[tauri::command]
+pub async fn audio_llega_sonido(salida: String) -> Result<Llegada, String> {
+    en_otro_hilo(move || {
+        let detalle = medir_llegada(&salida);
+        Ok(Llegada {
+            llega: detalle.starts_with("LLEGA SONIDO"),
+            detalle,
+            preparado_bluetooth: crate::arranque::sonido_preparado_para_bluetooth(),
+        })
+    })
+    .await
+}
+
 fn medir_llegada(sink: &str) -> String {
     if sink.trim().is_empty() {
         return "(no hay salida elegida)".to_string();

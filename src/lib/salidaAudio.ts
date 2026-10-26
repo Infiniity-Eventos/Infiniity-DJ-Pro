@@ -27,13 +27,44 @@
  * La cancion no se pierde (sigue en memoria) y se reanuda donde iba.
  */
 
-import { audioSetOutput, audioOutputStatus } from "./tauri";
+import { audioSetOutput, audioOutputStatus, audioLlegaSonido } from "./tauri";
 import { useStore } from "../state/store";
 
 /** La salida guardada ya esta aplicada al flujo de sonido que suena ahora. */
 let aplicada = false;
 /** El aviso de fallo se muestra una sola vez (si no, saldria en cada play). */
 let avisado = false;
+
+/**
+ * Comprueba que a la cabina le LLEGUE el sonido, y si no, dice que hacer.
+ *
+ * POR QUE: medido en un evento, con la cabina Bluetooth puesta el motor sacaba
+ * sonido (-14.4 dB) y a la cabina no llegaba nada (pico 0.00000), con el flujo
+ * enganchado, la salida en marcha, sin silencio y al 110%. Todo "correcto" y
+ * mudo. Esa situacion no se puede dejar sin explicar en pantalla: el DJ tiene
+ * que saber que hacer, no quedarse mirando una app que dice que todo va bien.
+ *
+ * Tarda unos segundos (graba de la salida), asi que va por detras y sin
+ * bloquear nada.
+ */
+async function comprobarQueLlega(sink: string): Promise<void> {
+  const { showToast, decks } = useStore.getState();
+  if (!decks.A.isPlaying && !decks.B.isPlaying) return; // sin musica no hay nada que medir
+  try {
+    const r = await audioLlegaSonido(sink);
+    if (r.llega) return;
+    console.error("[salidaAudio] no llega sonido a la salida:", r.detalle);
+    showToast(
+      r.preparado_bluetooth
+        ? "La cabina no está recibiendo el sonido. Dale a «Guardar informe» y mándalo."
+        : "La cabina no está recibiendo el sonido. Cierra y vuelve a abrir el programa: al arrancar con la cabina ya elegida, se le manda en trozos más grandes, que es lo que necesita el Bluetooth."
+    );
+  } catch (err) {
+    // Que falle la comprobacion no es que falle el sonido: no se alarma, pero
+    // queda en el registro.
+    console.error("[salidaAudio] no se pudo comprobar si llega el sonido", err);
+  }
+}
 
 /** Cuenta en pantalla lo que hubo que corregir para que se oiga. */
 function avisarDeArreglos(arreglos: string[]): void {
@@ -161,6 +192,8 @@ export async function aplicarSalida(sink: string): Promise<number> {
     );
   }
   aplicada = true;
+  // Con la cabina puesta, comprobar por detras que de verdad le llega.
+  if (esBluetooth(sink)) void comprobarQueLlega(sink);
   return movidos;
 }
 

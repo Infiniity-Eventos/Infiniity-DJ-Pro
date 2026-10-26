@@ -411,6 +411,7 @@ pub fn run() {
     // Antes de que GTK/WebKit arranquen: leen las variables una sola vez.
     #[cfg(target_os = "linux")]
     {
+        arranque::preparar_sonido();
         arranque::ocultar_fuentes_emoji_color();
         arranque::decidir_modo_dibujo();
     }
@@ -496,6 +497,7 @@ pub fn run() {
             bluetooth::bt_conectar,
             bluetooth::bt_desconectar,
             informe::guardar_informe,
+            informe::audio_llega_sonido,
             quit_app,
             minimize_window,
             toggle_fullscreen

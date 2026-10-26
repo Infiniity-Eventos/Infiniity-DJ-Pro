@@ -185,6 +185,8 @@ export interface EstadoSalida {
   salida: string | null; // salida por la que va (nombre tecnico)
   pausado: boolean; // el sistema lo tiene en pausa
   estado: string; // "RUNNING" solo si esta saliendo sonido de verdad
+  volumen: number; // volumen que el EQUIPO le da a esa salida (%)
+  silenciada: boolean; // el equipo la tiene muda
 }
 /**
  * Comprueba si de verdad esta saliendo sonido por donde creemos. Que mover el
@@ -237,6 +239,16 @@ export const btDesconectar = (mac: string) => invoke<void>("bt_desconectar", { m
  * Guarda un informe de fallo dentro de la carpeta de musica, que es la que ya
  * viaja sola entre las PC por Sync. Devuelve donde quedo guardado.
  */
+/** Resultado de comprobar si el sonido llega a una salida. */
+export interface Llegada {
+  llega: boolean;
+  detalle: string;
+  preparado_bluetooth: boolean; // el programa arrancó preparado para Bluetooth
+}
+/** Comprueba si llega sonido a esa salida. Tarda unos segundos: graba de ella. */
+export const audioLlegaSonido = (salida: string) =>
+  invoke<Llegada>("audio_llega_sonido", { salida });
+
 export const guardarInforme = (
   carpetaMusica: string,
   estadoApp: string,

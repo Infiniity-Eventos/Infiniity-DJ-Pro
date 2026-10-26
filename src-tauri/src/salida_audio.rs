@@ -81,6 +81,8 @@ struct Sink {
     state: String,
     /// El equipo tiene esta salida muda. Otra forma de "todo bien y no se oye".
     muted: bool,
+    /// Volumen del equipo para esta salida, en crudo (65536 = 100%).
+    volume: u32,
 }
 
 fn list_sinks() -> Result<Vec<Sink>, String> {
@@ -100,6 +102,7 @@ fn parse_sinks(text: &str) -> Vec<Sink> {
                 description: String::new(),
                 state: String::new(),
                 muted: false,
+                volume: u32::MAX,
             });
             continue;
         }
@@ -126,6 +129,19 @@ fn parse_sinks(text: &str) -> Vec<Sink> {
         }
         if let Some(v) = t.strip_prefix("Mute: ") {
             cur.muted = v.trim() == "yes";
+            continue;
+        }
+        // "Volume: front-left: 72089 / 110% / 2.48 dB,   front-right: ..."
+        // Se toma el primer canal: con el equipo desbalanceado igual hace falta
+        // subirlo, y el volumen se pone en los dos a la vez.
+        if cur.volume == u32::MAX {
+            if let Some(v) = t.strip_prefix("Volume: ") {
+                cur.volume = v
+                    .split_once(": ")
+                    .and_then(|(_, resto)| resto.split('/').next())
+                    .and_then(|n| n.trim().parse::<u32>().ok())
+                    .unwrap_or(u32::MAX);
+            }
         }
     }
     out.retain(|s| s.index != u32::MAX && !s.name.is_empty());
@@ -329,6 +345,9 @@ fn audio_set_output_sinc(sink: &str) -> Result<ResultadoSalida, String> {
     if let Some(aviso) = quitar_silencio(sink) {
         arreglos.push(aviso);
     }
+    if let Some(aviso) = asegurar_volumen(sink) {
+        arreglos.push(aviso);
+    }
 
     // Dejar esta salida como la general del equipo.
     //
@@ -369,6 +388,12 @@ fn audio_set_output_sinc(sink: &str) -> Result<ResultadoSalida, String> {
             Err(e) => ultimo_error = Some(e),
         }
     }
+
+    // Dejar apuntada la salida elegida para el PROXIMO arranque: el tamaño de
+    // los trozos de sonido se decide al abrir el programa y no se puede cambiar
+    // despues, asi que el arranque necesita saber si va a una cabina Bluetooth
+    // (ver `arranque::preparar_sonido`).
+    crate::arranque::recordar_salida(sink);
 
     // Si habia flujos nuestros y NINGUNO se pudo mover, es un fallo de verdad:
     // hay que decirlo, no devolver 0 como si no hubiera nada sonando.
@@ -508,6 +533,39 @@ fn quitar_silencio(sink: &str) -> Option<String> {
     }
 }
 
+/// 100% en la escala del servidor de sonido.
+const VOLUMEN_NORMAL: u32 = 65536;
+
+/// Sube el volumen que el EQUIPO le da a esta salida si lo encuentra bajo.
+///
+/// POR QUE: el volumen del sistema es un segundo volumen, invisible desde la
+/// app. Alguien lo baja desde los ajustes del equipo —o se quedo bajo de otro
+/// dia, porque el sistema lo recuerda por aparato— y entonces en la app se ve
+/// todo al 100% y por la cabina no sale nada. Buscarlo en mitad de un evento,
+/// entrando a la configuracion del sistema, es justo lo que esta app existe
+/// para evitar.
+///
+/// En un equipo de DJ este volumen tiene que estar arriba SIEMPRE: el volumen
+/// se maneja desde la app (VOL general) y desde la perilla de la cabina. Por
+/// eso se pone al 100% en vez de solo avisar. Y se DICE, que es la diferencia
+/// entre ayudar y toquetear a escondidas.
+fn asegurar_volumen(sink: &str) -> Option<String> {
+    let sinks = parse_sinks(&pactl(&["list", "sinks"]).ok()?);
+    let s = sinks.iter().find(|s| s.name == sink)?;
+    if s.volume == u32::MAX || s.volume >= VOLUMEN_NORMAL {
+        return None; // no se pudo leer, o ya esta arriba
+    }
+    let antes = (f64::from(s.volume) / f64::from(VOLUMEN_NORMAL) * 100.0).round();
+    match pactl(&["set-sink-volume", sink, "100%"]) {
+        Ok(_) => Some(format!(
+            "El equipo tenía esta salida al {antes}% de volumen; se subió al 100%."
+        )),
+        Err(e) => Some(format!(
+            "El equipo tiene esta salida al {antes}% de volumen y no se pudo subir: {e}"
+        )),
+    }
+}
+
 /// Lo que esta pasando AHORA MISMO con el sonido de la app.
 ///
 /// POR QUE HACE FALTA: que `pactl` acepte la orden de mover el flujo NO
@@ -524,6 +582,11 @@ pub struct EstadoSalida {
     pub pausado: bool,
     /// Estado de esa salida: "RUNNING" solo si esta saliendo sonido de verdad.
     pub estado: String,
+    /// Volumen que el EQUIPO le da a esa salida, en %. Es un segundo volumen,
+    /// aparte del de la app, y si esta bajo no se oye nada.
+    pub volumen: u32,
+    /// El equipo tiene esa salida muda.
+    pub silenciada: bool,
 }
 
 /// Comprueba por donde va el sonido de la app y si de verdad esta saliendo.
@@ -544,6 +607,8 @@ fn audio_output_status_sinc() -> Result<EstadoSalida, String> {
             salida: None,
             pausado: false,
             estado: String::new(),
+            volumen: 0,
+            silenciada: false,
         });
     };
     let sinks = list_sinks()?;
@@ -553,12 +618,28 @@ fn audio_output_status_sinc() -> Result<EstadoSalida, String> {
         salida: sink.map(|s| s.name.clone()),
         pausado: nuestro.corked,
         estado: sink.map(|s| s.state.clone()).unwrap_or_default(),
+        volumen: sink
+            .filter(|s| s.volume != u32::MAX)
+            .map(|s| (f64::from(s.volume) / f64::from(VOLUMEN_NORMAL) * 100.0).round() as u32)
+            .unwrap_or(0),
+        silenciada: sink.map(|s| s.muted).unwrap_or(false),
     })
 }
 
 #[cfg(test)]
 mod pruebas {
     use super::*;
+
+    /// Donde queda apuntada la salida elegida (ver `arranque::recordar_salida`).
+    fn dirs_cache_salida() -> std::path::PathBuf {
+        let base = std::env::var_os("XDG_CACHE_HOME")
+            .map(std::path::PathBuf::from)
+            .or_else(|| {
+                std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".cache"))
+            })
+            .unwrap_or_else(std::env::temp_dir);
+        base.join("infiniity-dj").join("salida-elegida")
+    }
 
     /// Salida real de `LC_ALL=C pactl list sinks` (recortada) en un equipo con
     /// salidas virtuales, HDMI e interna. Se guarda tal cual, con la seccion
@@ -694,16 +775,28 @@ Sink Input #210
         // `audio_set_output` ahora tambien cambia la salida GENERAL del equipo,
         // asi que hay que devolverla como estaba: si no, la prueba dejaria el
         // sonido de esta PC apuntando a una salida de pega que ya no existe.
+        // `audio_set_output` tiene dos efectos que salen de la prueba: cambia la
+        // salida GENERAL del equipo y apunta la salida elegida para el proximo
+        // arranque. Las dos se devuelven como estaban: una prueba no puede
+        // dejarle el sonido tocado a quien la corre.
         let general_antes = default_sink();
-        struct Restaurar(Option<String>);
+        let apuntada_antes =
+            std::fs::read_to_string(dirs_cache_salida()).ok();
+        struct Restaurar(Option<String>, Option<String>);
         impl Drop for Restaurar {
             fn drop(&mut self) {
                 if let Some(s) = &self.0 {
                     let _ = pactl(&["set-default-sink", s]);
                 }
+                match &self.1 {
+                    Some(v) => crate::arranque::recordar_salida(v),
+                    None => {
+                        let _ = std::fs::remove_file(dirs_cache_salida());
+                    }
+                }
             }
         }
-        let _restaurar = Restaurar(general_antes);
+        let _restaurar = Restaurar(general_antes, apuntada_antes);
 
         let wav = std::env::temp_dir().join("infiniity-dj-prueba-salida.wav");
         wav_de_prueba(&wav, 20);
@@ -821,6 +914,17 @@ Card #88
         );
         // Una salida con cable no tiene tarjeta Bluetooth que mirar.
         assert_eq!(direccion_de_sink("alsa_output.pci-0000_00_1f.3.analog-stereo"), None);
+    }
+
+    #[test]
+    fn parse_sinks_lee_el_volumen_del_equipo() {
+        let s = parse_sinks(
+            "Sink #7\n\tState: RUNNING\n\tName: cabina\n\tMute: no\n\tVolume: front-left: 32768 /  50% / -6.02 dB,   front-right: 32768 /  50% / -6.02 dB\n",
+        );
+        assert_eq!(s[0].volume, 32768, "el volumen del equipo es un segundo volumen, hay que leerlo");
+        // Sin linea de volumen no se inventa un valor: queda marcado como «no se sabe».
+        let sin = parse_sinks("Sink #8\n\tName: otra\n");
+        assert_eq!(sin[0].volume, u32::MAX);
     }
 
     #[test]

@@ -18,6 +18,54 @@ fn dir_cache() -> PathBuf {
     base.join("infiniity-dj")
 }
 
+/// Donde queda apuntada la ultima salida de audio elegida.
+const MARCA_SALIDA: &str = "salida-elegida";
+
+/// Apunta la salida elegida para el proximo arranque.
+pub fn recordar_salida(sink: &str) {
+    let dir = dir_cache();
+    if std::fs::create_dir_all(&dir).is_err() {
+        return;
+    }
+    if let Err(e) = std::fs::write(dir.join(MARCA_SALIDA), sink) {
+        eprintln!("[arranque] no se pudo apuntar la salida elegida: {e}");
+    }
+}
+
+/// ¿El programa arranco preparado para una cabina Bluetooth?
+pub fn sonido_preparado_para_bluetooth() -> bool {
+    std::env::var("PULSE_LATENCY_MSEC").is_ok()
+}
+
+/// Prepara el sonido ANTES de abrir la ventana, segun donde vaya a sonar.
+///
+/// POR QUE: el navegador interno le pide al sistema trozos de sonido de unos
+/// 60 ms (medido: `tlength = 21168`). Con cable va de sobra. Una cabina
+/// BLUETOOTH trabaja mucho mas lento, y un flujo que no llega a tiempo no
+/// suena bajito: aporta SILENCIO a la mezcla. Eso cuadra con lo medido en un
+/// evento, donde el motor sacaba sonido (-14.4 dB) y por la cabina no llegaba
+/// nada (pico 0.00000) con todo lo demas en orden.
+///
+/// El tamaño de esos trozos se decide cuando el navegador interno abre su
+/// conexion con el sonido, y NO se puede cambiar con el programa ya abierto:
+/// por eso se hace aqui, al arrancar, y por eso hay que saber de antemano a
+/// donde va a sonar (lo apunta `recordar_salida`).
+///
+/// Solo se agranda si la ultima salida elegida era Bluetooth: agrandarlo
+/// siempre le meteria ese retardo tambien a quien va por cable, donde hoy
+/// funciona bien.
+pub fn preparar_sonido() {
+    let elegida = std::fs::read_to_string(dir_cache().join(MARCA_SALIDA)).unwrap_or_default();
+    let elegida = elegida.trim().to_lowercase();
+    if !(elegida.starts_with("bluez") || elegida.contains("bluetooth")) {
+        return;
+    }
+    // 250 ms: por encima de lo que suele costar el camino Bluetooth, y todavia
+    // razonable para mezclar en vivo (el propio Bluetooth ya añade lo suyo).
+    std::env::set_var("PULSE_LATENCY_MSEC", "250");
+    eprintln!("[arranque] salida Bluetooth apuntada: sonido en trozos de 250 ms");
+}
+
 // ---------------------------------------------------------------------------
 // Fuentes de emojis
 // ---------------------------------------------------------------------------

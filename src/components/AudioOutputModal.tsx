@@ -216,7 +216,8 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
         const e = await audioOutputStatus();
         estadoSalida =
           `hay flujo de sonido: ${e.hay_flujo} | va por: ${e.salida ?? "?"}` +
-          ` | en pausa: ${e.pausado} | estado de la salida: ${e.estado || "?"}`;
+          ` | en pausa: ${e.pausado} | estado de la salida: ${e.estado || "?"}` +
+          ` | volumen del equipo: ${e.volumen}% | silenciada por el equipo: ${e.silenciada}`;
       } catch (err) {
         estadoSalida = `(fallo al consultar: ${err instanceof Error ? err.message : String(err)})`;
       }
