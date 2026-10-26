@@ -64,15 +64,17 @@ async function comprobarQueLlega(sink: string): Promise<void> {
   }
 }
 
-/** Ultimo aviso de arreglo y cuando salio: el mismo no se repite enseguida. */
-let ultimoArreglo: { texto: string; cuando: number } | null = null;
+/** Avisos de arreglo recientes y cuando salieron: ninguno se repite enseguida. */
+const avisosRecientes = new Map<string, number>();
 
 /**
  * Cuenta en pantalla lo que hubo que corregir para que se oiga.
  *
  * Sin repetir: al cambiar de salida se aplica varias veces seguidas (al
- * elegirla, al rehacer la conexion, al volver a dar play) y el mismo aviso
- * salia tres y cuatro veces en fila. Repetido deja de leerse.
+ * elegirla, al rehacer la conexion, al volver a dar play) y los mismos avisos
+ * salian tres y cuatro veces en fila, a veces alternados entre si. Se recuerda
+ * CADA aviso con su hora, no solo el ultimo, para que alternar dos tampoco
+ * los cuele. Repetido deja de leerse.
  */
 function avisarDeArreglos(arreglos: string[]): void {
   if (arreglos.length === 0) return;
@@ -80,9 +82,14 @@ function avisarDeArreglos(arreglos: string[]): void {
   const ahora = Date.now();
   arreglos.forEach((a) => {
     console.info("[salidaAudio] arreglado:", a);
-    if (ultimoArreglo && ultimoArreglo.texto === a && ahora - ultimoArreglo.cuando < 8000) return;
-    ultimoArreglo = { texto: a, cuando: ahora };
+    const antes = avisosRecientes.get(a);
+    if (antes !== undefined && ahora - antes < 8000) return;
+    avisosRecientes.set(a, ahora);
     showToast(a);
+  });
+  // Que el mapa no crezca sin limite en una sesion larga.
+  avisosRecientes.forEach((cuando, texto) => {
+    if (ahora - cuando > 60000) avisosRecientes.delete(texto);
   });
 }
 

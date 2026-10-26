@@ -220,6 +220,35 @@ fn armar_informe(estado_app: &str, salida: &str) -> String {
         recoger("pactl", &["list", "cards"])
     );
     let _ = write!(t, "=== BLUETOOTH ===\n{}\n", detalle_bluetooth());
+
+    // EL PORQUE. Cuando una cabina Bluetooth queda "conectada a medias" (su
+    // salida existe pero sin canal de sonido), `pactl` solo muestra el QUE. El
+    // motivo —no se pudo abrir el transporte, fallo la negociacion del codec,
+    // el aparato colgo, un error de D-Bus— lo escribe el servidor de sonido en
+    // su registro, y el demonio de Bluetooth en el suyo. Sin esto, el informe
+    // dice "no suena" con todo lujo de detalle y no dice por que.
+    let _ = write!(
+        t,
+        "=== SERVICIOS DE SONIDO DEL USUARIO (tienen que estar «active») ===\n{}\n\n",
+        ["wireplumber", "pipewire", "pipewire-pulse", "pipewire-media-session"]
+            .iter()
+            .map(|u| format!("{u}: {}", recoger("systemctl", &["--user", "is-active", u])))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+    let _ = write!(
+        t,
+        "=== REGISTRO DEL SERVIDOR DE SONIDO (busca «bluez», «transport», «error», «failed») ===\n{}\n\n",
+        recoger(
+            "journalctl",
+            &["--user", "-u", "wireplumber", "-u", "pipewire", "-u", "pipewire-pulse", "-n", "120", "--no-pager"]
+        )
+    );
+    let _ = write!(
+        t,
+        "=== REGISTRO DEL BLUETOOTH DEL EQUIPO (busca «avdtp», «a2dp», «connect») ===\n{}\n",
+        recoger("journalctl", &["-u", "bluetooth", "-n", "60", "--no-pager"])
+    );
     t
 }
 

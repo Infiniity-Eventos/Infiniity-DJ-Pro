@@ -352,6 +352,7 @@ pub async fn audio_set_output(sink: String) -> Result<ResultadoSalida, String> {
 }
 
 fn audio_set_output_sinc(sink: &str) -> Result<ResultadoSalida, String> {
+    let _candado = CANDADO_SALIDA.lock().unwrap_or_else(|e| e.into_inner());
     // ANTES de mover nada: dejar la salida en condiciones de sonar.
     //
     // El orden importa. Cambiar el modo de trabajo de una cabina Bluetooth
@@ -721,59 +722,122 @@ fn es_fantasma(s: &Sink) -> bool {
 /// Devuelve que paso, para decirlo en pantalla y en el informe.
 fn reavivar_bluetooth(sink: &str) -> Option<String> {
     let dir = direccion_de_sink(sink)?;
-    let sinks = parse_sinks(&pactl(&["list", "sinks"]).ok()?);
-    let salida = sinks.iter().find(|s| s.name == sink)?;
-    if !es_fantasma(salida) {
+    if sana(sink) == Some(true) {
         return None; // tiene transporte: esta bien
     }
-    let tarjetas = parse_cards(&pactl(&["list", "cards"]).ok()?);
-    let tarjeta = tarjetas
-        .iter()
-        .find(|c| c.name.starts_with("bluez_card.") && c.name.contains(&dir))?;
-    let musica = tarjeta
-        .perfiles
-        .iter()
-        .find(|p| es_modo_musica(p))
-        .cloned()
-        .unwrap_or_else(|| "a2dp-sink".to_string());
+    let mac = dir.replace('_', ":");
+    let mut pasos: Vec<&str> = Vec::new();
 
-    let apagar = pactl(&["set-card-profile", &tarjeta.name, "off"]);
-    std::thread::sleep(std::time::Duration::from_millis(900));
-    let encender = pactl(&["set-card-profile", &tarjeta.name, &musica]);
-    // La salida tarda un momento en volver a existir con su transporte.
-    let mut vuelta: Option<Sink> = None;
-    for _ in 0..12 {
-        std::thread::sleep(std::time::Duration::from_millis(400));
-        if let Ok(texto) = pactl(&["list", "sinks"]) {
-            if let Some(s) = parse_sinks(&texto).into_iter().find(|s| s.name == sink) {
-                let fantasma = es_fantasma(&s);
-                vuelta = Some(s);
-                if !fantasma {
-                    break;
-                }
+    // ESCALON 1: reabrir el perfil de la tarjeta (off -> a2dp). Destruye la
+    // salida y la crea de nuevo; al crearla, el servidor de sonido vuelve a
+    // pedir el transporte. Lo mas suave; en un portatil del equipo NO basto.
+    if let Some(tarjeta) = tarjeta_de(&dir) {
+        let musica = tarjeta
+            .perfiles
+            .iter()
+            .find(|p| es_modo_musica(p))
+            .cloned()
+            .unwrap_or_else(|| "a2dp-sink".to_string());
+        let _ = pactl(&["set-card-profile", &tarjeta.name, "off"]);
+        std::thread::sleep(std::time::Duration::from_millis(900));
+        let _ = pactl(&["set-card-profile", &tarjeta.name, &musica]);
+        if esperar_sana(sink, 12) {
+            return Some(
+                "La cabina estaba conectada a medias (sin canal de sonido). Se reabrió la \
+                 conexión y ya tiene por dónde sonar."
+                    .to_string(),
+            );
+        }
+        pasos.push("reabrir la conexión");
+    }
+
+    // ESCALON 2: apagar y encender el Bluetooth del equipo y reconectar. Borra
+    // el estado atascado del controlador, que el perfil no toca.
+    match crate::bluetooth::reiniciar_adaptador_y_conectar(&mac) {
+        Ok(()) => {
+            if esperar_sana(sink, 25) {
+                return Some(
+                    "La cabina estaba conectada a medias (sin canal de sonido). Se reinició el \
+                     Bluetooth del equipo, se reconectó, y ya tiene por dónde sonar."
+                        .to_string(),
+                );
             }
+            pasos.push("reiniciar el Bluetooth del equipo");
+        }
+        Err(e) => {
+            eprintln!("[salida_audio] reiniciar el adaptador fallo: {e}");
+            pasos.push("reiniciar el Bluetooth del equipo (no se pudo)");
         }
     }
-    match (apagar, encender, vuelta) {
-        (Ok(_), Ok(_), Some(s)) if !es_fantasma(&s) => Some(
-            "La cabina estaba conectada a medias (sin canal de sonido). Se reabrió la \
-             conexión y ya tiene por dónde sonar."
-                .to_string(),
-        ),
-        (Ok(_), Ok(_), _) => Some(
-            "La cabina está conectada a medias (sin canal de sonido) y reabrir la conexión \
-             no bastó. Apágala, enciéndela y vuelve a conectarla desde aquí."
-                .to_string(),
-        ),
-        (Err(e), _, _) | (_, Err(e), _) => Some(format!(
-            "La cabina está conectada a medias (sin canal de sonido) y no se pudo reabrir: {e}"
-        )),
+
+    // ESCALON 3: reiniciar los servicios de sonido del usuario. Es lo que haria
+    // un tecnico a mano. Corta el sonido de TODO el equipo un par de segundos
+    // (la app rehace su conexion sola despues), y por eso va el ultimo y solo
+    // con el nodo confirmado fantasma.
+    let reinicio = clean_command("systemctl")
+        .args(["--user", "restart", "wireplumber", "pipewire", "pipewire-pulse"])
+        .output();
+    match reinicio {
+        Ok(out) if out.status.success() => {
+            std::thread::sleep(std::time::Duration::from_millis(2500));
+            let _ = crate::bluetooth::reconectar(&mac);
+            if esperar_sana(sink, 30) {
+                return Some(
+                    "La cabina estaba conectada a medias (sin canal de sonido). Hubo que \
+                     reiniciar el sonido del equipo y reconectarla; ya tiene por dónde sonar."
+                        .to_string(),
+                );
+            }
+            pasos.push("reiniciar el sonido del equipo");
+        }
+        Ok(out) => {
+            let e = String::from_utf8_lossy(&out.stderr).trim().to_string();
+            eprintln!("[salida_audio] reiniciar los servicios de sonido fallo: {e}");
+            pasos.push("reiniciar el sonido del equipo (no se pudo)");
+        }
+        Err(e) => {
+            eprintln!("[salida_audio] no se pudo ejecutar systemctl: {e}");
+            pasos.push("reiniciar el sonido del equipo (no se pudo)");
+        }
     }
+
+    Some(format!(
+        "La cabina sigue conectada a medias (sin canal de sonido) después de: {}. \
+         Apaga la cabina, enciéndela y conéctala otra vez; si sigue igual, reinicia el \
+         portátil y guarda un informe.",
+        pasos.join(", ")
+    ))
+}
+
+/// ¿La salida existe y tiene transporte? Some(true) sana, Some(false)
+/// fantasma, None no existe (o no se pudo consultar).
+fn sana(sink: &str) -> Option<bool> {
+    let sinks = parse_sinks(&pactl(&["list", "sinks"]).ok()?);
+    sinks.iter().find(|s| s.name == sink).map(|s| !es_fantasma(s))
+}
+
+/// Espera (hasta `intentos` x 400 ms) a que la salida exista Y tenga transporte.
+fn esperar_sana(sink: &str, intentos: u32) -> bool {
+    for _ in 0..intentos {
+        std::thread::sleep(std::time::Duration::from_millis(400));
+        if sana(sink) == Some(true) {
+            return true;
+        }
+    }
+    false
+}
+
+/// La tarjeta Bluetooth de una salida, por la direccion que comparten.
+fn tarjeta_de(dir: &str) -> Option<Tarjeta> {
+    parse_cards(&pactl(&["list", "cards"]).ok()?)
+        .into_iter()
+        .find(|c| c.name.starts_with("bluez_card.") && c.name.contains(dir))
 }
 
 /// Para quien conecta la cabina (bluetooth.rs): busca su salida por la
 /// direccion y, si nacio fantasma, la reaviva. Espera a que la salida exista.
 pub fn reavivar_por_direccion(mac: &str) -> Option<String> {
+    let _candado = CANDADO_SALIDA.lock().unwrap_or_else(|e| e.into_inner());
     let marca = mac.to_uppercase().replace(':', "_");
     let mut nombre: Option<String> = None;
     for _ in 0..15 {
@@ -790,6 +854,16 @@ pub fn reavivar_por_direccion(mac: &str) -> Option<String> {
     }
     reavivar_bluetooth(&nombre?)
 }
+
+/// Candado: aplicar la salida va de UNA en una.
+///
+/// POR QUE: la interfaz aplica la salida varias veces seguidas al cambiarla
+/// (al elegirla, al rehacer la conexion, al volver a dar play), y cada una
+/// corre en su propio hilo. Dos a la vez se pisaban: una apagaba el perfil de
+/// la cabina para reavivarla y la otra, viendolo en «off», avisaba de un
+/// «modo manos libres» que no existia. Y dos reavivados a la vez son peores
+/// que ninguno.
+static CANDADO_SALIDA: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /// 100% en la escala del servidor de sonido.
 const VOLUMEN_NORMAL: u32 = 65536;
