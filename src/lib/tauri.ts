@@ -187,6 +187,43 @@ export interface EstadoSalida {
  */
 export const audioOutputStatus = () => invoke<EstadoSalida>("audio_output_status");
 
+// --- Cabinas Bluetooth (ver src-tauri/src/bluetooth.rs) ---
+export interface DispositivoBt {
+  mac: string; // direccion del aparato
+  nombre: string; // nombre para mostrar
+  conectado: boolean;
+  emparejado: boolean;
+  altavoz: boolean; // sirve para sacar sonido (no es un teclado ni un celular)
+}
+export interface EstadoBt {
+  hay: boolean; // el equipo tiene Bluetooth
+  encendido: boolean;
+  motivo: string; // por que no se puede usar (vacio si todo bien)
+}
+export const btEstado = (): Promise<EstadoBt> => {
+  // En el navegador no hay Bluetooth que valga: se dice, en vez de dejar la
+  // lista vacia como si el equipo no tuviera ninguna cabina.
+  if (!isTauri())
+    return Promise.resolve({
+      hay: false,
+      encendido: false,
+      motivo: "(modo navegador) las cabinas Bluetooth solo funcionan en el programa instalado.",
+    });
+  return invoke<EstadoBt>("bt_estado");
+};
+export const btEncender = () => invoke<void>("bt_encender");
+/** Cabinas que el equipo ya conoce (emparejadas o vistas hace poco). */
+export const btDispositivos = (): Promise<DispositivoBt[]> => {
+  if (!isTauri()) return Promise.resolve([]);
+  return invoke<DispositivoBt[]>("bt_dispositivos");
+};
+/** Busca cabinas encendidas alrededor durante unos segundos. */
+export const btBuscar = (segundos: number) =>
+  invoke<DispositivoBt[]>("bt_buscar", { segundos });
+/** Empareja (si hace falta), marca de confianza y conecta. */
+export const btConectar = (mac: string) => invoke<void>("bt_conectar", { mac });
+export const btDesconectar = (mac: string) => invoke<void>("bt_desconectar", { mac });
+
 // --- Monitor de recursos ---
 export interface SystemStats {
   ram_mb: number;

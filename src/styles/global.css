@@ -1107,6 +1107,47 @@ input[type="range"]::-webkit-slider-thumb {
   font-weight: 600;
 }
 
+/* --- Cabinas Bluetooth dentro del modal de salida de audio --- */
+.out-bt {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--glass-border);
+}
+.out-bt-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.out-bt-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.out-bt-nota {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+  text-align: left;
+}
+.out-bt-fila {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+/* Una fila de cabina no es un boton entero (lleva el suyo dentro): no debe
+   parecer pulsable ni reaccionar como tal. */
+.out-row-fija {
+  cursor: default;
+}
+.out-row-fija:hover {
+  border-color: var(--glass-border);
+}
+
 /* ---------------- Emojis seguros en TODA la interfaz ----------------
  *
  * POR QUE EXISTE ESTO: el motor de dibujo que viaja dentro del AppImage

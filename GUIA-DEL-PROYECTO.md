@@ -274,6 +274,7 @@ src-tauri/src/
 ├── midi.rs / ddj200.rs          ⭐ Controladora DDJ-200 (falta probar con hardware).
 ├── downloader.rs                🆕 yt-dlp: buscar, descargar (nice), instalar tools.
 ├── salida_audio.rs              🆕 Salida de audio por `pactl` (ver 2.2-bis). NO tocar LC_ALL=C.
+├── bluetooth.rs                 🆕 Buscar/conectar cabinas por `bluetoothctl`. Todo con plazo: se cuelga.
 └── sysmon.rs                    🆕 Monitor RAM/CPU (lee /proc) + diagnóstico a CSV.
 ```
 
