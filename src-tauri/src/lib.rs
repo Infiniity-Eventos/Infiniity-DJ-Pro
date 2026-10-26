@@ -465,6 +465,7 @@ pub fn run() {
             midi_disconnect,
             salida_audio::audio_outputs,
             salida_audio::audio_set_output,
+            salida_audio::audio_output_status,
             quit_app,
             minimize_window,
             toggle_fullscreen

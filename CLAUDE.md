@@ -65,7 +65,17 @@ Cada una salió de un fallo real en el equipo de alguien:
    velocidad van como curvas en los `AudioParam` (`AudioEngine.ts`), que corren
    en el hilo de audio pase lo que pase con la pantalla.
 
-8. **No quitar el `git push` del final de `publicar.sh`.** Durante dos meses el
+8. **La salida de audio no se cambia arrastrando el flujo que ya suena.** Con
+   cable funciona; con Bluetooth, no. El parlante va a otra frecuencia (44100
+   contra los 48000 del equipo) y con mucho más retardo, así que al llegar hay
+   que renegociar el búfer: medido, eso deja más de dos segundos de silencio
+   total, y el motor de WebKitGTK no lo aguanta — se queda en `interrupted` (un
+   estado propio suyo) y la música se para en seco. Hay que REHACER la conexión
+   de sonido (`AudioEngine.rehacerConexion()`), que reusa el audio ya
+   decodificado y reanuda donde iba. Y hay que COMPROBAR que suena de verdad
+   (`audio_output_status`): que `pactl` acepte la orden no significa que se oiga.
+
+9. **No quitar el `git push` del final de `publicar.sh`.** Durante dos meses el
    guion publicaba el programa pero no subía el código, y nadie lo notó porque
    publicar "funcionaba". GitHub se quedó en la 0.3.4 de agosto mientras salían
    versiones nuevas: alguien trabajó desde otro PC sobre código de dos meses

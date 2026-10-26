@@ -48,8 +48,13 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
   const elegir = async (salida: AudioOutput) => {
     setOcupado(true);
     try {
-      const movidos = await aplicarSalida(salida.name);
+      // La eleccion se guarda ANTES de aplicarla, y el orden importa: al
+      // cambiar a Bluetooth se rehace la conexion de sonido, y todo lo que
+      // vuelve a mandar el sonido a su sitio lee la salida guardada. Si se
+      // guardara despues, leeria la salida VIEJA y el sonido se volveria a la
+      // anterior en mitad del cambio.
       setAudioSink(salida.name);
+      const movidos = await aplicarSalida(salida.name);
       setError(null);
       showToast(
         movidos > 0
@@ -67,10 +72,15 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
   const probar = async () => {
     setOcupado(true);
     try {
+      // Este primer pitido NO es la prueba: esta para forzar que exista la
+      // conexion de sonido, porque el navegador interno no la abre hasta que
+      // algo suena, y sin ella no hay nada que mandar a ninguna parte.
       await engine.probarSalida();
-      // El pitido obliga a que exista la conexion de sonido: recien ahora se
-      // puede mover de verdad y confirmar por donde esta saliendo.
       if (audioSink) await aplicarSalida(audioSink);
+      // Y este si es la prueba. Va aparte porque con Bluetooth se rehace la
+      // conexion de sonido, y eso corta en seco el pitido de arriba: si no se
+      // repitiera, el usuario oiria un pitido a medias y creeria que falla.
+      await engine.probarSalida();
       setError(null);
       showToast("Debe oírse un pitido por la salida elegida");
       await cargar();
@@ -93,7 +103,9 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
 
         <p className="out-hint">
           Elige por dónde suena la música. Si vas a usar un parlante Bluetooth,
-          conéctalo primero desde el sistema y aparecerá en esta lista.
+          conéctalo primero desde el sistema y aparecerá en esta lista. Al pasar
+          a Bluetooth el sonido se corta un instante: hay que rehacer la conexión
+          para que el parlante suene de verdad.
         </p>
 
         {error && <div className="out-error">⚠ {error}</div>}

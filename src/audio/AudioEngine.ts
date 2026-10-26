@@ -26,7 +26,13 @@
 import { useStore, FX_NEUTRO, type DeckId, type FxKey, type FxValues } from "../state/store";
 import { readMediaBytes } from "../lib/tauri";
 import { analizarCancion, golpeEnTramo, siguienteGolpe, type AnalisisCancion } from "./analisis";
-import { aplicarSalidaGuardada } from "../lib/salidaAudio";
+import {
+  aplicarSalidaGuardada,
+  comprobarSalida,
+  olvidarSalidaAplicada,
+  registrarRehacerConexion,
+  rehacerConexionDeSonido,
+} from "../lib/salidaAudio";
 
 /**
  * Le pone un limite de tiempo a una promesa.
@@ -141,6 +147,14 @@ class AudioEngine {
   onFinNatural: ((id: DeckId) => void) | null = null;
   /** Efectos de un toque (drops): audio decodificado y, si suena, su fuente. */
   private efectos = new Map<string, { buffer: AudioBuffer | null; cargando: Promise<AudioBuffer | null> | null; source: AudioBufferSourceNode | null; gain: GainNode | null }>();
+  /** Esta en marcha un intento de levantar el motor (no solapar dos). */
+  private levantando = false;
+  /** Temporizador que comprueba que el sonido siga saliendo por donde debe. */
+  private vigilante: number | null = null;
+  /** Comprobaciones seguidas con problema (se avisa a la segunda, no a la primera). */
+  private fallosSalida = 0;
+  /** Ya se aviso del problema de salida (no repetirlo cada pocos segundos). */
+  private avisadoSalida = false;
 
   ensure(): void {
     if (this.ctx) return;
@@ -192,6 +206,9 @@ class AudioEngine {
     this.master = master;
     this.decks = { A: makeDeck(), B: makeDeck() };
     this.applyCrossfader(useStore.getState().crossfader);
+
+    this.vigilarMotor(ctx);
+    this.vigilarSalida();
 
     // Recien creado el motor ya existe la conexion con el sonido del sistema:
     // es el momento de mandarla a la salida elegida (la cabina), ANTES de que
@@ -593,6 +610,221 @@ class AudioEngine {
     // Nunca bajar una cancion a menos de la mitad: mejor un poco despareja
     // que "pasito" en pleno baile.
     return clamp(gain, 0.5, 4);
+  }
+
+  // -------- Salud del motor de sonido --------
+
+  /**
+   * VIGILANTE DEL MOTOR DE SONIDO.
+   *
+   * POR QUE: WebKitGTK puede dejar el motor en «suspended» o en «interrupted»
+   * (un estado propio suyo, fuera del estandar) cuando el aparato de sonido
+   * cambia por debajo — por ejemplo al mandar el sonido a un parlante
+   * Bluetooth, que trabaja a otra frecuencia y con mucho mas retardo. Cuando
+   * eso pasa la musica se para EN SECO.
+   *
+   * Antes nadie vigilaba esto: `despertar()` mira el estado del motor solo al
+   * darle play, asi que si se caia con la cancion ya sonando, la app no se
+   * enteraba y no decia NADA. Se quedaba muda en mitad del evento y parecia
+   * que el programa se habia colgado. Era el fallo reportado con Bluetooth.
+   */
+  private vigilarMotor(ctx: AudioContext): void {
+    ctx.onstatechange = () => {
+      if (ctx !== this.ctx) return; // motor viejo, ya reemplazado
+      if (ctx.state === "running") return;
+      const sonando = !!this.decks && (this.decks.A.playing || this.decks.B.playing);
+      if (!sonando) return; // sin musica puesta, dormirse es lo normal
+      void this.levantarMotor(ctx.state);
+    };
+  }
+
+  /** Intenta que el sonido vuelva: primero reanudar, y si no, rehacer la conexion. */
+  private async levantarMotor(estado: string): Promise<void> {
+    if (this.levantando) return;
+    this.levantando = true;
+    const { showToast } = useStore.getState();
+    showToast(`El sonido se paró (motor «${estado}»). Recuperando...`);
+    try {
+      try {
+        await this.ctx?.resume();
+      } catch (err) {
+        console.error("[AudioEngine] no se pudo reanudar el motor", err);
+      }
+      if (this.ctx?.state === "running") {
+        showToast("Sonido recuperado");
+        return;
+      }
+      // Reanudar no bastó: la conexion con el sonido del sistema esta rota y
+      // hay que hacerla de nuevo (la cancion sigue en memoria, no se pierde).
+      await rehacerConexionDeSonido();
+      // En variable aparte a proposito: `this.ctx` es OTRO objeto despues de
+      // rehacer la conexion, y si no TypeScript cree que sigue sin arrancar.
+      const estadoNuevo: string | undefined = this.ctx?.state;
+      showToast(
+        estadoNuevo === "running"
+          ? "Sonido recuperado"
+          : `El sonido no arranca (motor «${estadoNuevo}»). Revisa la salida de audio del equipo.`
+      );
+    } catch (err) {
+      console.error("[AudioEngine] no se pudo recuperar el sonido", err);
+      showToast(
+        `No se pudo recuperar el sonido: ${err instanceof Error ? err.message : String(err)}`
+      );
+    } finally {
+      this.levantando = false;
+    }
+  }
+
+  /**
+   * Comprueba cada pocos segundos que, con musica puesta, el sonido siga
+   * saliendo de verdad por la salida elegida. Es la unica forma de enterarse
+   * de que se corto por abajo: el parlante Bluetooth se desconecto, el aparato
+   * se durmio, o el sistema movio el flujo por su cuenta. Nada de eso avisa al
+   * navegador interno, asi que sin esto la app se queda muda sin decir nada.
+   *
+   * Solo INFORMA, no toca nada: una falsa alarma en mitad de un evento no
+   * puede provocar un corte que no existia.
+   */
+  private vigilarSalida(): void {
+    if (this.vigilante !== null) return;
+    this.vigilante = window.setInterval(() => void this.revisarSalida(), 8000);
+  }
+
+  private async revisarSalida(): Promise<void> {
+    const { audioSink, showToast } = useStore.getState();
+    if (!audioSink || !this.decks) return;
+    if (!this.decks.A.playing && !this.decks.B.playing) return;
+    let problema: string | null = null;
+    try {
+      problema = await comprobarSalida(audioSink);
+    } catch (err) {
+      // Que falle la comprobacion no es que falle el sonido: no se alarma al
+      // usuario por esto, pero queda en el registro.
+      console.error("[AudioEngine] no se pudo comprobar la salida de audio", err);
+      return;
+    }
+    if (!problema) {
+      this.fallosSalida = 0;
+      this.avisadoSalida = false;
+      return;
+    }
+    // Se avisa a la SEGUNDA comprobacion seguida con problema: recien dado el
+    // play la salida tarda un momento en arrancar y seria una falsa alarma.
+    this.fallosSalida += 1;
+    if (this.fallosSalida < 2 || this.avisadoSalida) return;
+    this.avisadoSalida = true;
+    showToast(`Puede que no se esté oyendo: ${problema}. Revisa «Salida de audio».`);
+  }
+
+  /**
+   * Rehace la conexion con el sonido del sistema SIN perder lo que suena.
+   *
+   * POR QUE EXISTE: hay dos casos en los que la conexion actual ya no sirve y
+   * no se puede arreglar desde dentro — (1) mandar el sonido a un parlante
+   * Bluetooth, porque arrastrar el flujo que ya suena no aguanta el cambio de
+   * frecuencia y de retardo (ver la cabecera de `lib/salidaAudio.ts`), y (2)
+   * que WebKitGTK deje el motor «interrupted» y no quiera reanudar.
+   *
+   * COMO NO SE PIERDE LA CANCION: el audio decodificado (`AudioBuffer`) no
+   * pertenece a ningun motor, asi que se reusa tal cual en el nuevo — no hay
+   * que volver a leer ni decodificar el archivo. Lo unico que se rehace son
+   * los nodos del grafo. Cada deck vuelve a arrancar en el segundo exacto en
+   * el que iba.
+   */
+  async rehacerConexion(): Promise<void> {
+    const viejo = this.ctx;
+    if (!viejo || !this.decks) return;
+
+    // En mitad de una transicion no: rehacer el grafo la dejaria a medias, con
+    // el crossfader colgado donde estuviera y los dos decks sonando.
+    if (this.mixAnim) {
+      throw new Error(
+        "hay una transición en marcha; espera a que termine y vuelve a intentarlo"
+      );
+    }
+    // Con una cancion a medio cargar tampoco: la carga en curso escribiria en
+    // el deck viejo y la cancion no llegaria a aparecer nunca.
+    const { decks: estadoDecks } = useStore.getState();
+    if (estadoDecks.A.loading || estadoDecks.B.loading) {
+      throw new Error(
+        "hay una canción cargando; espera a que termine y vuelve a intentarlo"
+      );
+    }
+
+    const ids: DeckId[] = ["A", "B"];
+    // Cerrar las rampas de velocidad ANTES de la foto: `plegarRampa()` deja la
+    // velocidad y la posicion reales al dia, y sin eso la foto se llevaria la
+    // velocidad con la que la rampa EMPEZO.
+    ids.forEach((id) => this.cancelRateAnim(id));
+    const fotos = ids.map((id) => {
+      const d = this.decks![id];
+      return {
+        id,
+        buffer: d.buffer,
+        naturalBpm: d.naturalBpm,
+        analisis: d.analisis,
+        rate: d.rate,
+        posicion: this.getPosition(id),
+        sonaba: d.playing,
+        fx: { ...d.fx.valores },
+        volumen: d.volumeGain.gain.value,
+        norm: d.normGain.gain.value,
+        loadToken: d.loadToken,
+      };
+    });
+    // Los buffers de los efectos tambien se reusan; sus nodos, no.
+    const efectos = new Map<string, AudioBuffer | null>();
+    this.efectos.forEach((e, k) => efectos.set(k, e.buffer));
+
+    ids.forEach((id) => this.stopSource(id));
+    this.efectos.clear();
+
+    this.ctx = null;
+    this.master = null;
+    this.decks = null;
+    try {
+      await viejo.close();
+    } catch (err) {
+      // No es fatal: el motor nuevo se crea igual. Pero que quede dicho.
+      console.error("[AudioEngine] no se pudo cerrar el motor viejo", err);
+    }
+
+    olvidarSalidaAplicada(); // el flujo de sonido es OTRO: hay que remandarlo
+    this.ensure(); // motor y grafo nuevos (volumen general y crossfader incluidos)
+    const ctx = this.ctx!;
+
+    fotos.forEach((f) => {
+      const d = this.decks![f.id];
+      d.buffer = f.buffer;
+      d.naturalBpm = f.naturalBpm;
+      d.analisis = f.analisis;
+      d.rate = f.rate;
+      d.offset = f.posicion;
+      d.loadToken = f.loadToken;
+      d.normGain.gain.value = f.norm;
+      d.volumeGain.gain.value = f.volumen;
+      (Object.keys(f.fx) as FxKey[]).forEach((k) => this.setFx(f.id, k, f.fx[k]));
+    });
+    efectos.forEach((buffer, k) =>
+      this.efectos.set(k, { buffer, cargando: null, source: null, gain: null })
+    );
+
+    if (ctx.state !== "running") {
+      try {
+        await ctx.resume();
+      } catch (err) {
+        console.error("[AudioEngine] el motor nuevo no quiso arrancar", err);
+      }
+    }
+
+    // Reanudar cada deck donde iba.
+    fotos.forEach((f) => {
+      if (f.sonaba && f.buffer) this.startFrom(f.id, f.posicion);
+    });
+
+    // Solo AHORA existe de verdad el flujo de sonido (lo abre el navegador
+    // interno al empezar a sonar): recien ahora se puede mandar a la cabina.
+    await aplicarSalidaGuardada();
   }
 
   // -------- Transporte --------
@@ -1097,3 +1329,9 @@ class AudioEngine {
 }
 
 export const engine = new AudioEngine();
+
+// El cambio de salida (lib/salidaAudio.ts) necesita poder rehacer la conexion
+// de sonido. Se registra aqui en vez de importar el motor alla, que crearia un
+// import circular.
+registrarRehacerConexion(() => engine.rehacerConexion());
+

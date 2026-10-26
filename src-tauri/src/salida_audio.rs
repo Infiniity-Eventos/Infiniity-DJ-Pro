@@ -75,6 +75,9 @@ struct Sink {
     index: u32,
     name: String,
     description: String,
+    /// "RUNNING" | "IDLE" | "SUSPENDED". Solo RUNNING significa que por ahi
+    /// esta saliendo sonido de verdad AHORA MISMO.
+    state: String,
 }
 
 fn list_sinks() -> Result<Vec<Sink>, String> {
@@ -92,6 +95,7 @@ fn parse_sinks(text: &str) -> Vec<Sink> {
                 index: rest.trim().parse().unwrap_or(u32::MAX),
                 name: String::new(),
                 description: String::new(),
+                state: String::new(),
             });
             continue;
         }
@@ -107,6 +111,12 @@ fn parse_sinks(text: &str) -> Vec<Sink> {
         if cur.description.is_empty() {
             if let Some(v) = t.strip_prefix("Description: ") {
                 cur.description = v.trim().to_string();
+                continue;
+            }
+        }
+        if cur.state.is_empty() {
+            if let Some(v) = t.strip_prefix("State: ") {
+                cur.state = v.trim().to_string();
             }
         }
     }
@@ -129,6 +139,8 @@ struct Stream {
     sink: u32,
     pid: Option<u32>,
     app: String,
+    /// El servidor de sonido tiene el flujo en pausa (no pide muestras).
+    corked: bool,
 }
 
 fn list_streams() -> Result<Vec<Stream>, String> {
@@ -145,12 +157,15 @@ fn parse_streams(text: &str) -> Vec<Stream> {
                 sink: u32::MAX,
                 pid: None,
                 app: String::new(),
+                corked: false,
             });
             continue;
         }
         let Some(cur) = out.last_mut() else { continue };
         if let Some(v) = t.strip_prefix("Sink: ") {
             cur.sink = v.trim().parse().unwrap_or(u32::MAX);
+        } else if let Some(v) = t.strip_prefix("Corked: ") {
+            cur.corked = v.trim() == "yes";
         } else if let Some(v) = t.strip_prefix("application.process.id = ") {
             cur.pid = v.trim().trim_matches('"').parse().ok();
         } else if let Some(v) = t.strip_prefix("application.name = ") {
@@ -301,6 +316,50 @@ pub fn audio_set_output(sink: String) -> Result<u32, String> {
     Ok(movidos)
 }
 
+/// Lo que esta pasando AHORA MISMO con el sonido de la app.
+///
+/// POR QUE HACE FALTA: que `pactl` acepte la orden de mover el flujo NO
+/// significa que por el parlante salga sonido. Con Bluetooth pasaba
+/// exactamente eso: la orden salia bien, la app decia "sonido enviado" y por
+/// la cabina no se oia nada. Esto permite comprobarlo y decir la verdad.
+#[derive(Serialize, Clone)]
+pub struct EstadoSalida {
+    /// La app tiene abierta una conexion de sonido con el sistema.
+    pub hay_flujo: bool,
+    /// Salida por la que va esa conexion (nombre tecnico), si se pudo saber.
+    pub salida: Option<String>,
+    /// El servidor de sonido tiene el flujo en pausa.
+    pub pausado: bool,
+    /// Estado de esa salida: "RUNNING" solo si esta saliendo sonido de verdad.
+    pub estado: String,
+}
+
+/// Comprueba por donde va el sonido de la app y si de verdad esta saliendo.
+#[tauri::command]
+pub fn audio_output_status() -> Result<EstadoSalida, String> {
+    let streams = list_streams()?;
+    let Some(nuestro) = streams
+        .iter()
+        .find(|s| stream_is_ours(s) && s.sink != u32::MAX)
+    else {
+        // Sin flujo no hay nada que comprobar: la app no esta sonando.
+        return Ok(EstadoSalida {
+            hay_flujo: false,
+            salida: None,
+            pausado: false,
+            estado: String::new(),
+        });
+    };
+    let sinks = list_sinks()?;
+    let sink = sinks.iter().find(|s| s.index == nuestro.sink);
+    Ok(EstadoSalida {
+        hay_flujo: true,
+        salida: sink.map(|s| s.name.clone()),
+        pausado: nuestro.corked,
+        estado: sink.map(|s| s.state.clone()).unwrap_or_default(),
+    })
+}
+
 #[cfg(test)]
 mod pruebas {
     use super::*;
@@ -335,6 +394,7 @@ Sink #63
 Sink Input #210
 	Driver: protocol-native.c
 	Sink: 40
+	Corked: yes
 	Properties:
 		application.name = "paplay"
 		application.process.id = "1267609"
@@ -355,6 +415,9 @@ Sink Input #210
             "la descripcion no debe venir de alsa.name: {}",
             s[1].description
         );
+        // El estado es lo que delata si por esa salida esta saliendo sonido.
+        assert_eq!(s[0].state, "RUNNING");
+        assert_eq!(s[1].state, "SUSPENDED");
     }
 
     #[test]
@@ -371,6 +434,122 @@ Sink Input #210
         assert_eq!(f[1].sink, 40);
         assert_eq!(f[1].pid, Some(1_267_609));
         assert_eq!(f[1].app, "paplay");
+        // "Corked: yes" = el sistema lo tiene en pausa (no pide muestras).
+        assert!(!f[0].corked);
+        assert!(f[1].corked);
+    }
+
+    /// Descarga los modulos de prueba aunque la prueba falle a medias: si no,
+    /// quedarian salidas de pega en el equipo del usuario.
+    struct Limpieza(Vec<String>);
+    impl Drop for Limpieza {
+        fn drop(&mut self) {
+            for m in &self.0 {
+                let _ = pactl(&["unload-module", m]);
+            }
+        }
+    }
+
+    /// Un WAV de verdad (sinusoide bajita) para tener algo que suene.
+    fn wav_de_prueba(ruta: &std::path::Path, segundos: u32) {
+        let (tasa, canales) = (48_000u32, 1u16);
+        let muestras = tasa * segundos;
+        let datos = muestras * 2;
+        let mut w: Vec<u8> = Vec::with_capacity(44 + datos as usize);
+        w.extend(b"RIFF");
+        w.extend(&(36 + datos).to_le_bytes());
+        w.extend(b"WAVEfmt ");
+        w.extend(&16u32.to_le_bytes());
+        w.extend(&1u16.to_le_bytes()); // PCM
+        w.extend(&canales.to_le_bytes());
+        w.extend(&tasa.to_le_bytes());
+        w.extend(&(tasa * 2).to_le_bytes()); // bytes por segundo
+        w.extend(&2u16.to_le_bytes()); // bytes por bloque
+        w.extend(&16u16.to_le_bytes()); // bits por muestra
+        w.extend(b"data");
+        w.extend(&datos.to_le_bytes());
+        for n in 0..muestras {
+            let t = n as f64 / tasa as f64;
+            let v = (t * 440.0 * std::f64::consts::TAU).sin() * 6000.0;
+            w.extend(&(v as i16).to_le_bytes());
+        }
+        std::fs::write(ruta, w).unwrap();
+    }
+
+    /// LA PRUEBA QUE IMPORTA: contra el sonido de verdad del equipo, comprobar
+    /// que `audio_set_output` mueve el flujo y que `audio_output_status` lo
+    /// confirma. Es la base de todo el arreglo de Bluetooth: si la
+    /// comprobacion mintiera, la app volveria a decir "sonido enviado"
+    /// mientras por el parlante no se oye nada.
+    ///
+    /// Suena en salidas de pega (`module-null-sink`), asi que no se oye nada.
+    #[test]
+    #[ignore = "necesita pactl y el sonido del equipo"]
+    fn mover_el_sonido_se_puede_comprobar_de_verdad() {
+        let m1 = pactl(&["load-module", "module-null-sink", "sink_name=djprueba1"])
+            .expect("hace falta pactl")
+            .trim()
+            .to_string();
+        let m2 = pactl(&["load-module", "module-null-sink", "sink_name=djprueba2"])
+            .expect("hace falta pactl")
+            .trim()
+            .to_string();
+        let _limpieza = Limpieza(vec![m1, m2]);
+
+        let wav = std::env::temp_dir().join("infiniity-dj-prueba-salida.wav");
+        wav_de_prueba(&wav, 20);
+
+        // Hijo NUESTRO sonando: asi `stream_is_ours` lo reconoce subiendo por
+        // la cadena de padres, igual que hace con el navegador interno.
+        let mut hijo = clean_command("paplay")
+            .env("PULSE_SINK", "djprueba1")
+            .arg(&wav)
+            .spawn()
+            .expect("hace falta paplay (pulseaudio-utils)");
+
+        // Darle tiempo a que abra el flujo de sonido.
+        let mut estado = None;
+        for _ in 0..40 {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            let e = audio_output_status().unwrap();
+            if e.hay_flujo && e.salida.as_deref() == Some("djprueba1") {
+                estado = Some(e);
+                break;
+            }
+        }
+        let e = estado.expect("el flujo de sonido no aparecio en djprueba1");
+        assert!(!e.pausado, "el flujo no deberia estar en pausa");
+        assert_eq!(
+            e.estado, "RUNNING",
+            "si esta sonando, la salida tiene que estar RUNNING"
+        );
+
+        // Y ahora lo que hace la app al cambiar de salida.
+        let movidos = audio_set_output("djprueba2".to_string()).unwrap();
+        assert!(movidos >= 1, "deberia haber movido al menos un flujo");
+        let mut llego = false;
+        for _ in 0..30 {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            if audio_output_status().unwrap().salida.as_deref() == Some("djprueba2") {
+                llego = true;
+                break;
+            }
+        }
+        assert!(llego, "el estado deberia confirmar que el sonido se mudo");
+
+        // Y que la comprobacion DETECTA el problema: sin flujo, no hay sonido.
+        let _ = hijo.kill();
+        let _ = hijo.wait();
+        let mut sin_flujo = false;
+        for _ in 0..30 {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            if !audio_output_status().unwrap().hay_flujo {
+                sin_flujo = true;
+                break;
+            }
+        }
+        assert!(sin_flujo, "al parar el sonido tiene que verse que no hay flujo");
+        let _ = std::fs::remove_file(&wav);
     }
 
     #[test]
@@ -397,5 +576,31 @@ Sink Input #210
             assert!(!s.name.is_empty());
             assert!(!s.description.is_empty(), "{} sin descripcion", s.name);
         }
+    }
+
+    /// Contra el sonido de verdad del equipo (como la de arriba, se salta en
+    /// CI con `#[ignore]`): comprueba que el estado se puede leer y que lo que
+    /// dice cuadra consigo mismo.
+    #[test]
+    #[ignore = "necesita pactl y el sonido del equipo"]
+    fn audio_output_status_real_cuadra_consigo_mismo() {
+        let e = audio_output_status().expect("hace falta pactl (pulseaudio-utils)");
+        if !e.hay_flujo {
+            // La app no esta sonando: entonces no hay salida ni estado que dar.
+            assert!(e.salida.is_none(), "sin flujo no puede haber salida");
+            assert!(e.estado.is_empty(), "sin flujo no puede haber estado");
+            return;
+        }
+        let salida = e.salida.expect("con flujo hay que saber por donde va");
+        let sinks = list_sinks().unwrap();
+        assert!(
+            sinks.iter().any(|s| s.name == salida),
+            "la salida «{salida}» no esta entre las del equipo"
+        );
+        assert!(
+            ["RUNNING", "IDLE", "SUSPENDED"].contains(&e.estado.as_str()),
+            "estado raro: «{}»",
+            e.estado
+        );
     }
 }

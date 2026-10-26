@@ -174,6 +174,19 @@ export const audioOutputs = () => invoke<AudioOutput[]>("audio_outputs");
 /** Devuelve cuantos flujos de sonido se movieron (0 = la app aun no sonaba). */
 export const audioSetOutput = (sink: string) => invoke<number>("audio_set_output", { sink });
 
+/** Lo que pasa AHORA MISMO con el sonido de la app (ver salida_audio.rs). */
+export interface EstadoSalida {
+  hay_flujo: boolean; // la app tiene abierta una conexion de sonido
+  salida: string | null; // salida por la que va (nombre tecnico)
+  pausado: boolean; // el sistema lo tiene en pausa
+  estado: string; // "RUNNING" solo si esta saliendo sonido de verdad
+}
+/**
+ * Comprueba si de verdad esta saliendo sonido por donde creemos. Que mover el
+ * flujo no de error NO significa que se oiga: con Bluetooth pasaba justo eso.
+ */
+export const audioOutputStatus = () => invoke<EstadoSalida>("audio_output_status");
+
 // --- Monitor de recursos ---
 export interface SystemStats {
   ram_mb: number;

@@ -8,9 +8,26 @@
  * Cada conexion nueva arranca donde diga el sistema, no donde la pusimos
  * nosotros. Si no se reaplica, en mitad de un evento el sonido se vuelve solo
  * a los parlantes del portatil.
+ *
+ * POR QUE CON BLUETOOTH NO BASTA CON ARRASTRAR EL FLUJO (0.4.33):
+ * cambiar de salida se hacia ARRASTRANDO el flujo que ya estaba sonando
+ * (`pactl move-sink-input`). Con un cable eso funciona. Con Bluetooth no: el
+ * parlante trabaja a otra frecuencia (casi siempre 44100 contra los 48000 del
+ * equipo) y con MUCHISIMO mas retardo, asi que al llegar el flujo hay que
+ * renegociar el tamaño del bufer. Midiendo el sonido que de verdad sale por la
+ * salida destino, ese arrastre deja MAS DE DOS SEGUNDOS de silencio total
+ * mientras se renegocia — y eso en el caso facil, sin Bluetooth de por medio.
+ * Con un parlante Bluetooth real el motor de audio de WebKitGTK no aguanta esa
+ * pausa: se queda en «interrupted» (un estado propio suyo, fuera del estandar)
+ * y la musica se para en seco. Era exactamente el fallo reportado: en un
+ * portatil dejaba de sonar al cambiar, y en otro sonaba un momento y se cortaba.
+ *
+ * La solucion es no arrastrar nada: se REHACE la conexion de sonido para que
+ * nazca ya pegada al parlante, y asi negocia su bufer con el aparato de verdad.
+ * La cancion no se pierde (sigue en memoria) y se reanuda donde iba.
  */
 
-import { audioSetOutput } from "./tauri";
+import { audioSetOutput, audioOutputStatus } from "./tauri";
 import { useStore } from "../state/store";
 
 /** La salida guardada ya esta aplicada al flujo de sonido que suena ahora. */
@@ -19,13 +36,138 @@ let aplicada = false;
 let avisado = false;
 
 /**
+ * Es un parlante o amplificador Bluetooth. Misma regla que `kind_of()` en
+ * `src-tauri/src/salida_audio.rs`.
+ */
+export function esBluetooth(sink: string): boolean {
+  const n = sink.toLowerCase();
+  return n.startsWith("bluez") || n.includes("bluetooth");
+}
+
+/**
+ * Como rehacer la conexion de sonido. Lo registra el motor de audio al
+ * arrancar; se guarda aqui para no tener que importar el motor (que a su vez
+ * importa este archivo, y seria una pescadilla que se muerde la cola).
+ */
+let rehacerConexion: (() => Promise<void>) | null = null;
+
+export function registrarRehacerConexion(fn: () => Promise<void>): void {
+  rehacerConexion = fn;
+}
+
+/**
+ * Se esta rehaciendo la conexion ahora mismo. Rehacerla crea un motor nuevo,
+ * que vuelve a pedir la salida guardada; sin esta marca se llamaria a si misma
+ * sin parar.
+ */
+let rehaciendo = false;
+
+/**
+ * Rehace la conexion de sonido del motor (ver la cabecera). Pasar SIEMPRE por
+ * aqui y no por el motor directamente: esta es la puerta que evita que se
+ * llame a si misma sin parar.
+ */
+export async function rehacerConexionDeSonido(): Promise<void> {
+  if (rehaciendo || !rehacerConexion) return;
+  rehaciendo = true;
+  try {
+    await rehacerConexion();
+  } finally {
+    rehaciendo = false;
+  }
+}
+
+/**
+ * El motor rehizo su conexion: el flujo de sonido es OTRO y hay que volver a
+ * mandarlo a la salida elegida.
+ */
+export function olvidarSalidaAplicada(): void {
+  aplicada = false;
+}
+
+/**
  * Manda el sonido a `sink`. Devuelve cuantos flujos se movieron:
  * 0 = la app todavia no estaba sonando (no habia nada que mover).
+ *
+ * Si la salida es Bluetooth, ademas rehace la conexion de sonido (ver la
+ * cabecera): mover el flujo solo sirve para que el sistema RECUERDE la salida,
+ * y asi la conexion nueva nace ya en el parlante.
+ *
+ * Lanza error si al terminar el sonido no quedo donde se pidio. Antes esto se
+ * daba por bueno con que `pactl` no se quejara, y por eso la app decia "sonido
+ * enviado" mientras por la cabina no se oia nada.
  */
 export async function aplicarSalida(sink: string): Promise<number> {
   const movidos = await audioSetOutput(sink);
   aplicada = movidos > 0;
+
+  // La app no esta sonando: no hay flujo que mover ni nada que comprobar. El
+  // sistema ya quedo avisado y al dar play saldra por ahi.
+  if (movidos === 0) return 0;
+
+  if (esBluetooth(sink) && !rehaciendo) {
+    await rehacerConexionDeSonido();
+    // La conexion nueva deberia nacer ya en el parlante (el sistema recuerda
+    // la salida por programa), pero no se da por supuesto: se manda igual.
+    aplicada = (await audioSetOutput(sink)) > 0;
+  }
+
+  // Comprobar donde quedo de verdad.
+  //
+  // Se espera a que el flujo aparezca donde debe en vez de mirar una sola vez:
+  // al rehacer la conexion, el navegador interno tarda un instante en abrirla
+  // otra vez, y comprobarlo al primer intento daria una falsa alarma.
+  //
+  // OJO: aqui NO se exige que la salida este ya "RUNNING". Recien cambiada
+  // tarda un par de segundos en arrancar (medido con el sonido real del
+  // equipo), asi que eso seria otra falsa alarma. De que suene de verdad se
+  // encarga `comprobarSalida()`, que corre mientras hay musica puesta.
+  let est = await audioOutputStatus();
+  for (let i = 0; i < 10; i++) {
+    if (est.hay_flujo && (!est.salida || est.salida === sink)) break;
+    await new Promise((listo) => window.setTimeout(listo, 200));
+    est = await audioOutputStatus();
+  }
+  if (!est.hay_flujo) {
+    throw new Error(
+      "La app se quedó sin conexión de sonido al cambiar de salida. Dale play otra vez."
+    );
+  }
+  if (est.salida && est.salida !== sink) {
+    throw new Error(
+      `El sistema devolvió el sonido a «${est.salida}» en vez de dejarlo en la salida elegida.`
+    );
+  }
+  if (est.pausado) {
+    throw new Error(
+      "El sistema dejó el sonido de la app en pausa. Revisa el volumen del equipo y vuelve a intentarlo."
+    );
+  }
+  aplicada = true;
   return movidos;
+}
+
+/**
+ * ¿Esta saliendo sonido de verdad por `sink`? Devuelve null si todo bien, o
+ * una explicacion del problema para mostrarsela al usuario.
+ *
+ * Se usa mientras hay musica puesta: es la unica forma de enterarse de que el
+ * sonido se corto por abajo (el aparato se durmio, el parlante Bluetooth se
+ * desconecto, el sistema movio el flujo por su cuenta). Solo INFORMA: no toca
+ * nada, porque una falsa alarma en mitad de un evento no puede provocar un
+ * corte que no existia.
+ */
+export async function comprobarSalida(sink: string): Promise<string | null> {
+  const est = await audioOutputStatus();
+  if (!est.hay_flujo) return "la app se quedó sin conexión con el sonido del equipo";
+  if (est.pausado) return "el sistema tiene el sonido de la app en pausa";
+  if (est.salida && est.salida !== sink) {
+    return `el sonido se fue a «${est.salida}» en vez de la salida elegida`;
+  }
+  if (est.estado && est.estado !== "RUNNING") {
+    return `la salida elegida no está reproduciendo (está «${est.estado}»)`;
+  }
+  return null;
 }
 
 /**
