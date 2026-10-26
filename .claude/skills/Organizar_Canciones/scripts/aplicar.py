@@ -32,8 +32,8 @@ from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from comun import (CATALOGO, COMODIN, FIRMA, UMBRAL_CARPETA_NUEVA, artista_canonico,  # noqa: E402
-                   guardar_estado, leer_estado, nombre_archivo, titulo_bonito)
+from comun import (AUDIO_EXT, CATALOGO, COMODIN, FIRMA, SIN_CLASIFICAR, UMBRAL_CARPETA_NUEVA,  # noqa: E402
+                   artista_canonico, guardar_estado, leer_estado, nombre_archivo, titulo_bonito)
 
 APPIMAGE = Path.home() / "Applications" / "Infiniity-DJ.AppImage"
 
@@ -142,6 +142,51 @@ def escribir_etiquetas(ruta: Path, c: dict, gain: float | None, bpm: float | Non
     t.save(ruta, v2_version=3)  # v2.3: lo leen hasta los programas viejos
 
 
+def sin_audio(ruta: Path) -> bool:
+    """El archivo no tiene audio: 0 bytes, o pesa pero esta ENTERO A CEROS.
+
+    Pasa con las descargas que se cortan: el archivo queda del tamano correcto
+    y parece normal en el explorador, pero dentro no hay nada. No suena aqui ni
+    en ninguna PC del equipo (2026-10-24: 20 archivos asi en un lote de 1617).
+    Se lee solo el primer trozo; si ahi hay algun byte distinto de cero, el
+    archivo tiene datos y se deja en paz."""
+    try:
+        if ruta.stat().st_size == 0:
+            return True
+        with ruta.open("rb") as f:
+            if any(f.read(1 << 20)):
+                return False
+            while True:
+                trozo = f.read(1 << 20)
+                if not trozo:
+                    return True
+                if any(trozo):
+                    return False
+    except OSError:
+        return False
+
+
+def borrar_sin_audio(bib: Path, simular: bool) -> int:
+    """Borra de "Sin clasificar" lo que no tiene audio (decision del usuario,
+    2026-10-26: "lo que no tiene audio borrarlo siempre"). No se puede
+    organizar ni oir, y ocupa sitio en todas las PC."""
+    carpeta = bib / SIN_CLASIFICAR
+    if not carpeta.is_dir():
+        return 0
+    n = 0
+    for f in sorted(carpeta.iterdir()):
+        if not f.is_file() or f.suffix.lower() not in AUDIO_EXT:
+            continue
+        if not sin_audio(f):
+            continue
+        print(f"  sin audio (archivo a ceros), {'se borraria' if simular else 'borrado'}: {f.name}")
+        if not simular:
+            f.unlink()
+        n += 1
+    print(f"Sin audio: {n}")
+    return n
+
+
 def esperar_pcs_conectadas(minutos: int) -> None:
     """Espera a que las PC del equipo que estan CONECTADAS tengan el 100% de la
     biblioteca (asi arman la copia nueva a partir de la vieja). Las apagadas NO
@@ -181,9 +226,15 @@ def main():
     ap.add_argument("--forzar", action="store_true", help="reorganizar aunque ya este firmada")
     ap.add_argument("--mover", action="store_true", help="mover en vez de copiar (sin fase de limpieza)")
     ap.add_argument("--limpiar", action="store_true", help="borrar los originales de las canciones ya copiadas (fase 2)")
+    ap.add_argument("--borrar-sin-audio", action="store_true",
+                    help="borrar de Sin clasificar lo que no tiene audio (archivos a ceros)")
     ap.add_argument("--esperar", type=int, default=0, help="con --limpiar: esperar hasta N minutos a que las PC CONECTADAS lleguen al 100%%")
     a = ap.parse_args()
     bib = Path(a.biblioteca)
+    if a.borrar_sin_audio:
+        borrar_sin_audio(bib, a.simular)
+        if a.plan in ("/dev/null", ""):
+            return
     if a.limpiar:
         if a.esperar:
             esperar_pcs_conectadas(a.esperar)

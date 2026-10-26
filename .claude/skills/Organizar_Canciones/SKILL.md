@@ -43,6 +43,14 @@ Reglas de criterio (tú decides cuando el script dice `genero_seguro: false` o `
   **pregunta**.
 - **Mixes** (> 15 min o "mix/megamix/set/enganchado" en el nombre): van a la carpeta de su género con
   nombre `Mix Infiniity <Género> NN` (lo pone `aplicar.py`), artista "Infiniity Eventos" (D8/D18).
+- **Packs de DJ**: canciones sueltas (3–5 min) cuyo nombre solo dice género y BPM
+  («138 - BPM - PACK SEPTIEMBRE - FUULL BASS - MERENGUE»), sin etiquetas y sin nada que buscar en
+  internet. **No son mixes**: van a la carpeta de su género con nombre
+  `<Género> Pack <BPM> Bpm NN`, artista "Infiniity Eventos", y se les pone
+  `TXXX:INFINIITY_SIN_IDENTIFICAR` para saber que el nombre es provisional. Así quedan usables en
+  un evento en vez de pudrirse en "Sin clasificar" (2026-10-26: 19 merengues, los 19 dieron 138 BPM
+  analizados, igual que decía el nombre). Cuando el usuario las oiga, se re-etiquetan con
+  `--forzar`.
 
 ## Procedimiento (cada corrida)
 
@@ -50,6 +58,15 @@ Scripts en `scripts/` (Python 3 + mutagen + numpy + ffmpeg). El BPM lo **analiza
 (ver "BPM real" abajo); el `--bpm-cli` del AppImage queda solo de respaldo y para los mixes.
 `BIB="$HOME/Música/Infiniity Dj Pro"`; carpeta de trabajo `$BIB/.organizar/` (oculta: la app y Sync
 la ignoran… Sync NO la ignora: es pequeña, no importa).
+
+0. **Borrar lo que no tiene audio** (siempre, antes de nada):
+   ```bash
+   python3 -I .claude/skills/Organizar_Canciones/scripts/aplicar.py /dev/null --biblioteca "$BIB" --borrar-sin-audio
+   ```
+   Una descarga que se corta deja el archivo del tamaño correcto pero **entero a ceros**: parece
+   normal en el explorador y no suena en ninguna PC. En el lote del 2026-10-24 había 20. Se borran
+   sin preguntar (pedido del usuario el 2026-10-26) y se dice cuáles en el resumen, para volver a
+   bajarlas.
 
 1. **Identificar** (no toca archivos; tarda ~2 s por canción, internet):
    ```bash
@@ -130,7 +147,9 @@ la ignoran… Sync NO la ignora: es pequeña, no importa).
   mitad de un evento no dice nada. Si duran lo mismo al milisegundo, es la misma: se queda la de
   más calidad (más bytes) y la otra se borra.
 - **Nunca** correr sobre la biblioteca sin el `--simular` previo del paso 3.
-- **Nunca** borrar una canción sin que el usuario lo haya dicho para ESA canción.
+- **Nunca** borrar una canción sin que el usuario lo haya dicho para ESA canción. **Excepción:
+  lo que no tiene audio se borra siempre** (archivo a ceros; `--borrar-sin-audio`), porque no hay
+  canción que perder.
 - Si `identificar.py` falla por internet (muchos `AVISO:`), no inventes: repite más tarde.
 - Un artista = una sola forma escrita (D22): `comun.artista_canonico` lo garantiza con
   `estado.json → alias_artistas`. Si ves dos formas para el mismo artista en la biblioteca
