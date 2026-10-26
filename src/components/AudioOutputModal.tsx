@@ -217,7 +217,8 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
         estadoSalida =
           `hay flujo de sonido: ${e.hay_flujo} | va por: ${e.salida ?? "?"}` +
           ` | en pausa: ${e.pausado} | estado de la salida: ${e.estado || "?"}` +
-          ` | volumen del equipo: ${e.volumen}% | silenciada por el equipo: ${e.silenciada}`;
+          ` | volumen del equipo: ${e.volumen}% | silenciada por el equipo: ${e.silenciada}` +
+          ` | FANTASMA (conectada sin canal de sonido): ${e.fantasma}`;
       } catch (err) {
         estadoSalida = `(fallo al consultar: ${err instanceof Error ? err.message : String(err)})`;
       }
@@ -309,8 +310,11 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
     setConectando(d.mac);
     setError(null);
     try {
-      await btConectar(d.mac);
+      const aviso = await btConectar(d.mac);
       showToast(`Cabina conectada: ${d.nombre}`);
+      // Si hubo que reavivarla (conectada a medias, sin canal de sonido), que
+      // se sepa: es justo el fallo que dejo un evento entero sin sonido.
+      if (aviso) showToast(aviso);
       const salida = await esperarSalidaDeCabina(d.mac);
       if (!salida) {
         // Conectada pero el sonido todavia no la ofrece: se dice tal cual, que

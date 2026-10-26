@@ -187,6 +187,7 @@ export interface EstadoSalida {
   estado: string; // "RUNNING" solo si esta saliendo sonido de verdad
   volumen: number; // volumen que el EQUIPO le da a esa salida (%)
   silenciada: boolean; // el equipo la tiene muda
+  fantasma: boolean; // solo Bluetooth: conectada A MEDIAS, sin canal de sonido
 }
 /**
  * Comprueba si de verdad esta saliendo sonido por donde creemos. Que mover el
@@ -231,8 +232,11 @@ export const btBuscar = (segundos: number): Promise<DispositivoBt[]> => {
   if (!isTauri()) return Promise.resolve([]);
   return invoke<DispositivoBt[]>("bt_buscar", { segundos });
 };
-/** Empareja (si hace falta), marca de confianza y conecta. */
-export const btConectar = (mac: string) => invoke<void>("bt_conectar", { mac });
+/**
+ * Empareja (si hace falta), marca de confianza y conecta. Devuelve un aviso si
+ * hubo que reavivar la cabina (vacio si no hizo falta).
+ */
+export const btConectar = (mac: string) => invoke<string>("bt_conectar", { mac });
 export const btDesconectar = (mac: string) => invoke<void>("bt_desconectar", { mac });
 
 /**

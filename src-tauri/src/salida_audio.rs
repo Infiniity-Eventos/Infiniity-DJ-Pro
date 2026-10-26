@@ -83,6 +83,14 @@ struct Sink {
     muted: bool,
     /// Volumen del equipo para esta salida, en crudo (65536 = 100%).
     volume: u32,
+    /// Solo en salidas Bluetooth: el canal de sonido abierto hacia el aparato
+    /// (`api.bluez5.transport`). None = no es Bluetooth o no se vio la
+    /// propiedad. Some("") = NODO FANTASMA: la salida existe y acepta flujos,
+    /// pero no tiene por donde mandar el sonido. Nada suena por ella.
+    transporte: Option<String>,
+    /// Solo en salidas Bluetooth: `api.bluez5.connection` ("connected" o
+    /// "disconnected"). La segunda, junto con el transporte vacio, es el fantasma.
+    conexion_bt: Option<String>,
 }
 
 fn list_sinks() -> Result<Vec<Sink>, String> {
@@ -103,6 +111,8 @@ fn parse_sinks(text: &str) -> Vec<Sink> {
                 state: String::new(),
                 muted: false,
                 volume: u32::MAX,
+                transporte: None,
+                conexion_bt: None,
             });
             continue;
         }
@@ -129,6 +139,15 @@ fn parse_sinks(text: &str) -> Vec<Sink> {
         }
         if let Some(v) = t.strip_prefix("Mute: ") {
             cur.muted = v.trim() == "yes";
+            continue;
+        }
+        // Propiedades Bluetooth (van entre comillas): `api.bluez5.transport = ""`.
+        if let Some(v) = t.strip_prefix("api.bluez5.transport = ") {
+            cur.transporte = Some(v.trim().trim_matches('"').to_string());
+            continue;
+        }
+        if let Some(v) = t.strip_prefix("api.bluez5.connection = ") {
+            cur.conexion_bt = Some(v.trim().trim_matches('"').to_string());
             continue;
         }
         // "Volume: front-left: 72089 / 110% / 2.48 dB,   front-right: ..."
@@ -339,6 +358,11 @@ fn audio_set_output_sinc(sink: &str) -> Result<ResultadoSalida, String> {
     // REHACE su salida en el sistema, asi que si se movieran los flujos antes,
     // irian a una salida que deja de existir un instante despues.
     let mut arreglos: Vec<String> = Vec::new();
+    // Primero de todo: si la cabina es un nodo fantasma, reavivarla. Destruye y
+    // recrea la salida, asi que va antes que cualquier otra cosa.
+    if let Some(aviso) = reavivar_bluetooth(sink) {
+        arreglos.push(aviso);
+    }
     if let Some(aviso) = asegurar_modo_musica(sink) {
         arreglos.push(aviso);
         // La salida acaba de rehacerse: darle un momento al sistema.
@@ -660,6 +684,113 @@ fn destino_del_puente() -> Option<String> {
     None
 }
 
+// ---------------------------------------------------------------------------
+// Nodo fantasma: la cabina esta conectada pero el sonido no tiene por donde ir
+// ---------------------------------------------------------------------------
+
+/// ¿Esta salida Bluetooth es un nodo fantasma?
+///
+/// EL FALLO DE VERDAD (encontrado el 2026-10-26 tras ocho versiones): en los
+/// tres informes de un evento, la salida de la cabina existia, estaba en
+/// RUNNING, aceptaba el flujo de la app (y hasta el de un enlace del propio
+/// sistema), el volumen arriba, en modo a2dp... y por ella no salia NADA (pico
+/// 0.00000). Las dos lineas que lo delataban, identicas las tres veces:
+///     api.bluez5.transport = ""
+///     api.bluez5.connection = "disconnected"
+/// `bluetoothctl` decia «Connected: yes», porque a nivel Bluetooth si estaba
+/// conectada. El desencaje es entre el Bluetooth y el servidor de sonido: el
+/// nodo nacio sin canal hacia el aparato. Pasa tras una reconexion (la cabina
+/// se desconecta sola y se vuelve a conectar): en todos los informes, justo
+/// antes, salia «Esa salida ya no esta disponible» y luego «Cabina conectada».
+fn es_fantasma(s: &Sink) -> bool {
+    match (&s.transporte, &s.conexion_bt) {
+        (Some(t), _) if t.is_empty() => true,
+        (_, Some(c)) if c == "disconnected" => true,
+        _ => false,
+    }
+}
+
+/// Vuelve a abrir el canal de sonido hacia la cabina si el nodo es fantasma.
+///
+/// COMO: apagando y volviendo a encender el perfil de la tarjeta (`off` ->
+/// `a2dp-sink`). Eso destruye la salida y la crea de nuevo, y al crearla el
+/// servidor de sonido vuelve a pedirle al Bluetooth el transporte. Es el
+/// remedio conocido para este estado. Como destruye la salida, hay que hacerlo
+/// ANTES de mover ningun flujo a ella.
+///
+/// Devuelve que paso, para decirlo en pantalla y en el informe.
+fn reavivar_bluetooth(sink: &str) -> Option<String> {
+    let dir = direccion_de_sink(sink)?;
+    let sinks = parse_sinks(&pactl(&["list", "sinks"]).ok()?);
+    let salida = sinks.iter().find(|s| s.name == sink)?;
+    if !es_fantasma(salida) {
+        return None; // tiene transporte: esta bien
+    }
+    let tarjetas = parse_cards(&pactl(&["list", "cards"]).ok()?);
+    let tarjeta = tarjetas
+        .iter()
+        .find(|c| c.name.starts_with("bluez_card.") && c.name.contains(&dir))?;
+    let musica = tarjeta
+        .perfiles
+        .iter()
+        .find(|p| es_modo_musica(p))
+        .cloned()
+        .unwrap_or_else(|| "a2dp-sink".to_string());
+
+    let apagar = pactl(&["set-card-profile", &tarjeta.name, "off"]);
+    std::thread::sleep(std::time::Duration::from_millis(900));
+    let encender = pactl(&["set-card-profile", &tarjeta.name, &musica]);
+    // La salida tarda un momento en volver a existir con su transporte.
+    let mut vuelta: Option<Sink> = None;
+    for _ in 0..12 {
+        std::thread::sleep(std::time::Duration::from_millis(400));
+        if let Ok(texto) = pactl(&["list", "sinks"]) {
+            if let Some(s) = parse_sinks(&texto).into_iter().find(|s| s.name == sink) {
+                let fantasma = es_fantasma(&s);
+                vuelta = Some(s);
+                if !fantasma {
+                    break;
+                }
+            }
+        }
+    }
+    match (apagar, encender, vuelta) {
+        (Ok(_), Ok(_), Some(s)) if !es_fantasma(&s) => Some(
+            "La cabina estaba conectada a medias (sin canal de sonido). Se reabrió la \
+             conexión y ya tiene por dónde sonar."
+                .to_string(),
+        ),
+        (Ok(_), Ok(_), _) => Some(
+            "La cabina está conectada a medias (sin canal de sonido) y reabrir la conexión \
+             no bastó. Apágala, enciéndela y vuelve a conectarla desde aquí."
+                .to_string(),
+        ),
+        (Err(e), _, _) | (_, Err(e), _) => Some(format!(
+            "La cabina está conectada a medias (sin canal de sonido) y no se pudo reabrir: {e}"
+        )),
+    }
+}
+
+/// Para quien conecta la cabina (bluetooth.rs): busca su salida por la
+/// direccion y, si nacio fantasma, la reaviva. Espera a que la salida exista.
+pub fn reavivar_por_direccion(mac: &str) -> Option<String> {
+    let marca = mac.to_uppercase().replace(':', "_");
+    let mut nombre: Option<String> = None;
+    for _ in 0..15 {
+        if let Ok(texto) = pactl(&["list", "sinks"]) {
+            if let Some(s) = parse_sinks(&texto)
+                .into_iter()
+                .find(|s| s.name.starts_with("bluez_output.") && s.name.to_uppercase().contains(&marca))
+            {
+                nombre = Some(s.name);
+                break;
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(400));
+    }
+    reavivar_bluetooth(&nombre?)
+}
+
 /// 100% en la escala del servidor de sonido.
 const VOLUMEN_NORMAL: u32 = 65536;
 
@@ -714,6 +845,9 @@ pub struct EstadoSalida {
     pub volumen: u32,
     /// El equipo tiene esa salida muda.
     pub silenciada: bool,
+    /// Solo Bluetooth: la cabina esta conectada A MEDIAS (sin canal de sonido).
+    /// Con esto en true no suena nada por mucho que todo lo demas este bien.
+    pub fantasma: bool,
 }
 
 /// Comprueba por donde va el sonido de la app y si de verdad esta saliendo.
@@ -736,6 +870,7 @@ fn audio_output_status_sinc() -> Result<EstadoSalida, String> {
             estado: String::new(),
             volumen: 0,
             silenciada: false,
+            fantasma: false,
         });
     };
     let sinks = list_sinks()?;
@@ -759,6 +894,12 @@ fn audio_output_status_sinc() -> Result<EstadoSalida, String> {
             .map(|s| (f64::from(s.volume) / f64::from(VOLUMEN_NORMAL) * 100.0).round() as u32)
             .unwrap_or(0),
         silenciada: sink.map(|s| s.muted).unwrap_or(false),
+        fantasma: destino_final
+            .as_ref()
+            .and_then(|d| sinks.iter().find(|s| &s.name == d))
+            .or(sink)
+            .map(es_fantasma)
+            .unwrap_or(false),
     })
 }
 
@@ -962,16 +1103,24 @@ Sink Input #210
         }
         let e = estado.expect("el flujo de sonido no aparecio en djprueba1");
         assert!(!e.pausado, "el flujo no deberia estar en pausa");
-        assert_eq!(
-            e.estado, "RUNNING",
-            "si esta sonando, la salida tiene que estar RUNNING"
-        );
+        // Que el flujo exista no significa que la salida ya este en marcha en
+        // ese mismo instante: con el equipo cargado tarda un momento en pasar
+        // de IDLE a RUNNING. Se espera, no se da por hecho.
+        let mut en_marcha = e.estado == "RUNNING";
+        for _ in 0..50 {
+            if en_marcha {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            en_marcha = audio_output_status_sinc().unwrap().estado == "RUNNING";
+        }
+        assert!(en_marcha, "si esta sonando, la salida tiene que acabar en RUNNING");
 
         // Y ahora lo que hace la app al cambiar de salida.
         let r = audio_set_output_sinc("djprueba2").unwrap();
         assert!(r.movidos >= 1, "deberia haber movido al menos un flujo");
         let mut llego = false;
-        for _ in 0..30 {
+        for _ in 0..100 {
             std::thread::sleep(std::time::Duration::from_millis(100));
             if audio_output_status_sinc().unwrap().salida.as_deref() == Some("djprueba2") {
                 llego = true;
@@ -984,7 +1133,7 @@ Sink Input #210
         let _ = hijo.kill();
         let _ = hijo.wait();
         let mut sin_flujo = false;
-        for _ in 0..30 {
+        for _ in 0..100 {
             std::thread::sleep(std::time::Duration::from_millis(100));
             if !audio_output_status_sinc().unwrap().hay_flujo {
                 sin_flujo = true;
@@ -1065,6 +1214,43 @@ Card #88
         assert_eq!(sin[0].volume, u32::MAX);
     }
 
+    /// Salida real de `pactl list sinks` (recortada) de la cabina del evento,
+    /// tal cual vino en el informe: el nodo fantasma. Esto es lo que hay que
+    /// reconocer para que no vuelva a costar un dia entero.
+    const SINK_FANTASMA: &str = r#"Sink #1708
+	State: RUNNING
+	Name: bluez_output.41_42_AA_A1_7E_93.1
+	Description: bluetooth
+	Mute: no
+	Volume: front-left: 72089 / 110% / 2.48 dB,   front-right: 72089 / 110% / 2.48 dB
+	Properties:
+		api.bluez5.profile = "a2dp-sink"
+		api.bluez5.transport = ""
+		api.bluez5.codec = "sbc"
+		api.bluez5.connection = "disconnected"
+	Active Port: headphone-output
+"#;
+
+    #[test]
+    fn reconoce_la_cabina_fantasma_del_evento() {
+        let s = parse_sinks(SINK_FANTASMA);
+        assert_eq!(s[0].transporte.as_deref(), Some(""));
+        assert_eq!(s[0].conexion_bt.as_deref(), Some("disconnected"));
+        assert!(es_fantasma(&s[0]), "RUNNING, sin silencio, al 110%... y fantasma");
+    }
+
+    #[test]
+    fn una_cabina_con_transporte_no_es_fantasma() {
+        let sana = SINK_FANTASMA
+            .replace("transport = \"\"", "transport = \"/org/bluez/hci0/dev_41_42_AA_A1_7E_93/fd3\"")
+            .replace("\"disconnected\"", "\"connected\"");
+        let s = parse_sinks(&sana);
+        assert!(!es_fantasma(&s[0]));
+        // Y una salida por cable, sin propiedades Bluetooth, tampoco.
+        let cable = parse_sinks("Sink #1\n\tState: RUNNING\n\tName: alsa_output.x\n");
+        assert!(!es_fantasma(&cable[0]));
+    }
+
     #[test]
     fn parse_sinks_ve_cuando_una_salida_esta_muda() {
         let s = parse_sinks("Sink #7
@@ -1116,15 +1302,29 @@ Card #88
 
         // Un hijo nuestro sonando, como hace el navegador interno.
         let wav = std::env::temp_dir().join("infiniity-dj-puente-tono.wav");
-        escribir_tono(&wav, 20);
+        escribir_tono(&wav, 40);
         let mut hijo = clean_command("paplay")
             .arg(&wav)
             .spawn()
             .expect("hace falta paplay (pulseaudio-utils)");
-        std::thread::sleep(std::time::Duration::from_millis(600));
+        // Esperar a que el flujo EXISTA, no un tiempo fijo: con el equipo
+        // cargado (las demas pruebas de hardware corren a la vez) `paplay`
+        // tarda mas en arrancar, y una prueba que falla a ratos no sirve.
+        let mut hay_flujo = false;
+        for _ in 0..100 {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            if list_streams().unwrap_or_default().iter().any(stream_is_ours) {
+                hay_flujo = true;
+                break;
+            }
+        }
+        assert!(hay_flujo, "el flujo de sonido del hijo no aparecio");
 
         let r = audio_set_output_sinc(CABINA).expect("deberia poder mandar el sonido a la cabina");
         assert!(r.movidos >= 1, "deberia haber movido el flujo");
+        // El enlace del puente lleva 300 ms de margen: darle tiempo a cebarse
+        // antes de medir, que si no se mide su arranque y no su funcionamiento.
+        std::thread::sleep(std::time::Duration::from_millis(1200));
 
         // El sonido tiene que ir por el puente, no directo a la cabina.
         let estado = audio_output_status_sinc().unwrap();
@@ -1146,8 +1346,12 @@ Card #88
             "el puente es cosa interna, no se le ofrece al usuario"
         );
 
-        // LO QUE DE VERDAD IMPORTA: que llegue sonido a la cabina.
-        let llegada = crate::informe::medir_llegada(CABINA);
+        // LO QUE DE VERDAD IMPORTA: que llegue sonido a la cabina. Con un
+        // segundo intento por si la primera medida pillo al enlace cebandose.
+        let mut llegada = crate::informe::medir_llegada(CABINA);
+        if !llegada.starts_with("LLEGA SONIDO") {
+            llegada = crate::informe::medir_llegada(CABINA);
+        }
         let _ = hijo.kill();
         let _ = hijo.wait();
         let _ = std::fs::remove_file(&wav);

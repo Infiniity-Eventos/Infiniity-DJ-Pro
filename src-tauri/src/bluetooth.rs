@@ -386,12 +386,13 @@ pub async fn bt_buscar(segundos: u32) -> Result<Vec<DispositivoBt>, String> {
 /// "De confianza" (`trust`) es importante para un evento: sin eso, el equipo
 /// no deja que la cabina se reconecte sola cuando se apaga y se vuelve a
 /// encender, y habria que repetir todo esto delante de la gente.
+/// Devuelve un aviso si hubo que reavivar la cabina (vacio si no hizo falta).
 #[tauri::command]
-pub async fn bt_conectar(mac: String) -> Result<(), String> {
+pub async fn bt_conectar(mac: String) -> Result<String, String> {
     en_otro_hilo(move || conectar_sinc(&mac)).await
 }
 
-fn conectar_sinc(mac: &str) -> Result<(), String> {
+fn conectar_sinc(mac: &str) -> Result<String, String> {
     let mac = mac.to_string();
     let info = bluetoothctl(&["info", &mac], PLAZO_CONSULTA)
         .map(|t| parse_info(&t))
@@ -403,7 +404,8 @@ fn conectar_sinc(mac: &str) -> Result<(), String> {
         });
 
     if info.conectado {
-        return Ok(()); // ya estaba
+        // Ya estaba conectada... pero puede estarlo A MEDIAS (ver abajo).
+        return Ok(crate::salida_audio::reavivar_por_direccion(&mac).unwrap_or_default());
     }
 
     if !info.emparejado {
@@ -428,13 +430,22 @@ fn conectar_sinc(mac: &str) -> Result<(), String> {
     // que todo bien mientras no se oia nada.
     let despues = bluetoothctl(&["info", &mac], PLAZO_CONSULTA).map(|t| parse_info(&t));
     match despues {
-        Ok(i) if i.conectado => Ok(()),
-        Ok(_) => Err("La cabina acepto la orden pero no quedo conectada. \
-                      Comprueba que no este emparejada con otro equipo o celular."
-            .to_string()),
+        Ok(i) if !i.conectado => {
+            return Err("La cabina acepto la orden pero no quedo conectada. \
+                        Comprueba que no este emparejada con otro equipo o celular."
+                .to_string());
+        }
         // Si no se puede comprobar, no se inventa un fallo: la orden no dio error.
-        Err(_) => Ok(()),
+        _ => {}
     }
+
+    // CONECTADA NO ES LO MISMO QUE CON SONIDO. Tras una (re)conexion, el
+    // servidor de sonido puede crear la salida de la cabina SIN canal hacia
+    // ella: un nodo fantasma, que acepta el sonido y no lo saca por ningun
+    // lado. Fue el fallo real de un evento entero (ver salida_audio.rs,
+    // `es_fantasma`). Aqui, justo despues de conectar, es donde nace, y por
+    // eso aqui se comprueba y se reaviva.
+    Ok(crate::salida_audio::reavivar_por_direccion(&mac).unwrap_or_default())
 }
 
 /// Desconecta una cabina (sigue emparejada, para reconectarla de un toque).

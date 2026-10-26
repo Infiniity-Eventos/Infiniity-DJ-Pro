@@ -64,12 +64,24 @@ async function comprobarQueLlega(sink: string): Promise<void> {
   }
 }
 
-/** Cuenta en pantalla lo que hubo que corregir para que se oiga. */
+/** Ultimo aviso de arreglo y cuando salio: el mismo no se repite enseguida. */
+let ultimoArreglo: { texto: string; cuando: number } | null = null;
+
+/**
+ * Cuenta en pantalla lo que hubo que corregir para que se oiga.
+ *
+ * Sin repetir: al cambiar de salida se aplica varias veces seguidas (al
+ * elegirla, al rehacer la conexion, al volver a dar play) y el mismo aviso
+ * salia tres y cuatro veces en fila. Repetido deja de leerse.
+ */
 function avisarDeArreglos(arreglos: string[]): void {
   if (arreglos.length === 0) return;
   const { showToast } = useStore.getState();
+  const ahora = Date.now();
   arreglos.forEach((a) => {
     console.info("[salidaAudio] arreglado:", a);
+    if (ultimoArreglo && ultimoArreglo.texto === a && ahora - ultimoArreglo.cuando < 8000) return;
+    ultimoArreglo = { texto: a, cuando: ahora };
     showToast(a);
   });
 }
@@ -208,6 +220,9 @@ export async function aplicarSalida(sink: string): Promise<number> {
 export async function comprobarSalida(sink: string): Promise<string | null> {
   const est = await audioOutputStatus();
   if (!est.hay_flujo) return "la app se quedó sin conexión con el sonido del equipo";
+  if (est.fantasma) {
+    return "la cabina está conectada a medias (sin canal de sonido); vuelve a conectarla desde «Salida de audio»";
+  }
   if (est.pausado) return "el sistema tiene el sonido de la app en pausa";
   if (est.salida && est.salida !== sink) {
     return `el sonido se fue a «${est.salida}» en vez de la salida elegida`;
