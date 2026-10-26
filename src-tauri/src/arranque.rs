@@ -212,3 +212,127 @@ pub fn vigilar_motor_web(app: &tauri::AppHandle) {
         eprintln!("AVISO: no se pudo vigilar el motor web ({e})");
     }
 }
+
+// ---------------------------------------------------------------------------
+// Acceso directo del menu (icono y .desktop)
+// ---------------------------------------------------------------------------
+
+/// Vuelve a copiar el icono y a reescribir el .desktop si el AppImage cambio.
+///
+/// POR QUE: `instalar-en-pc-nueva.sh` copia el icono a ~/.local/share/icons y
+/// escribe el .desktop UNA SOLA VEZ, el dia que se instala. El actualizador
+/// automatico solo reemplaza el AppImage, asi que el menu de Linux se queda
+/// para siempre con lo que habia ese dia. Costo dos cosas:
+///
+///   - El icono nuevo (Jimbo, 0.4.31) no llego a NINGUNA PC: todas siguen
+///     mostrando el vinilo de agosto aunque el programa este al dia.
+///   - Peor: los .desktop escritos antes de la 0.3.6 llevan
+///     "env WEBKIT_DISABLE_DMABUF_RENDERER=1" en el Exec. Esa variable prohibe
+///     la tarjeta grafica y deja la CPU al 186% reproduciendo en los portatiles
+///     Intel. Se quito del instalador, pero las PC ya instaladas la siguen
+///     arrastrando porque nadie les reescribio el acceso directo.
+///
+/// Por eso ahora el propio programa lo refresca al arrancar, en segundo plano.
+///
+/// Solo toca lo que YA existe: si no hay .desktop, esta PC no se instalo con el
+/// guion (alguien corre el AppImage suelto) y no le creamos nada en el menu.
+pub fn refrescar_acceso_directo() {
+    std::thread::spawn(|| {
+        if let Err(e) = refrescar() {
+            // No es fatal: la app funciona igual, solo se ve el icono viejo.
+            eprintln!("AVISO: no se pudo refrescar el acceso directo del menu ({e})");
+        }
+    });
+}
+
+fn refrescar() -> Result<(), String> {
+    // APPDIR solo existe dentro del AppImage: es la carpeta donde se monta.
+    let appdir = match std::env::var_os("APPDIR") {
+        Some(d) => PathBuf::from(d),
+        None => return Ok(()), // en desarrollo no hay nada que refrescar
+    };
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .ok_or("no hay HOME")?;
+    let escritorio = home.join(".local/share/applications/infiniity-dj.desktop");
+    if !escritorio.exists() {
+        return Ok(()); // AppImage suelto, sin instalar: no tocamos el menu
+    }
+
+    let mut cambio = false;
+    let iconos = home.join(".local/share/icons/hicolor");
+
+    // El AppImage trae varios tamanos; los copiamos todos (el instalador solo
+    // copiaba el de 128 y en el menu de Mint se veia escalado).
+    let origen = appdir.join("usr/share/icons/hicolor");
+    let dirs = std::fs::read_dir(&origen)
+        .map_err(|e| format!("no se pudo leer {} ({e})", origen.display()))?;
+    for medida in dirs.flatten() {
+        let icono = medida.path().join("apps/infiniity-dj.png");
+        if !icono.is_file() {
+            continue;
+        }
+        let destino = iconos
+            .join(medida.file_name())
+            .join("apps/infiniity-dj.png");
+        let nuevo = std::fs::read(&icono)
+            .map_err(|e| format!("no se pudo leer {} ({e})", icono.display()))?;
+        if std::fs::read(&destino).ok().as_deref() == Some(&nuevo[..]) {
+            continue; // ya esta al dia
+        }
+        if let Some(padre) = destino.parent() {
+            std::fs::create_dir_all(padre)
+                .map_err(|e| format!("no se pudo crear {} ({e})", padre.display()))?;
+        }
+        std::fs::write(&destino, &nuevo)
+            .map_err(|e| format!("no se pudo escribir {} ({e})", destino.display()))?;
+        cambio = true;
+    }
+
+    // El .desktop se reescribe con la ruta real del AppImage que esta corriendo.
+    // Tiene que quedar IGUAL que el que escribe instalar-en-pc-nueva.sh.
+    if let Some(ruta) = std::env::var_os("APPIMAGE") {
+        let texto = format!(
+            "[Desktop Entry]\n\
+             Type=Application\n\
+             Name=Infiniity DJ\n\
+             Comment=Mezclador de musica para eventos\n\
+             Exec=\"{}\"\n\
+             Icon=infiniity-dj\n\
+             Terminal=false\n\
+             Categories=Audio;Music;AudioVideo;\n\
+             StartupWMClass=Infiniity DJ\n",
+            PathBuf::from(ruta).display()
+        );
+        if std::fs::read_to_string(&escritorio).ok().as_deref() != Some(texto.as_str()) {
+            std::fs::write(&escritorio, &texto)
+                .map_err(|e| format!("no se pudo escribir {} ({e})", escritorio.display()))?;
+            cambio = true;
+        }
+    }
+
+    if !cambio {
+        return Ok(()); // lo normal en cada arranque: nada que hacer
+    }
+
+    // Avisar al escritorio. clean_command porque dentro del AppImage las
+    // variables heredadas rompen las herramientas del sistema (ver CLAUDE.md).
+    // No son fatales (hay escritorios que no traen gtk-update-icon-cache y se
+    // enteran igual), pero si fallan se dice: un icono que no cambia sin
+    // explicacion es exactamente lo que nos hizo perder esta semana.
+    if let Err(e) = crate::downloader::clean_command("gtk-update-icon-cache")
+        .args(["-f", "-t"])
+        .arg(&iconos)
+        .status()
+    {
+        eprintln!("AVISO: no se pudo refrescar el cache de iconos ({e})");
+    }
+    if let Err(e) = crate::downloader::clean_command("update-desktop-database")
+        .arg(home.join(".local/share/applications"))
+        .status()
+    {
+        eprintln!("AVISO: no se pudo refrescar el menu de aplicaciones ({e})");
+    }
+    eprintln!("Infiniity DJ: acceso directo del menu actualizado.");
+    Ok(())
+}

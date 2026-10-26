@@ -417,6 +417,10 @@ pub fn run() {
             }
             #[cfg(target_os = "linux")]
             arranque::vigilar_motor_web(app.handle());
+            // El menu de Linux se quedaba con el icono y el Exec del dia de la
+            // instalacion, pasara lo que pasara despues (ver arranque.rs).
+            #[cfg(target_os = "linux")]
+            arranque::refrescar_acceso_directo();
             // Buscar y reconectar la controladora sola (ver midi.rs).
             midi::vigilar(app.handle().clone());
             // Sincronización de la biblioteca: misma carpeta de datos que el resto.
