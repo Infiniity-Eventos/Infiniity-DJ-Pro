@@ -75,7 +75,17 @@ Cada una salió de un fallo real en el equipo de alguien:
    decodificado y reanuda donde iba. Y hay que COMPROBAR que suena de verdad
    (`audio_output_status`): que `pactl` acepte la orden no significa que se oiga.
 
-9. **No quitar el `git push` del final de `publicar.sh`.** Durante dos meses el
+9. **Nada que tarde corre en el hilo de la ventana, y lo que tarda se ve.** Los
+   comandos de Tauri declarados `fn` se ejecutan en el hilo de la ventana: si
+   tardan, la pantalla deja de repintarse y el sistema saca «la aplicación no
+   responde». Pasó con la búsqueda de cabinas Bluetooth (doce segundos). Todo
+   lo que hable con programas del sistema (`bluetoothctl`, `pactl`) va con
+   `en_otro_hilo()` (en `lib.rs`). Y en pantalla tiene que verse algo moviéndose
+   —cuenta atrás, ruedita— porque una espera sin señales no se distingue de un
+   cuelgue. Ampliando la regla 4: no basta con avisar de los fallos; también hay
+   que decir «estoy trabajando» y «busqué y no encontré nada».
+
+10. **No quitar el `git push` del final de `publicar.sh`.** Durante dos meses el
    guion publicaba el programa pero no subía el código, y nadie lo notó porque
    publicar "funcionaba". GitHub se quedó en la 0.3.4 de agosto mientras salían
    versiones nuevas: alguien trabajó desde otro PC sobre código de dos meses
