@@ -330,6 +330,28 @@ fn audio_set_output_sinc(sink: &str) -> Result<ResultadoSalida, String> {
         arreglos.push(aviso);
     }
 
+    // Dejar esta salida como la general del equipo.
+    //
+    // POR QUE SE AÑADIO (0.4.39): mover el flujo que ya suena funciona con
+    // cable, pero con la cabina Bluetooth el informe de un evento mostro que
+    // el flujo queda enganchado a la salida, la salida en RUNNING... y por la
+    // cabina no sale NADA (grabando esa salida: pico 0.00000), mientras el
+    // motor si estaba produciendo sonido (-14.4 dB). O sea: se pierde entre el
+    // navegador interno y el sonido del sistema, justo en el tramo del
+    // arrastre.
+    //
+    // Poniendola como salida general, la conexion NUEVA que abre el navegador
+    // al rehacerse NACE ya en la cabina, en vez de nacer en otro sitio y que
+    // haya que arrastrarla. No sustituye al arrastre (ver la cabecera: el
+    // sistema recuerda la salida POR PROGRAMA y por eso el arrastre sigue
+    // haciendo falta); se hacen las dos cosas.
+    //
+    // Que no se pueda no es motivo para parar: el arrastre de abajo puede
+    // bastar. Pero queda dicho.
+    if let Err(e) = pactl(&["set-default-sink", sink]) {
+        eprintln!("[salida_audio] no se pudo poner «{sink}» como salida general: {e}");
+    }
+
     let sinks = list_sinks()?;
     if !sinks.iter().any(|s| s.name == sink) {
         return Err(format!(
@@ -669,6 +691,19 @@ Sink Input #210
             .trim()
             .to_string();
         let _limpieza = Limpieza(vec![m1, m2]);
+        // `audio_set_output` ahora tambien cambia la salida GENERAL del equipo,
+        // asi que hay que devolverla como estaba: si no, la prueba dejaria el
+        // sonido de esta PC apuntando a una salida de pega que ya no existe.
+        let general_antes = default_sink();
+        struct Restaurar(Option<String>);
+        impl Drop for Restaurar {
+            fn drop(&mut self) {
+                if let Some(s) = &self.0 {
+                    let _ = pactl(&["set-default-sink", s]);
+                }
+            }
+        }
+        let _restaurar = Restaurar(general_antes);
 
         let wav = std::env::temp_dir().join("infiniity-dj-prueba-salida.wav");
         wav_de_prueba(&wav, 20);
