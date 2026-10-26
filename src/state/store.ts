@@ -130,6 +130,8 @@ interface AppStore {
   setAudioSink: (name: string | null) => void;
   setAudioModalOpen: (v: boolean) => void;
   setMidi: (connected: boolean, port: string | null) => void;
+  /** Ultimos avisos que salieron en pantalla (para el informe de fallos). */
+  historialAvisos: string[];
   showToast: (msg: string) => void;
   showAvisoCentral: (msg: string) => void;
   askConfirm: (message: string, onYes: () => void, extra?: Omit<ConfirmBox, "message" | "onYes">) => void;
@@ -289,9 +291,16 @@ export const useStore = create<AppStore>((set, get) => ({
     set({ audioSink: name });
     savePrefs(get());
   },
+  historialAvisos: [],
   setAudioModalOpen: (v) => set({ audioModalOpen: v }),
   setMidi: (connected, port) => set({ midiConnected: connected, midiPort: port }),
   showToast: (msg) => {
+    // Se guarda el historial para el informe de fallos: cuando desde otra PC
+    // dicen "no suena", los avisos que salieron antes son la mitad de la
+    // respuesta, y para cuando llega el mensaje ya se los llevo el viento.
+    const previos = get().historialAvisos;
+    const sello = new Date().toLocaleTimeString();
+    set({ historialAvisos: [...previos, `${sello}  ${msg}`].slice(-40) });
     set({ toast: msg });
     window.setTimeout(() => {
       if (get().toast === msg) set({ toast: null });

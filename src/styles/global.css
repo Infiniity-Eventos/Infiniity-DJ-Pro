@@ -1107,6 +1107,17 @@ input[type="range"]::-webkit-slider-thumb {
   font-weight: 600;
 }
 
+/* Esta pantalla tiene cuatro botones y no caben en una linea: que bajen en
+   vez de salirse. Va en una clase propia para no tocar los demas modales, que
+   tienen dos o tres y estan bien como estan. */
+.out-actions {
+  flex-wrap: wrap;
+  row-gap: 10px;
+}
+.out-actions .btn {
+  min-width: 112px;
+}
+
 /* --- Cabinas Bluetooth dentro del modal de salida de audio --- */
 .out-bt {
   display: flex;

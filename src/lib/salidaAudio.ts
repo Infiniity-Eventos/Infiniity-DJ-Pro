@@ -35,6 +35,16 @@ let aplicada = false;
 /** El aviso de fallo se muestra una sola vez (si no, saldria en cada play). */
 let avisado = false;
 
+/** Cuenta en pantalla lo que hubo que corregir para que se oiga. */
+function avisarDeArreglos(arreglos: string[]): void {
+  if (arreglos.length === 0) return;
+  const { showToast } = useStore.getState();
+  arreglos.forEach((a) => {
+    console.info("[salidaAudio] arreglado:", a);
+    showToast(a);
+  });
+}
+
 /**
  * Es un parlante o amplificador Bluetooth. Misma regla que `kind_of()` en
  * `src-tauri/src/salida_audio.rs`.
@@ -98,8 +108,13 @@ export function olvidarSalidaAplicada(): void {
  * enviado" mientras por la cabina no se oia nada.
  */
 export async function aplicarSalida(sink: string): Promise<number> {
-  const movidos = await audioSetOutput(sink);
+  const r = await audioSetOutput(sink);
+  const movidos = r.movidos;
   aplicada = movidos > 0;
+  // Lo que el sistema tuvo que corregir para que se oiga (cabina en modo manos
+  // libres, salida muda...) se DICE. Si la app lo arregla a espaldas del
+  // usuario y se lo calla, la proxima vez nadie sabra por que a veces suena.
+  avisarDeArreglos(r.arreglos);
 
   // La app no esta sonando: no hay flujo que mover ni nada que comprobar. El
   // sistema ya quedo avisado y al dar play saldra por ahi.
@@ -109,7 +124,9 @@ export async function aplicarSalida(sink: string): Promise<number> {
     await rehacerConexionDeSonido();
     // La conexion nueva deberia nacer ya en el parlante (el sistema recuerda
     // la salida por programa), pero no se da por supuesto: se manda igual.
-    aplicada = (await audioSetOutput(sink)) > 0;
+    const r2 = await audioSetOutput(sink);
+    avisarDeArreglos(r2.arreglos);
+    aplicada = r2.movidos > 0;
   }
 
   // Comprobar donde quedo de verdad.

@@ -171,8 +171,13 @@ export interface AudioOutput {
   active: boolean; // true en la salida por la que suena la app ahora
 }
 export const audioOutputs = () => invoke<AudioOutput[]>("audio_outputs");
-/** Devuelve cuantos flujos de sonido se movieron (0 = la app aun no sonaba). */
-export const audioSetOutput = (sink: string) => invoke<number>("audio_set_output", { sink });
+/** Como fue el cambio de salida (ver `ResultadoSalida` en salida_audio.rs). */
+export interface ResultadoSalida {
+  movidos: number; // flujos de sonido movidos (0 = la app aun no sonaba)
+  arreglos: string[]; // lo que hubo que corregir para que se oiga
+}
+export const audioSetOutput = (sink: string) =>
+  invoke<ResultadoSalida>("audio_set_output", { sink });
 
 /** Lo que pasa AHORA MISMO con el sonido de la app (ver salida_audio.rs). */
 export interface EstadoSalida {
@@ -227,6 +232,13 @@ export const btBuscar = (segundos: number): Promise<DispositivoBt[]> => {
 /** Empareja (si hace falta), marca de confianza y conecta. */
 export const btConectar = (mac: string) => invoke<void>("bt_conectar", { mac });
 export const btDesconectar = (mac: string) => invoke<void>("bt_desconectar", { mac });
+
+/**
+ * Guarda un informe de fallo dentro de la carpeta de musica, que es la que ya
+ * viaja sola entre las PC por Sync. Devuelve donde quedo guardado.
+ */
+export const guardarInforme = (carpetaMusica: string, estadoApp: string) =>
+  invoke<string>("guardar_informe", { carpetaMusica, estadoApp });
 
 // --- Monitor de recursos ---
 export interface SystemStats {

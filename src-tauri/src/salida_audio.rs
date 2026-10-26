@@ -79,6 +79,8 @@ struct Sink {
     /// "RUNNING" | "IDLE" | "SUSPENDED". Solo RUNNING significa que por ahi
     /// esta saliendo sonido de verdad AHORA MISMO.
     state: String,
+    /// El equipo tiene esta salida muda. Otra forma de "todo bien y no se oye".
+    muted: bool,
 }
 
 fn list_sinks() -> Result<Vec<Sink>, String> {
@@ -97,6 +99,7 @@ fn parse_sinks(text: &str) -> Vec<Sink> {
                 name: String::new(),
                 description: String::new(),
                 state: String::new(),
+                muted: false,
             });
             continue;
         }
@@ -118,7 +121,11 @@ fn parse_sinks(text: &str) -> Vec<Sink> {
         if cur.state.is_empty() {
             if let Some(v) = t.strip_prefix("State: ") {
                 cur.state = v.trim().to_string();
+                continue;
             }
+        }
+        if let Some(v) = t.strip_prefix("Mute: ") {
+            cur.muted = v.trim() == "yes";
         }
     }
     out.retain(|s| s.index != u32::MAX && !s.name.is_empty());
@@ -291,12 +298,38 @@ fn audio_outputs_sinc() -> Result<Vec<AudioOutput>, String> {
 /// app todavia no esta sonando, asi que no habia nada que mover (al darle play
 /// se vuelve a intentar). Se devuelve el numero en vez de callarlo para que la
 /// interfaz pueda decir la verdad: "ya suena por ahi" o "dale play".
+/// Como fue el cambio de salida.
+#[derive(Serialize, Clone)]
+pub struct ResultadoSalida {
+    /// Cuantos flujos de sonido se movieron (0 = la app aun no sonaba).
+    pub movidos: u32,
+    /// Lo que hubo que arreglar para que se oiga. Se dice en pantalla: si la
+    /// app corrige algo a espaldas del usuario y no lo cuenta, la proxima vez
+    /// que pase nadie sabra por que a veces suena y a veces no.
+    pub arreglos: Vec<String>,
+}
+
 #[tauri::command]
-pub async fn audio_set_output(sink: String) -> Result<u32, String> {
+pub async fn audio_set_output(sink: String) -> Result<ResultadoSalida, String> {
     en_otro_hilo(move || audio_set_output_sinc(&sink)).await
 }
 
-fn audio_set_output_sinc(sink: &str) -> Result<u32, String> {
+fn audio_set_output_sinc(sink: &str) -> Result<ResultadoSalida, String> {
+    // ANTES de mover nada: dejar la salida en condiciones de sonar.
+    //
+    // El orden importa. Cambiar el modo de trabajo de una cabina Bluetooth
+    // REHACE su salida en el sistema, asi que si se movieran los flujos antes,
+    // irian a una salida que deja de existir un instante despues.
+    let mut arreglos: Vec<String> = Vec::new();
+    if let Some(aviso) = asegurar_modo_musica(sink) {
+        arreglos.push(aviso);
+        // La salida acaba de rehacerse: darle un momento al sistema.
+        std::thread::sleep(std::time::Duration::from_millis(600));
+    }
+    if let Some(aviso) = quitar_silencio(sink) {
+        arreglos.push(aviso);
+    }
+
     let sinks = list_sinks()?;
     if !sinks.iter().any(|s| s.name == sink) {
         return Err(format!(
@@ -322,7 +355,135 @@ fn audio_set_output_sinc(sink: &str) -> Result<u32, String> {
             return Err(format!("No pude mandar el sonido a esa salida: {e}"));
         }
     }
-    Ok(movidos)
+    Ok(ResultadoSalida { movidos, arreglos })
+}
+
+// ---------------------------------------------------------------------------
+// Cabinas Bluetooth: modo de trabajo y silencio
+// ---------------------------------------------------------------------------
+
+/// Una tarjeta de sonido (en Bluetooth, el aparato) y su modo de trabajo.
+struct Tarjeta {
+    name: String,
+    perfil_activo: String,
+    perfiles: Vec<String>,
+}
+
+fn parse_cards(texto: &str) -> Vec<Tarjeta> {
+    let mut out: Vec<Tarjeta> = Vec::new();
+    let mut en_perfiles = false;
+    for linea in texto.lines() {
+        let t = linea.trim();
+        if t.starts_with("Card #") {
+            en_perfiles = false;
+            out.push(Tarjeta {
+                name: String::new(),
+                perfil_activo: String::new(),
+                perfiles: Vec::new(),
+            });
+            continue;
+        }
+        let Some(cur) = out.last_mut() else { continue };
+        if t == "Profiles:" {
+            en_perfiles = true;
+            continue;
+        }
+        if let Some(v) = t.strip_prefix("Active Profile: ") {
+            en_perfiles = false;
+            cur.perfil_activo = v.trim().to_string();
+            continue;
+        }
+        // Cualquier otro encabezado cierra la lista de modos.
+        if t.ends_with(':') && !t.contains(' ') {
+            en_perfiles = false;
+        }
+        if cur.name.is_empty() {
+            if let Some(v) = t.strip_prefix("Name: ") {
+                cur.name = v.trim().to_string();
+                continue;
+            }
+        }
+        if en_perfiles {
+            if let Some((id, _)) = t.split_once(": ") {
+                if !id.is_empty() && !id.contains(' ') {
+                    cur.perfiles.push(id.to_string());
+                }
+            }
+        }
+    }
+    out.retain(|c| !c.name.is_empty());
+    out
+}
+
+/// La parte de la direccion que comparten la salida y la tarjeta de una misma
+/// cabina: `bluez_output.41_42_AE_0F_D5_CD.1` y `bluez_card.41_42_AE_0F_D5_CD`.
+fn direccion_de_sink(sink: &str) -> Option<String> {
+    let resto = sink.strip_prefix("bluez_output.")?;
+    let dir = resto.split('.').next()?;
+    if dir.is_empty() {
+        None
+    } else {
+        Some(dir.to_string())
+    }
+}
+
+/// ¿Este modo de trabajo es el de musica (A2DP) o el de "manos libres"?
+fn es_modo_musica(perfil: &str) -> bool {
+    perfil.contains("a2dp")
+}
+
+/// Pone la cabina en modo MUSICA si se quedo en modo "manos libres".
+///
+/// POR QUE ESTO ES IMPRESCINDIBLE: una cabina Bluetooth anuncia dos modos, el
+/// de musica (A2DP, estereo y buena calidad) y el de manos libres (HSP/HFP,
+/// pensado para llamadas). El sistema a veces se queda en el de manos libres.
+/// Cuando pasa, TODO parece correcto —la cabina sale conectada, la salida
+/// aparece en la lista, la app manda el sonido ahi— y por la cabina NO SE OYE
+/// NADA. Es exactamente el fallo que se reporto desde un evento.
+///
+/// Devuelve que se hizo, para poder decirlo en pantalla (regla 4).
+fn asegurar_modo_musica(sink: &str) -> Option<String> {
+    let dir = direccion_de_sink(sink)?;
+    let tarjetas = parse_cards(&pactl(&["list", "cards"]).ok()?);
+    let tarjeta = tarjetas
+        .iter()
+        .find(|c| c.name.starts_with("bluez_card.") && c.name.contains(&dir))?;
+    if es_modo_musica(&tarjeta.perfil_activo) {
+        return None; // ya esta bien
+    }
+    // Entre los modos de musica, el que la cabina prefiera primero.
+    let destino = tarjeta
+        .perfiles
+        .iter()
+        .find(|p| es_modo_musica(p))
+        .cloned()?;
+    match pactl(&["set-card-profile", &tarjeta.name, &destino]) {
+        Ok(_) => Some(format!(
+            "La cabina estaba en modo manos libres («{}»), que no reproduce música.              Se pasó a modo música («{destino}»).",
+            tarjeta.perfil_activo
+        )),
+        Err(e) => Some(format!(
+            "La cabina está en modo manos libres («{}»), que no reproduce música,              y no se pudo cambiar: {e}",
+            tarjeta.perfil_activo
+        )),
+    }
+}
+
+/// Quita el silencio de la salida si el sistema la tenia muda.
+///
+/// Una salida muda es otra forma de "todo correcto y no se oye nada": el flujo
+/// llega, el sistema lo da por bueno, y no sale sonido. El sistema recuerda el
+/// silencio por aparato, asi que una cabina puede llegar muda de otra vez.
+fn quitar_silencio(sink: &str) -> Option<String> {
+    let sinks = parse_sinks(&pactl(&["list", "sinks"]).ok()?);
+    let s = sinks.iter().find(|s| s.name == sink)?;
+    if !s.muted {
+        return None;
+    }
+    match pactl(&["set-sink-mute", sink, "0"]) {
+        Ok(_) => Some("La salida estaba silenciada en el equipo; se le quitó el silencio.".to_string()),
+        Err(e) => Some(format!("La salida está silenciada en el equipo y no se pudo quitar: {e}")),
+    }
 }
 
 /// Lo que esta pasando AHORA MISMO con el sonido de la app.
@@ -520,9 +681,12 @@ Sink Input #210
             .spawn()
             .expect("hace falta paplay (pulseaudio-utils)");
 
-        // Darle tiempo a que abra el flujo de sonido.
+        // Darle tiempo a que abra el flujo de sonido. Margen amplio a
+        // proposito: con todas las pruebas de hardware corriendo a la vez, el
+        // equipo va cargado y `paplay` tarda mas en arrancar. Una prueba que
+        // falla a ratos no sirve para nada.
         let mut estado = None;
-        for _ in 0..40 {
+        for _ in 0..100 {
             std::thread::sleep(std::time::Duration::from_millis(100));
             let e = audio_output_status_sinc().unwrap();
             if e.hay_flujo && e.salida.as_deref() == Some("djprueba1") {
@@ -538,8 +702,8 @@ Sink Input #210
         );
 
         // Y ahora lo que hace la app al cambiar de salida.
-        let movidos = audio_set_output_sinc("djprueba2").unwrap();
-        assert!(movidos >= 1, "deberia haber movido al menos un flujo");
+        let r = audio_set_output_sinc("djprueba2").unwrap();
+        assert!(r.movidos >= 1, "deberia haber movido al menos un flujo");
         let mut llego = false;
         for _ in 0..30 {
             std::thread::sleep(std::time::Duration::from_millis(100));
@@ -563,6 +727,75 @@ Sink Input #210
         }
         assert!(sin_flujo, "al parar el sonido tiene que verse que no hay flujo");
         let _ = std::fs::remove_file(&wav);
+    }
+
+    /// Salida real de `pactl list cards` con una cabina Bluetooth atascada en
+    /// modo manos libres: exactamente el caso que deja todo "correcto" y mudo.
+    const CARDS: &str = r#"Card #55
+	Name: alsa_card.pci-0000_00_1f.3
+	Profiles:
+		off: Apagado (sinks: 0, sources: 0, priority: 0, available: yes)
+		output:analog-stereo: Estereo (sinks: 1, sources: 0, priority: 6500, available: yes)
+	Active Profile: output:analog-stereo
+Card #88
+	Name: bluez_card.41_42_AE_0F_D5_CD
+	Profiles:
+		off: Apagado (sinks: 0, sources: 0, priority: 0, available: yes)
+		a2dp-sink: Alta fidelidad (A2DP Sink) (sinks: 1, sources: 0, priority: 40, available: yes)
+		headset-head-unit: Manos libres (HSP/HFP) (sinks: 1, sources: 1, priority: 30, available: yes)
+	Active Profile: headset-head-unit
+	Ports:
+		speaker-output: Altavoz (type: Speaker, priority: 0)
+"#;
+
+    #[test]
+    fn parse_cards_saca_el_modo_de_trabajo_de_la_cabina() {
+        let c = parse_cards(CARDS);
+        assert_eq!(c.len(), 2);
+        let cabina = c
+            .iter()
+            .find(|x| x.name.starts_with("bluez_card."))
+            .expect("deberia encontrar la cabina");
+        assert_eq!(cabina.perfil_activo, "headset-head-unit");
+        assert!(
+            cabina.perfiles.iter().any(|p| p == "a2dp-sink"),
+            "tiene que ver el modo musica entre los disponibles: {:?}",
+            cabina.perfiles
+        );
+        // "Ports:" no debe colarse como si fuera un modo de trabajo.
+        assert!(
+            !cabina.perfiles.iter().any(|p| p.contains("speaker-output")),
+            "se colo un puerto entre los modos: {:?}",
+            cabina.perfiles
+        );
+    }
+
+    #[test]
+    fn modo_manos_libres_no_cuenta_como_modo_musica() {
+        assert!(es_modo_musica("a2dp-sink"));
+        assert!(es_modo_musica("a2dp-sink-sbc-xq"));
+        assert!(!es_modo_musica("headset-head-unit"));
+        assert!(!es_modo_musica("off"));
+    }
+
+    #[test]
+    fn direccion_de_sink_empareja_la_salida_con_su_tarjeta() {
+        assert_eq!(
+            direccion_de_sink("bluez_output.41_42_AE_0F_D5_CD.1").as_deref(),
+            Some("41_42_AE_0F_D5_CD")
+        );
+        // Una salida con cable no tiene tarjeta Bluetooth que mirar.
+        assert_eq!(direccion_de_sink("alsa_output.pci-0000_00_1f.3.analog-stereo"), None);
+    }
+
+    #[test]
+    fn parse_sinks_ve_cuando_una_salida_esta_muda() {
+        let s = parse_sinks("Sink #7
+	State: IDLE
+	Name: muda
+	Mute: yes
+");
+        assert!(s[0].muted, "«Mute: yes» tiene que verse");
     }
 
     #[test]

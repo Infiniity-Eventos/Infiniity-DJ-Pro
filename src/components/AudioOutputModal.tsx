@@ -8,6 +8,8 @@ import {
   btDispositivos,
   btEncender,
   btEstado,
+  guardarInforme,
+  audioOutputStatus,
   type AudioOutput,
   type DispositivoBt,
   type EstadoBt,
@@ -69,6 +71,8 @@ async function esperarSalidaDeCabina(mac: string): Promise<AudioOutput | undefin
  */
 export function AudioOutputModal({ onClose }: { onClose: () => void }) {
   const audioSink = useStore((s) => s.audioSink);
+  const musicRoot = useStore((s) => s.musicRoot);
+  const historialAvisos = useStore((s) => s.historialAvisos);
   const setAudioSink = useStore((s) => s.setAudioSink);
   const showToast = useStore((s) => s.showToast);
 
@@ -185,6 +189,52 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
     } catch (e) {
       setError(
         `No se pudo probar el sonido: ${e instanceof Error ? e.message : String(e)}`
+      );
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  /**
+   * Deja por escrito que esta pasando en ESTA PC y lo guarda en la carpeta de
+   * musica, que viaja sola por Sync hasta el PC original.
+   *
+   * POR QUE: las PC del equipo estan en otras casas y en otros eventos. Cuando
+   * algo no suena, lo unico que llega es "no suena" por WhatsApp, con la
+   * persona en mitad de un evento. Con esto llega el detalle completo sin que
+   * nadie tenga que mirar nada raro ni mandar nada.
+   */
+  const guardarInformeDeFallo = async () => {
+    setOcupado(true);
+    setError(null);
+    try {
+      let estadoSalida = "(no se pudo consultar)";
+      try {
+        const e = await audioOutputStatus();
+        estadoSalida =
+          `hay flujo de sonido: ${e.hay_flujo} | va por: ${e.salida ?? "?"}` +
+          ` | en pausa: ${e.pausado} | estado de la salida: ${e.estado || "?"}`;
+      } catch (err) {
+        estadoSalida = `(fallo al consultar: ${err instanceof Error ? err.message : String(err)})`;
+      }
+      const estadoApp = [
+        `version: ${__APP_VERSION__}`,
+        `salida elegida: ${audioSink ?? "(ninguna)"}`,
+        `salida de verdad: ${estadoSalida}`,
+        "",
+        engine.resumen(),
+        "",
+        "ultimos avisos que salieron en pantalla:",
+        historialAvisos.length > 0 ? historialAvisos.join("\n") : "(ninguno)",
+      ].join("\n");
+
+      const ruta = await guardarInforme(musicRoot ?? "", estadoApp);
+      showToast("Informe guardado. Llega solo al PC original por Sync.");
+      setError(null);
+      console.info("[informe] guardado en", ruta);
+    } catch (e) {
+      setError(
+        `No se pudo guardar el informe: ${e instanceof Error ? e.message : String(e)}`
       );
     } finally {
       setOcupado(false);
@@ -416,9 +466,17 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
           ))}
         </div>
 
-        <div className="modal-actions">
+        <div className="modal-actions out-actions">
           <button className="btn" disabled={ocupado} onClick={() => void cargar()}>
             Actualizar lista
+          </button>
+          <button
+            className="btn"
+            disabled={ocupado}
+            title="Guarda lo que está pasando en esta PC y lo manda al PC original por Sync"
+            onClick={() => void guardarInformeDeFallo()}
+          >
+            Guardar informe
           </button>
           <button className="btn" disabled={ocupado} onClick={() => void probar()}>
             Probar sonido

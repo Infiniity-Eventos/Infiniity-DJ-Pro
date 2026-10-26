@@ -612,6 +612,33 @@ class AudioEngine {
     return clamp(gain, 0.5, 4);
   }
 
+  /**
+   * Lo que el motor puede contar de si mismo, para el informe de fallos.
+   *
+   * El dato que mas dice es el RELOJ: si el motor esta «running» pero el reloj
+   * no avanza entre dos informes, el sonido esta parado por debajo aunque todo
+   * parezca correcto.
+   */
+  resumen(): string {
+    const st = useStore.getState();
+    const lineas = [
+      `motor de sonido: ${this.ctx ? this.ctx.state : "sin crear todavia"}`,
+      `frecuencia del motor: ${this.ctx ? this.ctx.sampleRate : "?"} Hz`,
+      `reloj del motor: ${this.ctx ? this.ctx.currentTime.toFixed(2) : "?"} s`,
+      `volumen general: ${Math.round(st.masterVolume * 100)}%`,
+      `crossfader: ${st.crossfader.toFixed(2)} (0 = todo A, 1 = todo B)`,
+    ];
+    (["A", "B"] as DeckId[]).forEach((id) => {
+      const d = this.decks?.[id];
+      const e = st.decks[id];
+      lineas.push(
+        `deck ${id}: ${e.trackName || "(vacio)"} | sonando=${d?.playing ?? false}` +
+          ` | posicion=${this.getPosition(id).toFixed(1)}s | velocidad=${(d?.rate ?? 1).toFixed(3)}`
+      );
+    });
+    return lineas.join("\n");
+  }
+
   // -------- Salud del motor de sonido --------
 
   /**

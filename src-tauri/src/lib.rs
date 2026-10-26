@@ -9,6 +9,7 @@ mod downloader;
 mod library;
 mod midi;
 mod bluetooth;
+mod informe;
 mod salida_audio;
 mod sync;
 mod sysmon;
@@ -494,6 +495,7 @@ pub fn run() {
             bluetooth::bt_buscar,
             bluetooth::bt_conectar,
             bluetooth::bt_desconectar,
+            informe::guardar_informe,
             quit_app,
             minimize_window,
             toggle_fullscreen
