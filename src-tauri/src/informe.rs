@@ -249,6 +249,13 @@ fn armar_informe(estado_app: &str, salida: &str) -> String {
         "=== REGISTRO DEL BLUETOOTH DEL EQUIPO (busca «avdtp», «a2dp», «connect») ===\n{}\n",
         recoger("journalctl", &["-u", "bluetooth", "-n", "60", "--no-pager"])
     );
+    // El adaptador en si (firmware, USB que se duerme, reinicios del chip): lo
+    // escribe el nucleo. Si no se puede leer sin permisos, que lo diga.
+    let _ = write!(
+        t,
+        "\n=== REGISTRO DEL NUCLEO SOBRE BLUETOOTH (busca «hci0», «btusb», «firmware») ===\n{}\n",
+        recoger("journalctl", &["-k", "-n", "400", "--no-pager", "-g", "(?i)bluetooth|hci0|btusb"])
+    );
     t
 }
 

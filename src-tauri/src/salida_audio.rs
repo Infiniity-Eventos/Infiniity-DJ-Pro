@@ -918,26 +918,36 @@ pub struct EstadoSalida {
 }
 
 /// Comprueba por donde va el sonido de la app y si de verdad esta saliendo.
+/// `elegida`: la salida que el usuario tiene elegida. Si la app no esta
+/// sonando, el estado se da de ESA salida (volumen, silencio, fantasma): en un
+/// informe tomado con el motor parado salia «FANTASMA: false» solo porque no
+/// habia flujo que mirar, y eso despista justo cuando mas hace falta.
 #[tauri::command]
-pub async fn audio_output_status() -> Result<EstadoSalida, String> {
-    en_otro_hilo(audio_output_status_sinc).await
+pub async fn audio_output_status(elegida: Option<String>) -> Result<EstadoSalida, String> {
+    en_otro_hilo(move || audio_output_status_sinc(elegida.as_deref())).await
 }
 
-fn audio_output_status_sinc() -> Result<EstadoSalida, String> {
+fn audio_output_status_sinc(elegida: Option<&str>) -> Result<EstadoSalida, String> {
     let streams = list_streams()?;
     let Some(nuestro) = streams
         .iter()
         .find(|s| stream_is_ours(s) && s.sink != u32::MAX)
     else {
-        // Sin flujo no hay nada que comprobar: la app no esta sonando.
+        // Sin flujo, la app no esta sonando; pero de la salida elegida si se
+        // puede decir como esta.
+        let sinks = list_sinks().unwrap_or_default();
+        let e = elegida.and_then(|n| sinks.iter().find(|s| s.name == n));
         return Ok(EstadoSalida {
             hay_flujo: false,
             salida: None,
             pausado: false,
-            estado: String::new(),
-            volumen: 0,
-            silenciada: false,
-            fantasma: false,
+            estado: e.map(|s| s.state.clone()).unwrap_or_default(),
+            volumen: e
+                .filter(|s| s.volume != u32::MAX)
+                .map(|s| (f64::from(s.volume) / f64::from(VOLUMEN_NORMAL) * 100.0).round() as u32)
+                .unwrap_or(0),
+            silenciada: e.map(|s| s.muted).unwrap_or(false),
+            fantasma: e.map(es_fantasma).unwrap_or(false),
         });
     };
     let sinks = list_sinks()?;
@@ -1162,7 +1172,7 @@ Sink Input #210
         let mut estado = None;
         for _ in 0..100 {
             std::thread::sleep(std::time::Duration::from_millis(100));
-            let e = audio_output_status_sinc().unwrap();
+            let e = audio_output_status_sinc(None).unwrap();
             if e.hay_flujo && e.salida.as_deref() == Some("djprueba1") {
                 estado = Some(e);
                 break;
@@ -1179,7 +1189,7 @@ Sink Input #210
                 break;
             }
             std::thread::sleep(std::time::Duration::from_millis(100));
-            en_marcha = audio_output_status_sinc().unwrap().estado == "RUNNING";
+            en_marcha = audio_output_status_sinc(None).unwrap().estado == "RUNNING";
         }
         assert!(en_marcha, "si esta sonando, la salida tiene que acabar en RUNNING");
 
@@ -1189,7 +1199,7 @@ Sink Input #210
         let mut llego = false;
         for _ in 0..100 {
             std::thread::sleep(std::time::Duration::from_millis(100));
-            if audio_output_status_sinc().unwrap().salida.as_deref() == Some("djprueba2") {
+            if audio_output_status_sinc(None).unwrap().salida.as_deref() == Some("djprueba2") {
                 llego = true;
                 break;
             }
@@ -1202,7 +1212,7 @@ Sink Input #210
         let mut sin_flujo = false;
         for _ in 0..100 {
             std::thread::sleep(std::time::Duration::from_millis(100));
-            if !audio_output_status_sinc().unwrap().hay_flujo {
+            if !audio_output_status_sinc(None).unwrap().hay_flujo {
                 sin_flujo = true;
                 break;
             }
@@ -1394,7 +1404,7 @@ Card #88
         std::thread::sleep(std::time::Duration::from_millis(1200));
 
         // El sonido tiene que ir por el puente, no directo a la cabina.
-        let estado = audio_output_status_sinc().unwrap();
+        let estado = audio_output_status_sinc(None).unwrap();
         assert!(estado.hay_flujo);
         assert_eq!(
             estado.salida.as_deref(),
@@ -1465,7 +1475,7 @@ Card #88
     fn audio_output_status_real_cuadra_consigo_mismo() {
         let _candado = crate::CANDADO_SONIDO.lock().unwrap_or_else(|e| e.into_inner());
 
-        let e = audio_output_status_sinc().expect("hace falta pactl (pulseaudio-utils)");
+        let e = audio_output_status_sinc(None).expect("hace falta pactl (pulseaudio-utils)");
         if !e.hay_flujo {
             // La app no esta sonando: entonces no hay salida ni estado que dar.
             assert!(e.salida.is_none(), "sin flujo no puede haber salida");

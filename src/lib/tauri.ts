@@ -193,7 +193,8 @@ export interface EstadoSalida {
  * Comprueba si de verdad esta saliendo sonido por donde creemos. Que mover el
  * flujo no de error NO significa que se oiga: con Bluetooth pasaba justo eso.
  */
-export const audioOutputStatus = () => invoke<EstadoSalida>("audio_output_status");
+export const audioOutputStatus = (elegida?: string | null) =>
+  invoke<EstadoSalida>("audio_output_status", { elegida: elegida ?? null });
 
 // --- Cabinas Bluetooth (ver src-tauri/src/bluetooth.rs) ---
 export interface DispositivoBt {

@@ -213,7 +213,7 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
     try {
       let estadoSalida = "(no se pudo consultar)";
       try {
-        const e = await audioOutputStatus();
+        const e = await audioOutputStatus(audioSink);
         estadoSalida =
           `hay flujo de sonido: ${e.hay_flujo} | va por: ${e.salida ?? "?"}` +
           ` | en pausa: ${e.pausado} | estado de la salida: ${e.estado || "?"}` +

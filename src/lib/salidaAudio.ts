@@ -187,11 +187,11 @@ export async function aplicarSalida(sink: string): Promise<number> {
   // tarda un par de segundos en arrancar (medido con el sonido real del
   // equipo), asi que eso seria otra falsa alarma. De que suene de verdad se
   // encarga `comprobarSalida()`, que corre mientras hay musica puesta.
-  let est = await audioOutputStatus();
+  let est = await audioOutputStatus(sink);
   for (let i = 0; i < 10; i++) {
     if (est.hay_flujo && (!est.salida || est.salida === sink)) break;
     await new Promise((listo) => window.setTimeout(listo, 200));
-    est = await audioOutputStatus();
+    est = await audioOutputStatus(sink);
   }
   if (!est.hay_flujo) {
     throw new Error(
@@ -225,7 +225,7 @@ export async function aplicarSalida(sink: string): Promise<number> {
  * corte que no existia.
  */
 export async function comprobarSalida(sink: string): Promise<string | null> {
-  const est = await audioOutputStatus();
+  const est = await audioOutputStatus(sink);
   if (!est.hay_flujo) return "la app se quedó sin conexión con el sonido del equipo";
   if (est.fantasma) {
     return "la cabina está conectada a medias (sin canal de sonido); vuelve a conectarla desde «Salida de audio»";
