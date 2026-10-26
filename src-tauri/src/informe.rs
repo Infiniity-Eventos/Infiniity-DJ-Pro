@@ -116,7 +116,7 @@ pub async fn audio_llega_sonido(salida: String) -> Result<Llegada, String> {
     .await
 }
 
-fn medir_llegada(sink: &str) -> String {
+pub(crate) fn medir_llegada(sink: &str) -> String {
     if sink.trim().is_empty() {
         return "(no hay salida elegida)".to_string();
     }
@@ -291,6 +291,8 @@ mod pruebas {
     #[test]
     #[ignore = "genera un informe real de este equipo"]
     fn informe_real_de_este_equipo() {
+        let _candado = crate::CANDADO_SONIDO.lock().unwrap_or_else(|e| e.into_inner());
+
         // Sin destino indicado se escribe en temporales: asi `--ignored` no
         // revienta cuando se corren todas las pruebas de golpe.
         let destino = std::env::var("DJ_INFORME_DESTINO").unwrap_or_else(|_| {
@@ -335,6 +337,8 @@ mod pruebas {
     #[test]
     #[ignore = "necesita pactl/parecord y el sonido del equipo"]
     fn medir_llegada_distingue_silencio_de_sonido() {
+        let _candado = crate::CANDADO_SONIDO.lock().unwrap_or_else(|e| e.into_inner());
+
         let modulo = recoger("pactl", &["load-module", "module-null-sink", "sink_name=djmedida"]);
         let modulo = modulo.trim().to_string();
         assert!(

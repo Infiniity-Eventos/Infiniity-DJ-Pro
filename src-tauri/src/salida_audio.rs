@@ -292,6 +292,8 @@ fn audio_outputs_sinc() -> Result<Vec<AudioOutput>, String> {
 
     Ok(sinks
         .iter()
+        // El puente es cosa interna: no es una salida que el usuario elija.
+        .filter(|s| s.name != PUENTE)
         .map(|s| AudioOutput {
             name: s.name.clone(),
             description: if s.description.is_empty() {
@@ -377,6 +379,33 @@ fn audio_set_output_sinc(sink: &str) -> Result<ResultadoSalida, String> {
             "Esa salida ya no esta disponible. Revisa que siga conectada: {sink}"
         ));
     }
+
+    // Con una cabina Bluetooth, el sonido NO va directo: va por el puente (ver
+    // arriba). Por cable se quita el puente si lo hubiera y se va directo.
+    let destino: String = if kind_of(sink) == "bluetooth" {
+        match armar_puente(sink) {
+            Ok(()) => {
+                arreglos.push(
+                    "Con la cabina Bluetooth el sonido va por un puente del sistema: \
+                     el programa escribe en una salida normal y el equipo se encarga \
+                     de pasarselo a la cabina."
+                        .to_string(),
+                );
+                PUENTE.to_string()
+            }
+            Err(e) => {
+                // Que no se pueda montar no es motivo para no sonar: se intenta
+                // directo, como antes, y se dice lo que paso.
+                eprintln!("[salida_audio] sin puente, se va directo: {e}");
+                arreglos.push(format!("No se pudo usar el puente hacia la cabina: {e}"));
+                sink.to_string()
+            }
+        }
+    } else {
+        quitar_puente();
+        sink.to_string()
+    };
+    let sink = destino.as_str();
 
     let streams = list_streams()?;
     let mut movidos = 0u32;
@@ -533,6 +562,104 @@ fn quitar_silencio(sink: &str) -> Option<String> {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Puente hacia las cabinas Bluetooth
+// ---------------------------------------------------------------------------
+
+/// Nombre de la salida intermedia que usa el puente.
+const PUENTE: &str = "infiniity_puente";
+
+/// POR QUE EXISTE EL PUENTE (0.4.41):
+///
+/// Mandando el sonido DIRECTO a una cabina Bluetooth, el navegador interno no
+/// consigue alimentarla. Medido en un evento, con todo lo demas en orden —el
+/// flujo enganchado a la cabina, la salida en RUNNING, sin silencio, al 110%,
+/// en modo a2dp, un solo flujo—: el motor sacaba sonido (-14.4 dB) y a la
+/// cabina NO llegaba nada (pico 0.00000). Por esa misma cabina, otros
+/// programas si suenan. Y por cable, el MISMO flujo llega perfecto (-13.6 dB
+/// saliendo, -13.4 dB llegando).
+///
+/// En vez de seguir peleando con ese tramo, se rodea: se crea una salida
+/// intermedia NORMAL (un `null-sink`, puro software, sin nada de Bluetooth), el
+/// navegador escribe ahi —que es lo que si sabe hacer— y un enlace del propio
+/// servidor de sonido (`module-loopback`) copia de esa salida a la cabina. El
+/// enlace es codigo del sistema de sonido, hecho para esto, y se entiende con
+/// el Bluetooth sin problemas.
+///
+/// Solo se usa con cabinas Bluetooth: por cable no hace falta y seria meter un
+/// salto de mas donde hoy funciona bien.
+fn modulos_del_puente() -> Vec<String> {
+    let Ok(texto) = pactl(&["list", "modules"]) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    let mut actual = String::new();
+    for linea in texto.lines() {
+        let t = linea.trim();
+        if let Some(resto) = t.strip_prefix("Module #") {
+            actual = resto.trim().to_string();
+        } else if t.starts_with("Argument:") && t.contains(PUENTE) && !actual.is_empty() {
+            out.push(actual.clone());
+        }
+    }
+    out
+}
+
+/// Quita el puente. Se llama tambien AL ARRANCAR: si el programa se cerro mal,
+/// sus modulos se quedarian cargados en el sonido del equipo para siempre.
+pub fn quitar_puente() {
+    for m in modulos_del_puente() {
+        if let Err(e) = pactl(&["unload-module", &m]) {
+            eprintln!("[salida_audio] no se pudo quitar el puente (modulo {m}): {e}");
+        }
+    }
+}
+
+/// Monta el puente hacia `destino` (la cabina). Devuelve por donde tiene que
+/// salir el sonido de la app a partir de ahora.
+fn armar_puente(destino: &str) -> Result<(), String> {
+    quitar_puente(); // nunca dos puentes a la vez
+    pactl(&[
+        "load-module",
+        "module-null-sink",
+        &format!("sink_name={PUENTE}"),
+        "sink_properties=device.description=Infiniity-DJ-puente",
+    ])
+    .map_err(|e| format!("No se pudo preparar el puente hacia la cabina: {e}"))?;
+    // 300 ms: el Bluetooth necesita margen, y este enlace es justo quien tiene
+    // que darselo para que el navegador interno no tenga que enterarse.
+    pactl(&[
+        "load-module",
+        "module-loopback",
+        &format!("source={PUENTE}.monitor"),
+        &format!("sink={destino}"),
+        "latency_msec=300",
+    ])
+    .map_err(|e| {
+        quitar_puente();
+        format!("No se pudo enlazar el puente con la cabina: {e}")
+    })?;
+    Ok(())
+}
+
+/// Si hay puente montado, ¿hacia que cabina va?
+fn destino_del_puente() -> Option<String> {
+    let texto = pactl(&["list", "modules"]).ok()?;
+    for linea in texto.lines() {
+        let t = linea.trim();
+        if let Some(args) = t.strip_prefix("Argument:") {
+            if args.contains(PUENTE) && args.contains("sink=") {
+                for trozo in args.split_whitespace() {
+                    if let Some(v) = trozo.strip_prefix("sink=") {
+                        return Some(v.to_string());
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
 /// 100% en la escala del servidor de sonido.
 const VOLUMEN_NORMAL: u32 = 65536;
 
@@ -613,11 +740,20 @@ fn audio_output_status_sinc() -> Result<EstadoSalida, String> {
     };
     let sinks = list_sinks()?;
     let sink = sinks.iter().find(|s| s.index == nuestro.sink);
+    // Si el sonido va por el puente, lo que importa es a donde lleva el puente:
+    // decir "suena por infiniity_puente" no le sirve a nadie.
+    let por_puente = sink.map(|s| s.name == PUENTE).unwrap_or(false);
+    let destino_final = if por_puente { destino_del_puente() } else { None };
     Ok(EstadoSalida {
         hay_flujo: true,
-        salida: sink.map(|s| s.name.clone()),
+        salida: destino_final.clone().or_else(|| sink.map(|s| s.name.clone())),
         pausado: nuestro.corked,
-        estado: sink.map(|s| s.state.clone()).unwrap_or_default(),
+        estado: destino_final
+            .as_ref()
+            .and_then(|d| sinks.iter().find(|s| &s.name == d))
+            .or(sink)
+            .map(|s| s.state.clone())
+            .unwrap_or_default(),
         volumen: sink
             .filter(|s| s.volume != u32::MAX)
             .map(|s| (f64::from(s.volume) / f64::from(VOLUMEN_NORMAL) * 100.0).round() as u32)
@@ -728,7 +864,7 @@ Sink Input #210
     }
 
     /// Un WAV de verdad (sinusoide bajita) para tener algo que suene.
-    fn wav_de_prueba(ruta: &std::path::Path, segundos: u32) {
+    fn escribir_tono(ruta: &std::path::Path, segundos: u32) {
         let (tasa, canales) = (48_000u32, 1u16);
         let muestras = tasa * segundos;
         let datos = muestras * 2;
@@ -763,6 +899,8 @@ Sink Input #210
     #[test]
     #[ignore = "necesita pactl y el sonido del equipo"]
     fn mover_el_sonido_se_puede_comprobar_de_verdad() {
+        let _candado = crate::CANDADO_SONIDO.lock().unwrap_or_else(|e| e.into_inner());
+
         let m1 = pactl(&["load-module", "module-null-sink", "sink_name=djprueba1"])
             .expect("hace falta pactl")
             .trim()
@@ -799,7 +937,7 @@ Sink Input #210
         let _restaurar = Restaurar(general_antes, apuntada_antes);
 
         let wav = std::env::temp_dir().join("infiniity-dj-prueba-salida.wav");
-        wav_de_prueba(&wav, 20);
+        escribir_tono(&wav, 20);
 
         // Hijo NUESTRO sonando: asi `stream_is_ours` lo reconoce subiendo por
         // la cadena de padres, igual que hace con el navegador interno.
@@ -937,6 +1075,89 @@ Card #88
         assert!(s[0].muted, "«Mute: yes» tiene que verse");
     }
 
+    /// LA PRUEBA DEL PUENTE, contra el sonido real del equipo.
+    ///
+    /// Se finge una cabina Bluetooth: `kind_of` decide por el NOMBRE, asi que
+    /// una salida de pega llamada «bluez_output...» recorre exactamente el
+    /// mismo camino que una cabina de verdad. Lo que se comprueba es lo unico
+    /// que importa: que al final LLEGUE SONIDO a la cabina.
+    ///
+    /// No prueba el Bluetooth en si (para eso hace falta el aparato), pero si
+    /// que el puente esta bien montado y que el sonido lo atraviesa.
+    #[test]
+    #[ignore = "necesita pactl y el sonido del equipo"]
+    fn el_puente_lleva_el_sonido_hasta_la_cabina() {
+        let _candado = crate::CANDADO_SONIDO.lock().unwrap_or_else(|e| e.into_inner());
+
+        const CABINA: &str = "bluez_output.99_99_99_99_99_99.1";
+        let m = pactl(&["load-module", "module-null-sink", &format!("sink_name={CABINA}")])
+            .expect("hace falta pactl");
+        let m = m.trim().to_string();
+        let general_antes = default_sink();
+        let apuntada_antes = std::fs::read_to_string(dirs_cache_salida()).ok();
+
+        struct Limpiar(String, Option<String>, Option<String>);
+        impl Drop for Limpiar {
+            fn drop(&mut self) {
+                quitar_puente();
+                let _ = pactl(&["unload-module", &self.0]);
+                if let Some(s) = &self.1 {
+                    let _ = pactl(&["set-default-sink", s]);
+                }
+                match &self.2 {
+                    Some(v) => crate::arranque::recordar_salida(v),
+                    None => {
+                        let _ = std::fs::remove_file(dirs_cache_salida());
+                    }
+                }
+            }
+        }
+        let _limpiar = Limpiar(m, general_antes, apuntada_antes);
+
+        // Un hijo nuestro sonando, como hace el navegador interno.
+        let wav = std::env::temp_dir().join("infiniity-dj-puente-tono.wav");
+        escribir_tono(&wav, 20);
+        let mut hijo = clean_command("paplay")
+            .arg(&wav)
+            .spawn()
+            .expect("hace falta paplay (pulseaudio-utils)");
+        std::thread::sleep(std::time::Duration::from_millis(600));
+
+        let r = audio_set_output_sinc(CABINA).expect("deberia poder mandar el sonido a la cabina");
+        assert!(r.movidos >= 1, "deberia haber movido el flujo");
+
+        // El sonido tiene que ir por el puente, no directo a la cabina.
+        let estado = audio_output_status_sinc().unwrap();
+        assert!(estado.hay_flujo);
+        assert_eq!(
+            estado.salida.as_deref(),
+            Some(CABINA),
+            "el estado tiene que hablar de la CABINA, no del puente"
+        );
+        assert_eq!(
+            destino_del_puente().as_deref(),
+            Some(CABINA),
+            "el puente tiene que apuntar a la cabina"
+        );
+        // Y el puente no puede salir en la lista de salidas elegibles.
+        let lista = audio_outputs_sinc().unwrap();
+        assert!(
+            !lista.iter().any(|o| o.name == PUENTE),
+            "el puente es cosa interna, no se le ofrece al usuario"
+        );
+
+        // LO QUE DE VERDAD IMPORTA: que llegue sonido a la cabina.
+        let llegada = crate::informe::medir_llegada(CABINA);
+        let _ = hijo.kill();
+        let _ = hijo.wait();
+        let _ = std::fs::remove_file(&wav);
+        println!("  llegada a la cabina: {llegada}");
+        assert!(
+            llegada.starts_with("LLEGA SONIDO"),
+            "el puente no llevo el sonido hasta la cabina: {llegada}"
+        );
+    }
+
     #[test]
     fn kind_of_reconoce_cada_tipo_de_salida() {
         assert_eq!(kind_of("bluez_output.AC_12_2F.1"), "bluetooth");
@@ -953,6 +1174,8 @@ Card #88
     #[test]
     #[ignore]
     fn audio_outputs_real_lista_las_salidas_del_equipo() {
+        let _candado = crate::CANDADO_SONIDO.lock().unwrap_or_else(|e| e.into_inner());
+
         let salidas = audio_outputs_sinc().expect("hace falta pactl (pulseaudio-utils)");
         assert!(!salidas.is_empty(), "el equipo deberia tener alguna salida");
         let activas = salidas.iter().filter(|s| s.active).count();
@@ -969,6 +1192,8 @@ Card #88
     #[test]
     #[ignore = "necesita pactl y el sonido del equipo"]
     fn audio_output_status_real_cuadra_consigo_mismo() {
+        let _candado = crate::CANDADO_SONIDO.lock().unwrap_or_else(|e| e.into_inner());
+
         let e = audio_output_status_sinc().expect("hace falta pactl (pulseaudio-utils)");
         if !e.hay_flujo {
             // La app no esta sonando: entonces no hay salida ni estado que dar.

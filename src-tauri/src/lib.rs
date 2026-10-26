@@ -40,6 +40,15 @@ where
         .map_err(|e| format!("La tarea no llego a terminar: {e}"))?
 }
 
+/// Candado para las pruebas que tocan el sonido DE VERDAD del equipo.
+///
+/// POR QUE: crean salidas de pega, mueven flujos, cambian la salida general y
+/// montan el puente. Corriendo a la vez se pisan entre ellas y fallan "a
+/// ratos", que es la peor clase de prueba: hace dudar del codigo cuando el
+/// codigo esta bien. Con esto van de una en una.
+#[cfg(test)]
+pub(crate) static CANDADO_SONIDO: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 pub struct AppState {
     pub cache: Mutex<Cache>,
     pub midi: Mutex<midi::MidiState>,
@@ -411,6 +420,9 @@ pub fn run() {
     // Antes de que GTK/WebKit arranquen: leen las variables una sola vez.
     #[cfg(target_os = "linux")]
     {
+        // Si el programa se cerro mal, su puente de sonido quedaria cargado
+        // en el equipo para siempre: se limpia antes de nada.
+        salida_audio::quitar_puente();
         arranque::preparar_sonido();
         arranque::ocultar_fuentes_emoji_color();
         arranque::decidir_modo_dibujo();

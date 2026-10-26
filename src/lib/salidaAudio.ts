@@ -55,9 +55,7 @@ async function comprobarQueLlega(sink: string): Promise<void> {
     if (r.llega) return;
     console.error("[salidaAudio] no llega sonido a la salida:", r.detalle);
     showToast(
-      r.preparado_bluetooth
-        ? "La cabina no está recibiendo el sonido. Dale a «Guardar informe» y mándalo."
-        : "La cabina no está recibiendo el sonido. Cierra y vuelve a abrir el programa: al arrancar con la cabina ya elegida, se le manda en trozos más grandes, que es lo que necesita el Bluetooth."
+      "La cabina no está recibiendo el sonido. Comprueba que esté encendida y con el volumen arriba; si lo está, dale a «Guardar informe»."
     );
   } catch (err) {
     // Que falle la comprobacion no es que falle el sonido: no se alarma, pero
