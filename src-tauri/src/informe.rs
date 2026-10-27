@@ -199,6 +199,17 @@ fn armar_informe(estado_app: &str, salida: &str) -> String {
         medir_llegada(salida)
     );
     let _ = write!(t, "=== SISTEMA ===\n{}\n\n", sistema());
+    // Las versiones del sonido y del Bluetooth: cualquier arreglo de la cabina
+    // Bluetooth depende de ellas (la configuracion de wireplumber cambia de
+    // formato entre la 0.4 y la 0.5, y PipeWire arregla cosas de bluez entre
+    // versiones). Sin esto se adivina.
+    let _ = write!(
+        t,
+        "=== VERSIONES DEL SONIDO Y DEL BLUETOOTH ===\npipewire: {}\nwireplumber: {}\nbluez: {}\n\n",
+        recoger("pipewire", &["--version"]).lines().last().unwrap_or("?").trim(),
+        recoger("wireplumber", &["--version"]).lines().next().unwrap_or("?").trim(),
+        recoger("bluetoothctl", &["--version"]).trim(),
+    );
     let _ = write!(
         t,
         "=== SONIDO: resumen ===\n{}\n\n",

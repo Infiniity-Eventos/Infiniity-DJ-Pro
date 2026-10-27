@@ -767,19 +767,30 @@ fn reavivar_bluetooth(sink: &str) -> Option<String> {
         pasos.push("reabrir la conexión");
     }
 
-    // NO HAY ESCALON 2 NI 3. Los hubo (0.4.43: apagar y encender el Bluetooth
-    // del equipo; reiniciar los servicios de sonido del usuario) y se quitaron
-    // en la 0.4.45 por dos razones medidas en un evento:
-    //   - No sirven para esto. El registro de wireplumber mostro que el canal
-    //     de audio SI se crea cada vez y se destruye enseguida («Failed to
-    //     release transport ... doesn't exist», «proxy destroyed»): la cabina
-    //     suelta el canal nada mas abrirse. Reiniciar cosas del equipo no
-    //     cambia lo que hace la cabina.
-    //   - Son peligrosos. Reiniciar el sonido del equipo mata la conexion de la
-    //     propia app, que al rehacerla volvia a escalar (cinco reinicios en dos
-    //     minutos), y el portatil acabo trabado. En un evento eso es peor que
-    //     una cabina muda: se pierde tambien el cable.
-    // Lo que queda es decir la verdad y que hacer a mano.
+    // ESCALON 2 (seguro): probar la OTRA variante de A2DP de la tarjeta. Si
+    // tampoco, se vuelve a la de antes para no dejar la tarjeta cambiada. No
+    // toca nada del equipo fuera de esa tarjeta (ver `perfil_alternativo`).
+    if let Some(tarjeta) = tarjeta_de(&dir) {
+        if let Some(otra) = perfil_alternativo(&tarjeta.perfiles, &tarjeta.perfil_activo) {
+            let antes = tarjeta.perfil_activo.clone();
+            if pactl(&["set-card-profile", &tarjeta.name, &otra]).is_ok() {
+                if esperar_sana(sink, 20) {
+                    return Some(format!(
+                        "La cabina cerraba el canal de sonido con la variante «{antes}». \
+                         Con «{otra}» lo mantiene: ya tiene por dónde sonar."
+                    ));
+                }
+                let _ = pactl(&["set-card-profile", &tarjeta.name, &antes]);
+                std::thread::sleep(std::time::Duration::from_millis(800));
+            }
+            pasos.push("probar la otra variante del códec");
+        }
+    }
+
+    // NO HAY ESCALON 3 (reiniciar el adaptador o el sonido del equipo). Lo hubo
+    // en la 0.4.43 y se quito en la 0.4.45: no reabre el canal (es la cabina
+    // quien lo suelta) y en un evento entro en bucle, mato la conexion de la
+    // propia app, trabo el portatil y cancelo un arranque de audio en marcha.
     let _ = &mac; // (la direccion se conserva por si vuelve a hacer falta)
 
     Some(format!(
@@ -788,6 +799,32 @@ fn reavivar_bluetooth(sink: &str) -> Option<String> {
          enciéndela y conéctala otra vez; si sigue igual, usa esa cabina por cable.",
         if pasos.is_empty() { "intentarlo".to_string() } else { pasos.join(", ") }
     ))
+}
+
+/// La OTRA variante de musica que ofrece la tarjeta (p. ej. de `a2dp-sink`
+/// a `a2dp-sink-sbc_xq`, o al reves). None si no hay otra.
+///
+/// POR QUE: en el informe limpio del 2026-10-27 el Bluetooth del sistema
+/// registro el canal de audio creado y tomado («fd(40) ready») y medio minuto
+/// despues la salida volvia a estar sin transporte, sin un solo error de
+/// wireplumber. Eso ya no es un estado atascado: es la cabina CERRANDO el
+/// canal nada mas empezar a recibir, como si no le gustara lo que le llega.
+/// Cambiar la variante del codec (SBC contra SBC-XQ cambia el modo y el
+/// bitpool) es lo unico que altera lo que recibe la cabina sin tocar nada
+/// del equipo.
+fn perfil_alternativo(perfiles: &[String], activo: &str) -> Option<String> {
+    perfiles
+        .iter()
+        .filter(|p| es_modo_musica(p) && p.as_str() != activo)
+        // Primero la variante "a secas" o la XQ, que son las que todo aparato
+        // SBC entiende; lo exotico (aptX, LDAC) al final.
+        .min_by_key(|p| match p.as_str() {
+            "a2dp-sink" => 0,
+            "a2dp-sink-sbc_xq" | "a2dp-sink-sbc-xq" => 1,
+            x if x.contains("sbc") => 2,
+            _ => 3,
+        })
+        .cloned()
 }
 
 /// ¿La salida existe y tiene transporte? Some(true) sana, Some(false)
@@ -1260,6 +1297,22 @@ Card #88
             "se colo un puerto entre los modos: {:?}",
             cabina.perfiles
         );
+    }
+
+    #[test]
+    fn perfil_alternativo_elige_la_otra_variante_de_musica() {
+        let v = |xs: &[&str]| xs.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+        // La tarjeta del evento: SBC activo -> probar SBC-XQ.
+        let p = v(&["off", "a2dp-sink", "a2dp-sink-sbc_xq", "headset-head-unit"]);
+        assert_eq!(perfil_alternativo(&p, "a2dp-sink").as_deref(), Some("a2dp-sink-sbc_xq"));
+        // Y al reves.
+        assert_eq!(perfil_alternativo(&p, "a2dp-sink-sbc_xq").as_deref(), Some("a2dp-sink"));
+        // Nunca el de manos libres ni «off»; sin otra variante, None.
+        let solo = v(&["off", "a2dp-sink", "headset-head-unit"]);
+        assert_eq!(perfil_alternativo(&solo, "a2dp-sink"), None);
+        // Con variantes exoticas, primero las SBC.
+        let muchas = v(&["off", "a2dp-sink-aptx", "a2dp-sink-sbc_xq", "a2dp-sink"]);
+        assert_eq!(perfil_alternativo(&muchas, "a2dp-sink-aptx").as_deref(), Some("a2dp-sink"));
     }
 
     #[test]
