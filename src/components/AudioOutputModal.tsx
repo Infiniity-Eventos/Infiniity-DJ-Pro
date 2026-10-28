@@ -8,11 +8,15 @@ import {
   btDispositivos,
   btEncender,
   btEstado,
+  btPreparacionEstado,
+  btPrepararEquipo,
+  btQuitarPreparacion,
   guardarInforme,
   audioOutputStatus,
   type AudioOutput,
   type DispositivoBt,
   type EstadoBt,
+  type EstadoPreparacion,
 } from "../lib/tauri";
 import { aplicarSalida } from "../lib/salidaAudio";
 import { engine } from "../audio/AudioEngine";
@@ -75,6 +79,7 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
   const historialAvisos = useStore((s) => s.historialAvisos);
   const setAudioSink = useStore((s) => s.setAudioSink);
   const showToast = useStore((s) => s.showToast);
+  const askConfirm = useStore((s) => s.askConfirm);
 
   const [salidas, setSalidas] = useState<AudioOutput[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -85,6 +90,8 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
   const [buscando, setBuscando] = useState(false);
   /** Direccion de la cabina que se esta conectando ahora (null si ninguna). */
   const [conectando, setConectando] = useState<string | null>(null);
+  /** Si el equipo esta preparado para cabinas Bluetooth sencillas. */
+  const [preparacion, setPreparacion] = useState<EstadoPreparacion | null>(null);
   /** Segundos que le quedan a la busqueda (la cuenta atras se ve en pantalla). */
   const [restan, setRestan] = useState(0);
   /** Como fue la ultima busqueda. Sin esto, "no encontre nada" era silencio. */
@@ -101,6 +108,11 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
   }, []);
 
   const cargarBt = useCallback(async () => {
+    try {
+      setPreparacion(await btPreparacionEstado());
+    } catch (err) {
+      console.error("[AudioOutputModal] no se pudo leer la preparación", err);
+    }
     try {
       const estado = await btEstado();
       setBt(estado);
@@ -225,6 +237,7 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
       const estadoApp = [
         `version: ${__APP_VERSION__}`,
         `salida elegida: ${audioSink ?? "(ninguna)"}`,
+        `equipo preparado para cabinas sencillas: ${preparacion?.preparado ? "sí" : "no"}`,
         `salida de verdad: ${estadoSalida}`,
         "",
         await engine.resumen(),
@@ -244,6 +257,43 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
     } finally {
       setOcupado(false);
     }
+  };
+
+  /**
+   * Preparar (o des-preparar) el equipo para cabinas Bluetooth sencillas.
+   *
+   * POR QUE PIDE CONFIRMACION: reinicia el gestor de sesion de sonido UNA vez y
+   * eso corta el sonido del equipo un par de segundos. En un evento, con
+   * musica, no se hace; y nunca se hace solo (regla 8).
+   */
+  const alternarPreparacion = () => {
+    const sonando = useStore.getState().decks.A.isPlaying || useStore.getState().decks.B.isPlaying;
+    if (sonando) {
+      setError("Para preparar el equipo, primero pausa la música: el sonido se corta unos segundos.");
+      return;
+    }
+    const quitar = preparacion?.preparado === true;
+    askConfirm(
+      quitar
+        ? "Quitar la preparación devuelve el Bluetooth del equipo a su configuración normal. El sonido se corta unos segundos. ¿Seguir?"
+        : "Preparar el equipo hace que el sistema le ofrezca a la cabina solo audio (sin manos libres), sin control de volumen por hardware y con SBC sencillo: es lo que estos módulos baratos aguantan. Reinicia el gestor de sonido UNA vez (el sonido se corta unos segundos). Se puede quitar después. ¿Seguir?",
+      () => {
+        void (async () => {
+          setOcupado(true);
+          setError(null);
+          try {
+            const msg = quitar ? await btQuitarPreparacion() : await btPrepararEquipo();
+            showToast(msg);
+            await cargarBt();
+            await cargar();
+          } catch (e) {
+            setError(e instanceof Error ? e.message : String(e));
+          } finally {
+            setOcupado(false);
+          }
+        })();
+      }
+    );
   };
 
   const encenderBt = async () => {
@@ -441,6 +491,19 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
               Ninguna cabina conocida todavía. Enciende la cabina, ponla en modo
               emparejar (normalmente dejando pulsado su botón de Bluetooth) y dale
               a «Buscar cabinas».
+            </div>
+          )}
+
+          {bt?.hay && (
+            <div className="out-bt-nota out-bt-fila">
+              <span>
+                {preparacion?.preparado
+                  ? "Equipo preparado para cabinas Bluetooth sencillas (solo audio, SBC)."
+                  : "Si una cabina conecta pero no suena, prepara el equipo para cabinas sencillas."}
+              </span>
+              <button className="btn" disabled={ocupado || buscando} onClick={alternarPreparacion}>
+                {preparacion?.preparado ? "Quitar preparación" : "Preparar equipo"}
+              </button>
             </div>
           )}
 

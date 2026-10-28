@@ -41,6 +41,20 @@ fn recoger(programa: &str, args: &[&str]) -> String {
     }
 }
 
+/// Version de pipewire/wireplumber. Las dos imprimen su nombre en la primera
+/// linea y la version en otra («Compiled with libwireplumber 0.4.17»): la
+/// primera captura del informe se quedo solo con el nombre, que no sirve para
+/// nada. Se busca la linea que lleve numeros.
+fn version_de(programa: &str) -> String {
+    let texto = recoger(programa, &["--version"]);
+    texto
+        .lines()
+        .map(str::trim)
+        .find(|l| l.chars().any(|c| c.is_ascii_digit()))
+        .unwrap_or_else(|| texto.lines().next().unwrap_or("?").trim())
+        .to_string()
+}
+
 fn nombre_del_equipo() -> String {
     std::fs::read_to_string("/proc/sys/kernel/hostname")
         .map(|s| s.trim().to_string())
@@ -206,8 +220,8 @@ fn armar_informe(estado_app: &str, salida: &str) -> String {
     let _ = write!(
         t,
         "=== VERSIONES DEL SONIDO Y DEL BLUETOOTH ===\npipewire: {}\nwireplumber: {}\nbluez: {}\n\n",
-        recoger("pipewire", &["--version"]).lines().last().unwrap_or("?").trim(),
-        recoger("wireplumber", &["--version"]).lines().next().unwrap_or("?").trim(),
+        version_de("pipewire"),
+        version_de("wireplumber"),
         recoger("bluetoothctl", &["--version"]).trim(),
     );
     let _ = write!(

@@ -10,6 +10,7 @@ mod library;
 mod midi;
 mod bluetooth;
 mod informe;
+mod preparacion_bt;
 mod salida_audio;
 mod sync;
 mod sysmon;
@@ -510,6 +511,9 @@ pub fn run() {
             bluetooth::bt_desconectar,
             informe::guardar_informe,
             informe::audio_llega_sonido,
+            preparacion_bt::bt_preparacion_estado,
+            preparacion_bt::bt_preparar_equipo,
+            preparacion_bt::bt_quitar_preparacion,
             quit_app,
             minimize_window,
             toggle_fullscreen

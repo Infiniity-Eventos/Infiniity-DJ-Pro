@@ -254,6 +254,19 @@ export interface Llegada {
 export const audioLlegaSonido = (salida: string) =>
   invoke<Llegada>("audio_llega_sonido", { salida });
 
+/** Preparacion del equipo para cabinas Bluetooth sencillas (ver preparacion_bt.rs). */
+export interface EstadoPreparacion {
+  preparado: boolean;
+  rutas: string[];
+}
+export const btPreparacionEstado = (): Promise<EstadoPreparacion> => {
+  if (!isTauri()) return Promise.resolve({ preparado: false, rutas: [] });
+  return invoke<EstadoPreparacion>("bt_preparacion_estado");
+};
+/** Escribe la configuracion y reinicia WirePlumber UNA vez. Corta el sonido unos segundos. */
+export const btPrepararEquipo = () => invoke<string>("bt_preparar_equipo");
+export const btQuitarPreparacion = () => invoke<string>("bt_quitar_preparacion");
+
 export const guardarInforme = (
   carpetaMusica: string,
   estadoApp: string,
