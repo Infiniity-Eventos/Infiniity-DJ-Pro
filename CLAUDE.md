@@ -84,6 +84,9 @@ Cada una salió de un fallo real en el equipo de alguien:
      pipewire-pulse para un solo programa (`pulse.rules`, `pulse.min.quantum` y
      `pulse.min.req`). Es el botón «Preparar equipo» desde la 0.4.54
      (`preparacion_bt.rs`), comprobado aquí con la regla exacta.
+     **Resultado:** con 75 ms la app **sonó por la cabina por primera vez**
+     (27-oct, 22:10), pero entrecortado; desde la 0.4.55 son 200 ms. Si vuelve
+     a cortarse, ese número es lo primero que se toca.
    - **Lo que falla de verdad** (registro de wireplumber 0.4.17 en Mint 22.1):
      al tomar la app la cabina, el sistema intenta conectar el audio y falla,
      `2 of 2 PipeWire links failed to activate`, y **no lo reintenta**:

@@ -7,6 +7,9 @@
 //! sonaba por la misma salida, en el mismo portatil. Ni la frecuencia (0.4.53
 //! la igualo a 48000 Hz) ni rehacer la conexion lo arreglaban.
 //!
+//! (Resultado: con 75 ms la app SONO por la cabina por primera vez, pero
+//! entrecortado; desde la 0.4.55 son 200 ms. Ver `REGLA`.)
+//!
 //! LA UNICA DIFERENCIA QUE QUEDABA con Firefox, en el mismo informe: el margen
 //! de sonido que cada uno tiene preparado. Firefox, `node.latency 3600/48000`
 //! (75 ms); la app, `1920/48000` (40 ms). Con cable 40 ms sobran; el Bluetooth
@@ -47,8 +50,16 @@ const NOMBRE_LUA_VIEJO: &str = "51-infiniity-cabina.lua";
 const NOMBRE_CONF_VIEJO: &str = "51-infiniity-cabina.conf";
 
 /// Regla para pipewire-pulse. `application.name = "infiniity-dj"` es como se
-/// presenta el sonido de la app (sale asi en todos los informes). 3600/48000 =
-/// 75 ms, lo mismo que tiene Firefox, que si suena por la cabina.
+/// presenta el sonido de la app (sale asi en todos los informes).
+///
+/// 9600/48000 = 200 ms. La primera version (0.4.54) puso 3600/48000 = 75 ms,
+/// lo que tiene Firefox, y fue LA PRIMERA VEZ EN DOS DIAS QUE LA APP SONO POR
+/// LA CABINA (2026-10-27 22:10, portatil Pavilion, «Bluetooth 2")... pero
+/// entrecortado: el margen ayudaba y aun se quedaba corto a ratos. Con 200 ms,
+/// comprobado aqui, el bufer que el sistema le guarda a la app pasa de 33600 a
+/// 115200 bytes (sin regla: 21120). El Bluetooth ya añade su propio retardo,
+/// asi que en la cabina no se nota; con cable, en un equipo preparado, el play
+/// y el crossfader responden un poco mas tarde.
 pub const REGLA: &str = r#"# Infiniity DJ: margen de sonido para que llegue a cabinas Bluetooth.
 # Solo afecta a Infiniity DJ. Reversible: borrar este archivo y reiniciar
 # pipewire-pulse (o pulsar «Quitar preparación» en la app).
@@ -57,8 +68,8 @@ pulse.rules = [
     matches = [ { application.name = "infiniity-dj" } ]
     actions = {
       update-props = {
-        pulse.min.quantum = 3600/48000
-        pulse.min.req = 3600/48000
+        pulse.min.quantum = 9600/48000
+        pulse.min.req = 9600/48000
       }
     }
   }
@@ -203,10 +214,12 @@ mod pruebas {
     use super::*;
 
     #[test]
-    fn la_regla_da_a_la_app_el_margen_de_firefox() {
+    fn la_regla_da_a_la_app_200_ms_de_margen() {
         assert!(REGLA.contains(r#"application.name = "infiniity-dj""#), "solo para la app");
-        assert!(REGLA.contains("pulse.min.quantum = 3600/48000"), "75 ms, como Firefox");
-        assert!(REGLA.contains("pulse.min.req = 3600/48000"));
+        // 75 ms (el de Firefox) sono entrecortado: hacen falta 200 ms.
+        assert!(REGLA.contains("pulse.min.quantum = 9600/48000"), "200 ms");
+        assert!(REGLA.contains("pulse.min.req = 9600/48000"));
+        assert!(!REGLA.contains("3600/48000"), "nunca el margen que se quedo corto");
         // SPA-JSON valido a ojo: corchetes y llaves balanceados.
         assert_eq!(REGLA.matches('{').count(), REGLA.matches('}').count());
         assert_eq!(REGLA.matches('[').count(), REGLA.matches(']').count());

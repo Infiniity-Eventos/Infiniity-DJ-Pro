@@ -276,7 +276,7 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
     askConfirm(
       quitar
         ? "Quitar la preparación devuelve el sonido del equipo a su configuración normal. El sonido se corta unos segundos. ¿Seguir?"
-        : "Preparar el equipo le da al sonido de Infiniity DJ el mismo margen que tiene Firefox (75 ms en vez de 40), que es lo que necesita una cabina Bluetooth. Solo afecta a esta app. Reinicia el servicio de sonido UNA vez (el sonido se corta unos segundos) y después hay que cerrar y abrir la app. Se puede quitar. ¿Seguir?",
+        : "Preparar el equipo le da al sonido de Infiniity DJ más margen (200 ms en vez de 40), que es lo que necesita una cabina Bluetooth para no cortarse. Solo afecta a esta app; con cable, el play y el crossfader responden un poco más tarde. Reinicia el servicio de sonido UNA vez (el sonido se corta unos segundos) y después hay que cerrar y abrir la app. Se puede quitar. ¿Seguir?",
       () => {
         void (async () => {
           setOcupado(true);
