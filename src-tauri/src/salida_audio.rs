@@ -177,8 +177,8 @@ fn default_sink() -> Option<String> {
 }
 
 /// Un flujo de sonido en curso (un programa sonando).
-struct Stream {
-    index: u32,
+pub(crate) struct Stream {
+    pub(crate) index: u32,
     sink: u32,
     pid: Option<u32>,
     app: String,
@@ -186,7 +186,7 @@ struct Stream {
     corked: bool,
 }
 
-fn list_streams() -> Result<Vec<Stream>, String> {
+pub(crate) fn list_streams() -> Result<Vec<Stream>, String> {
     Ok(parse_streams(&pactl(&["list", "sink-inputs"])?))
 }
 
@@ -257,7 +257,7 @@ fn is_ours(pid: u32) -> bool {
 }
 
 /// ¿Este flujo de sonido es de la app?
-fn stream_is_ours(s: &Stream) -> bool {
+pub(crate) fn stream_is_ours(s: &Stream) -> bool {
     if let Some(pid) = s.pid {
         if is_ours(pid) {
             return true;

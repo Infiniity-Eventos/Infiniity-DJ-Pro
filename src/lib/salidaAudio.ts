@@ -136,6 +136,21 @@ function avisarDeArreglos(arreglos: string[]): void {
 }
 
 /**
+ * Para el motor, al dar play: si la salida elegida es una cabina Bluetooth,
+ * comprobar (con la medida fiable) que le llega el sonido y, si no, rehacer la
+ * conexion. Va con un pequeño retraso para no medir el arranque.
+ *
+ * POR QUE AQUI Y NO SOLO AL ELEGIR LA SALIDA (0.4.52): al elegirla, lo normal
+ * es que todavia no haya musica, o que haya una cancion cargando; el unico
+ * momento seguro para medir y recuperar es cuando ya esta sonando.
+ */
+export function vigilarLlegada(): void {
+  const { audioSink } = useStore.getState();
+  if (!audioSink || !esBluetooth(audioSink)) return;
+  window.setTimeout(() => void comprobarQueLlega(audioSink), 2000);
+}
+
+/**
  * Es un parlante o amplificador Bluetooth. Misma regla que `kind_of()` en
  * `src-tauri/src/salida_audio.rs`.
  */
@@ -211,12 +226,24 @@ export async function aplicarSalida(sink: string): Promise<number> {
   if (movidos === 0) return 0;
 
   if (esBluetooth(sink) && !rehaciendo) {
-    await rehacerConexionDeSonido();
-    // La conexion nueva deberia nacer ya en el parlante (el sistema recuerda
-    // la salida por programa), pero no se da por supuesto: se manda igual.
-    const r2 = await audioSetOutput(sink);
-    avisarDeArreglos(r2.arreglos);
-    aplicada = r2.movidos > 0;
+    try {
+      await rehacerConexionDeSonido();
+      // La conexion nueva deberia nacer ya en el parlante (el sistema recuerda
+      // la salida por programa), pero no se da por supuesto: se manda igual.
+      const r2 = await audioSetOutput(sink);
+      avisarDeArreglos(r2.arreglos);
+      aplicada = r2.movidos > 0;
+    } catch (err) {
+      // NO ABORTAR (0.4.52). Rehacer la conexion esta prohibido mientras una
+      // cancion carga o hay una transicion, y la salida se aplica JUSTO al
+      // cargar (el motor arranca ahi). Antes ese fallo abortaba todo lo de
+      // abajo —incluida la comprobacion que recupera el sonido— y la salida
+      // quedaba marcada como aplicada, asi que al dar play no se reintentaba.
+      // Paso en la prueba de la 0.4.51: la recuperacion nunca llego a correr.
+      // El flujo ya esta en la cabina; la comprobacion de `vigilarLlegada`
+      // (al dar play) se encarga de rehacer la conexion cuando se pueda.
+      console.warn("[salidaAudio] no se pudo rehacer la conexión ahora; se reintenta al sonar", err);
+    }
   }
 
   // Comprobar donde quedo de verdad.

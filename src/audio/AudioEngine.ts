@@ -32,6 +32,7 @@ import {
   olvidarSalidaAplicada,
   registrarRehacerConexion,
   rehacerConexionDeSonido,
+  vigilarLlegada,
 } from "../lib/salidaAudio";
 
 /**
@@ -958,6 +959,10 @@ class AudioEngine {
 
     this.startFrom(id, d.offset);
     useStore.getState().patchDeck(id, { isPlaying: true });
+
+    // Con una cabina Bluetooth: comprobar que le llega y recuperarlo si no.
+    // Es el unico momento seguro (ya no hay nada cargando). Ver salidaAudio.ts.
+    vigilarLlegada();
   }
 
   /**

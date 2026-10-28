@@ -130,46 +130,37 @@ pub async fn audio_llega_sonido(salida: String) -> Result<Llegada, String> {
     .await
 }
 
-pub(crate) fn medir_llegada(sink: &str) -> String {
-    if sink.trim().is_empty() {
-        return "(no hay salida elegida)".to_string();
-    }
-    let archivo = std::env::temp_dir().join(format!("infiniity-dj-medida-{}.raw", std::process::id()));
-    let Ok(salida) = std::fs::File::create(&archivo) else {
-        return "(no se pudo preparar la medicion)".to_string();
-    };
+/// Graba ~3,5 s de `origen` (argumento de parecord: `--device=X.monitor` o
+/// `--monitor-stream=N`) y devuelve el pico (0..1), o None si no se grabo nada.
+///
+/// TRES SEGUNDOS Y MEDIO, y no menos: medido en este equipo, `parecord` tarda
+/// unos dos segundos en soltar lo primero que graba. Con menos devolvia CERO
+/// bytes aunque hubiera sonido, y se habria leido como silencio. Una medida
+/// que miente es peor que no medir.
+fn grabar_pico(origen: &str) -> Result<Option<f64>, String> {
+    let archivo = std::env::temp_dir().join(format!(
+        "infiniity-dj-medida-{}-{}.raw",
+        std::process::id(),
+        origen.len()
+    ));
+    let salida = std::fs::File::create(&archivo)
+        .map_err(|_| "(no se pudo preparar la medicion)".to_string())?;
     let mut cmd = clean_command("parecord");
     cmd.env("LC_ALL", "C");
-    cmd.args([
-        &format!("--device={sink}.monitor"),
-        "--raw",
-        "--format=s16le",
-        "--rate=48000",
-        "--channels=2",
-    ]);
+    cmd.args([origen, "--raw", "--format=s16le", "--rate=48000", "--channels=2"]);
     cmd.stdout(std::process::Stdio::from(salida));
     cmd.stderr(std::process::Stdio::null());
-    let Ok(mut hijo) = cmd.spawn() else {
+    let mut hijo = cmd.spawn().map_err(|_| {
         let _ = std::fs::remove_file(&archivo);
-        return "(falta «parecord»: instala pulseaudio-utils)".to_string();
-    };
-    // TRES SEGUNDOS Y MEDIO, y no menos: medido en este equipo, `parecord`
-    // tarda unos dos segundos en soltar lo primero que graba. Con un segundo y
-    // medio devolvia CERO bytes aunque la salida estuviera reproduciendo, y se
-    // habria leido como "no llega sonido" cuando si llegaba. Una medida que
-    // miente es peor que no medir.
+        "(falta «parecord»: instala pulseaudio-utils)".to_string()
+    })?;
     std::thread::sleep(std::time::Duration::from_millis(3500));
     let _ = hijo.kill();
     let _ = hijo.wait();
-
     let datos = std::fs::read(&archivo).unwrap_or_default();
     let _ = std::fs::remove_file(&archivo);
     if datos.len() < 64 {
-        // Una salida en reposo no produce nada en su monitor. Si la app cree
-        // que esta sonando por ahi, esto ya dice que no es verdad.
-        return format!(
-            "NO LLEGA NADA — «{sink}» no esta reproduciendo (no se pudo grabar ni un instante de ella)"
-        );
+        return Ok(None);
     }
     let mut pico: i32 = 0;
     for trozo in datos.chunks_exact(2) {
@@ -178,15 +169,66 @@ pub(crate) fn medir_llegada(sink: &str) -> String {
             pico = v;
         }
     }
-    let frac = f64::from(pico) / 32768.0;
-    if frac < 0.0005 {
-        format!("SILENCIO — por «{sink}» no esta saliendo nada (pico {frac:.5})")
-    } else {
-        format!(
-            "LLEGA SONIDO por «{sink}»: {:.1} dB (pico {frac:.4})",
-            20.0 * frac.log10()
-        )
+    Ok(Some(f64::from(pico) / 32768.0))
+}
+
+/// ¿LLEGA SONIDO DE VERDAD A LA SALIDA ELEGIDA? Graba su monitor (la mezcla de
+/// todo lo que suena por ella) y mide el pico.
+pub(crate) fn medir_llegada(sink: &str) -> String {
+    if sink.trim().is_empty() {
+        return "(no hay salida elegida)".to_string();
     }
+    match grabar_pico(&format!("--device={sink}.monitor")) {
+        Err(e) => e,
+        Ok(None) => format!(
+            "NO LLEGA NADA — «{sink}» no esta reproduciendo (no se pudo grabar ni un instante de ella)"
+        ),
+        Ok(Some(f)) if f < 0.0005 => {
+            format!("SILENCIO — por «{sink}» no esta saliendo nada (pico {f:.5})")
+        }
+        Ok(Some(f)) => format!("LLEGA SONIDO por «{sink}»: {:.1} dB (pico {f:.4})", 20.0 * f.log10()),
+    }
+}
+
+/// ¿EL FLUJO DE LA APP LLEVA SONIDO DENTRO? Graba SOLO el flujo de la app (no
+/// la salida entera) y mide el pico.
+///
+/// POR QUE (0.4.52): en un informe del 2026-10-27 el flujo de la app estaba en
+/// la salida de la cabina —la misma por la que Firefox acababa de sonar—, en
+/// marcha, y a la salida llegaba silencio, sin ningun fallo en el registro. Lo
+/// que parte el problema en dos es esto:
+///   - si el flujo lleva sonido y a la salida no llega -> el sistema no lo
+///     esta mezclando (un enlace que no se activo);
+///   - si el flujo ya va en silencio -> el navegador interno esta entregando
+///     silencio cuando la salida es Bluetooth, aunque el motor produzca sonido.
+pub(crate) fn medir_flujo_propio() -> String {
+    let flujos = match crate::salida_audio::list_streams() {
+        Ok(f) => f,
+        Err(e) => return format!("(no se pudieron listar los flujos: {e})"),
+    };
+    let propios: Vec<u32> = flujos
+        .iter()
+        .filter(|s| crate::salida_audio::stream_is_ours(s))
+        .map(|s| s.index)
+        .collect();
+    if propios.is_empty() {
+        return "(la app no tiene ningun flujo de sonido abierto)".to_string();
+    }
+    propios
+        .iter()
+        .map(|idx| match grabar_pico(&format!("--monitor-stream={idx}")) {
+            Err(e) => format!("flujo #{idx}: {e}"),
+            Ok(None) => format!("flujo #{idx}: NO SE GRABO NADA (el flujo no entrega muestras)"),
+            Ok(Some(f)) if f < 0.0005 => {
+                format!("flujo #{idx}: SILENCIO — la app entrega silencio al sistema (pico {f:.5})")
+            }
+            Ok(Some(f)) => format!(
+                "flujo #{idx}: LLEVA SONIDO {:.1} dB (pico {f:.4}) — la app SI entrega sonido al sistema",
+                20.0 * f.log10()
+            ),
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn armar_informe(estado_app: &str, salida: &str) -> String {
@@ -211,6 +253,11 @@ fn armar_informe(estado_app: &str, salida: &str) -> String {
         t,
         "=== ¿LLEGA SONIDO A LA SALIDA ELEGIDA? ===\n{}\n\n",
         medir_llegada(salida)
+    );
+    let _ = write!(
+        t,
+        "=== ¿EL FLUJO DE LA APP LLEVA SONIDO DENTRO? ===\n{}\n\n",
+        medir_flujo_propio()
     );
     let _ = write!(t, "=== SISTEMA ===\n{}\n\n", sistema());
     // Las versiones del sonido y del Bluetooth: cualquier arreglo de la cabina
@@ -430,6 +477,46 @@ mod pruebas {
         // que llega sonido.
         assert!(!en_silencio.contains("LLEGA SONIDO"), "{en_silencio}");
         assert!(con_sonido.contains("LLEGA SONIDO"), "{con_sonido}");
+    }
+
+    /// Contra el sonido real: un flujo PROPIO (hijo nuestro) con un tono tiene
+    /// que salir como «LLEVA SONIDO». Es la medida que separa "la app entrega
+    /// silencio" de "la cabina no mezcla lo que le llega".
+    #[test]
+    #[ignore = "necesita pactl/parecord y el sonido del equipo"]
+    fn medir_flujo_propio_ve_el_sonido_de_la_app() {
+        let _candado = crate::CANDADO_SONIDO.lock().unwrap_or_else(|e| e.into_inner());
+        let modulo = recoger("pactl", &["load-module", "module-null-sink", "sink_name=djflujopropio"]);
+        let modulo = modulo.trim().to_string();
+        assert!(
+            modulo.chars().all(|c| c.is_ascii_digit()) && !modulo.is_empty(),
+            "no se pudo crear la salida de pega: {modulo}"
+        );
+        let wav = std::env::temp_dir().join("infiniity-dj-flujo-propio.wav");
+        tono_wav(&wav);
+        let mut hijo = clean_command("paplay")
+            .env("PULSE_SINK", "djflujopropio")
+            .arg(&wav)
+            .spawn()
+            .expect("hace falta paplay (pulseaudio-utils)");
+        // Esperar a que el flujo exista (no un tiempo fijo).
+        for _ in 0..100 {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            if crate::salida_audio::list_streams()
+                .unwrap_or_default()
+                .iter()
+                .any(crate::salida_audio::stream_is_ours)
+            {
+                break;
+            }
+        }
+        let medida = medir_flujo_propio();
+        let _ = hijo.kill();
+        let _ = hijo.wait();
+        let _ = std::fs::remove_file(&wav);
+        let _ = recoger("pactl", &["unload-module", &modulo]);
+        println!("  flujo propio: {medida}");
+        assert!(medida.contains("LLEVA SONIDO"), "{medida}");
     }
 
     #[test]
