@@ -261,10 +261,38 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
     }
   };
 
+  /**
+   * Enciende el Bluetooth del portatil si esta apagado, antes de buscar o
+   * conectar. Antes habia que darle a un boton aparte y nadie lo veia: en un
+   * evento se perdio un buen rato porque "la app no conecta", cuando lo que
+   * pasaba es que el Bluetooth del equipo estaba apagado. Si hay que hacerlo
+   * siempre, que lo haga la app y lo diga.
+   */
+  const asegurarBtEncendido = async (): Promise<boolean> => {
+    if (bt?.encendido) return true;
+    try {
+      await btEncender();
+      showToast("El Bluetooth del equipo estaba apagado: se encendió.");
+      await cargarBt();
+      return true;
+    } catch (e) {
+      setError(
+        `El Bluetooth del equipo está apagado y no se pudo encender: ${
+          e instanceof Error ? e.message : String(e)
+        }`
+      );
+      return false;
+    }
+  };
+
   const buscarCabinas = async () => {
     setBuscando(true);
     setError(null);
     setAvisoBusqueda(null);
+    if (!(await asegurarBtEncendido())) {
+      setBuscando(false);
+      return;
+    }
     const conocidas = new Set(cabinas.map((c) => c.mac));
     try {
       const encontradas = (await btBuscar(SEGUNDOS_BUSQUEDA)).filter(
@@ -310,6 +338,7 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
     setConectando(d.mac);
     setError(null);
     try {
+      if (!(await asegurarBtEncendido())) return;
       const aviso = await btConectar(d.mac);
       showToast(`Cabina conectada: ${d.nombre}`);
       // Si hubo que reavivarla (conectada a medias, sin canal de sonido), que
@@ -373,7 +402,7 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
             <span className="out-bt-title">Cabinas Bluetooth</span>
             <button
               className="btn"
-              disabled={ocupado || buscando || !bt?.encendido}
+              disabled={ocupado || buscando || (bt !== null && !bt.hay)}
               onClick={() => void buscarCabinas()}
             >
               {buscando ? "Buscando..." : "Buscar cabinas"}

@@ -827,6 +827,16 @@ fn perfil_alternativo(perfiles: &[String], activo: &str) -> Option<String> {
         .cloned()
 }
 
+/// El modo de musica con el que arrancar una tarjeta: el SBC «a secas» si lo
+/// hay (lo entiende cualquier cabina), si no el primero que sea de musica.
+fn perfil_musica_preferido(perfiles: &[String]) -> Option<String> {
+    perfiles
+        .iter()
+        .find(|p| p.as_str() == "a2dp-sink")
+        .or_else(|| perfiles.iter().find(|p| es_modo_musica(p)))
+        .cloned()
+}
+
 /// ¿La salida existe y tiene transporte? Some(true) sana, Some(false)
 /// fantasma, None no existe (o no se pudo consultar).
 fn sana(sink: &str) -> Option<bool> {
@@ -857,20 +867,77 @@ fn tarjeta_de(dir: &str) -> Option<Tarjeta> {
 pub fn reavivar_por_direccion(mac: &str) -> Option<String> {
     let _candado = CANDADO_SALIDA.lock().unwrap_or_else(|e| e.into_inner());
     let marca = mac.to_uppercase().replace(':', "_");
+    let buscar_salida = || -> Option<String> {
+        let texto = pactl(&["list", "sinks"]).ok()?;
+        parse_sinks(&texto)
+            .into_iter()
+            .find(|s| s.name.starts_with("bluez_output.") && s.name.to_uppercase().contains(&marca))
+            .map(|s| s.name)
+    };
     let mut nombre: Option<String> = None;
     for _ in 0..15 {
-        if let Ok(texto) = pactl(&["list", "sinks"]) {
-            if let Some(s) = parse_sinks(&texto)
-                .into_iter()
-                .find(|s| s.name.starts_with("bluez_output.") && s.name.to_uppercase().contains(&marca))
-            {
-                nombre = Some(s.name);
-                break;
-            }
+        nombre = buscar_salida();
+        if nombre.is_some() {
+            break;
         }
         std::thread::sleep(std::time::Duration::from_millis(400));
     }
-    reavivar_bluetooth(&nombre?)
+
+    // SIN SALIDA TRAS CONECTAR: casi siempre es que la tarjeta quedo en «off».
+    //
+    // Medido el 2026-10-27 (informe de las 19:15): con el Bluetooth del
+    // portatil recien encendido, la cabina conecto («Cabina conectada») y 20 s
+    // despues la tarjeta seguia en «Active Profile: off». Sin perfil no hay
+    // salida; sin salida no se puede elegir; y el paso que la ponia en modo
+    // musica solo corria AL ELEGIRLA. Pescadilla. Aqui se rompe: si tras
+    // conectar no aparece la salida y la tarjeta esta en «off», se enciende.
+    let mut aviso_tarjeta: Option<String> = None;
+    if nombre.is_none() {
+        let dir = marca.clone();
+        if let Some(tarjeta) = tarjeta_de(&dir) {
+            if tarjeta.perfil_activo == "off" || tarjeta.perfil_activo.is_empty() {
+                if let Some(musica) = perfil_musica_preferido(&tarjeta.perfiles) {
+                    match pactl(&["set-card-profile", &tarjeta.name, &musica]) {
+                        Ok(_) => {
+                            for _ in 0..15 {
+                                std::thread::sleep(std::time::Duration::from_millis(400));
+                                nombre = buscar_salida();
+                                if nombre.is_some() {
+                                    break;
+                                }
+                            }
+                            aviso_tarjeta = Some(if nombre.is_some() {
+                                "La cabina conectó pero el equipo la dejó apagada como salida de \
+                                 sonido; se encendió en modo música."
+                                    .to_string()
+                            } else {
+                                "La cabina conectó pero el equipo la dejó apagada como salida de \
+                                 sonido, y al encenderla no apareció. Apágala, enciéndela y \
+                                 conéctala otra vez."
+                                    .to_string()
+                            });
+                        }
+                        Err(e) => {
+                            aviso_tarjeta = Some(format!(
+                                "La cabina conectó pero el equipo la dejó apagada como salida de \
+                                 sonido y no se pudo encender: {e}"
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let Some(nombre) = nombre else {
+        return aviso_tarjeta;
+    };
+    // Con la salida ya existente, lo de siempre: comprobar el canal.
+    match (aviso_tarjeta, reavivar_bluetooth(&nombre)) {
+        (Some(a), Some(b)) => Some(format!("{a} {b}")),
+        (Some(a), None) => Some(a),
+        (None, b) => b,
+    }
 }
 
 /// Candado: aplicar la salida va de UNA en una.
@@ -1297,6 +1364,16 @@ Card #88
             "se colo un puerto entre los modos: {:?}",
             cabina.perfiles
         );
+    }
+
+    #[test]
+    fn perfil_musica_preferido_arranca_por_sbc_a_secas() {
+        let v = |xs: &[&str]| xs.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+        let p = v(&["off", "a2dp-sink-sbc_xq", "a2dp-sink", "headset-head-unit"]);
+        assert_eq!(perfil_musica_preferido(&p).as_deref(), Some("a2dp-sink"));
+        let sin_sbc = v(&["off", "a2dp-sink-aptx", "headset-head-unit"]);
+        assert_eq!(perfil_musica_preferido(&sin_sbc).as_deref(), Some("a2dp-sink-aptx"));
+        assert_eq!(perfil_musica_preferido(&v(&["off", "headset-head-unit"])), None);
     }
 
     #[test]
