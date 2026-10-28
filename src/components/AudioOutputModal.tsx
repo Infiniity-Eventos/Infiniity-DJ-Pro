@@ -499,7 +499,9 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
               <span>
                 {preparacion?.preparado
                   ? "Equipo preparado para cabinas Bluetooth sencillas (solo audio, SBC)."
-                  : "Si una cabina conecta pero no suena, prepara el equipo para cabinas sencillas."}
+                  : preparacion?.antigua
+                    ? "Hay una preparación ANTIGUA (de una versión con un error) que impide conectar cabinas: vuelve a preparar el equipo."
+                    : "Si una cabina conecta pero no suena, prepara el equipo para cabinas sencillas."}
               </span>
               <button className="btn" disabled={ocupado || buscando} onClick={alternarPreparacion}>
                 {preparacion?.preparado ? "Quitar preparación" : "Preparar equipo"}

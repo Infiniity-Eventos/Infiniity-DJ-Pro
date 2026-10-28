@@ -84,6 +84,13 @@ Cada una salió de un fallo real en el equipo de alguien:
      portátil trabado tras cinco reinicios en bucle. Peor que una cabina muda.
    - **No mandar versiones a ciegas al equipo.** Sin poder reproducir aquí, cada
      versión le cuesta al que prueba. Primero el informe, luego el cambio.
+   - **Verificar antes de mandar, también lo "obvio".** En `bluez5.roles` de
+     WirePlumber los roles se nombran desde el PORTÁTIL: `a2dp_source` = envía
+     audio (cabinas), `a2dp_sink` = recibe (de un celular). Una versión puso
+     `a2dp_sink` sin comprobarlo y dejó un portátil sin poder conectar ninguna
+     cabina (`br-connection-profile-unavailable`). Se comprobó después en un
+     minuto, en este PC, mirando qué puntos registra bluetoothd. Ese minuto
+     va ANTES de publicar, no después. (`preparacion_bt.rs`)
    - Sigue siendo cierto que la salida no se cambia arrastrando el flujo
      (`AudioEngine.rehacerConexion()` la rehace y reanuda donde iba) y que hay
      que comprobar que suena de verdad (`audio_output_status`), pero eso NO

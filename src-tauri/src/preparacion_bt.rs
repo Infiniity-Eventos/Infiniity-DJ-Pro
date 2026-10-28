@@ -21,6 +21,16 @@
 //! trabo un portatil (regla 8). Aqui se hace UNA vez, porque el usuario lo
 //! pidio, con la app sin musica, y se dice lo que va a pasar.
 //!
+//! EL ROL, Y EL ERROR QUE COSTO (0.4.49): los roles de `bluez5.roles` se
+//! nombran desde el punto de vista del PORTATIL. `a2dp_source` = el portatil
+//! ENVIA audio (a una cabina); `a2dp_sink` = el portatil RECIBE audio (de un
+//! celular). La 0.4.49 puso `a2dp_sink` y con eso el sistema dejo de registrar
+//! el punto A2DPSource: BlueZ contestaba «br-connection-profile-unavailable» y
+//! NINGUNA cabina podia conectarse. Se comprobo empiricamente (con
+//! `roles = [ a2dp_source ]` bluetoothd registra solo `/MediaEndpoint/
+//! A2DPSource/*`). Por eso `estado_sinc` reconoce la preparacion antigua y la
+//! da por NO preparada: volver a pulsar «Preparar equipo» la reescribe.
+//!
 //! REVERSIBLE: borrar los dos archivos y reiniciar WirePlumber. Hay boton.
 
 use serde::Serialize;
@@ -36,7 +46,7 @@ const NOMBRE_CONF: &str = "51-infiniity-cabina.conf";
 pub const LUA: &str = r#"-- Infiniity DJ: cabinas Bluetooth sencillas (WirePlumber 0.4).
 -- Solo audio (sin manos libres), sin control de volumen por hardware, SBC a secas.
 -- Reversible: borrar este archivo y reiniciar wireplumber.
-bluez_monitor.properties["bluez5.roles"] = "[ a2dp_sink ]"
+bluez_monitor.properties["bluez5.roles"] = "[ a2dp_source ]"
 bluez_monitor.properties["bluez5.codecs"] = "[ sbc ]"
 bluez_monitor.properties["bluez5.enable-sbc-xq"] = false
 bluez_monitor.properties["bluez5.enable-msbc"] = false
@@ -49,7 +59,7 @@ pub const CONF: &str = r#"# Infiniity DJ: cabinas Bluetooth sencillas (WirePlumb
 # Solo audio (sin manos libres), sin control de volumen por hardware, SBC a secas.
 # Reversible: borrar este archivo y reiniciar wireplumber.
 monitor.bluez.properties = {
-  bluez5.roles = [ a2dp_sink ]
+  bluez5.roles = [ a2dp_source ]
   bluez5.codecs = [ sbc ]
   bluez5.enable-sbc-xq = false
   bluez5.enable-msbc = false
@@ -77,16 +87,23 @@ fn rutas() -> (PathBuf, PathBuf) {
 /// Estado de la preparacion, para la interfaz y el informe.
 #[derive(Serialize, Clone)]
 pub struct EstadoPreparacion {
-    /// Los archivos de configuracion estan puestos.
+    /// Los archivos de configuracion estan puestos Y son los actuales.
     pub preparado: bool,
+    /// Hay archivos de una preparacion anterior distinta (p. ej. la de la
+    /// 0.4.49, con el rol invertido): hay que volver a preparar.
+    pub antigua: bool,
     /// Donde estan (o estarian).
     pub rutas: Vec<String>,
 }
 
 fn estado_sinc() -> EstadoPreparacion {
     let (lua, conf) = rutas();
+    let leer = |r: &PathBuf| std::fs::read_to_string(r).unwrap_or_default();
+    let hay = lua.is_file() || conf.is_file();
+    let actual = leer(&lua) == LUA && leer(&conf) == CONF;
     EstadoPreparacion {
-        preparado: lua.is_file() && conf.is_file(),
+        preparado: hay && actual,
+        antigua: hay && !actual,
         rutas: vec![lua.to_string_lossy().into_owned(), conf.to_string_lossy().into_owned()],
     }
 }
@@ -95,6 +112,7 @@ fn estado_sinc() -> EstadoPreparacion {
 pub async fn bt_preparacion_estado() -> EstadoPreparacion {
     en_otro_hilo(|| Ok(estado_sinc())).await.unwrap_or(EstadoPreparacion {
         preparado: false,
+        antigua: false,
         rutas: Vec::new(),
     })
 }
@@ -162,13 +180,43 @@ mod pruebas {
     #[test]
     fn la_configuracion_solo_ofrece_audio_y_sbc_a_secas() {
         for texto in [LUA, CONF] {
-            assert!(texto.contains("a2dp_sink"), "solo el rol de audio");
+            // El portatil ENVIA audio a la cabina: a2dp_source. Con a2dp_sink
+            // (la 0.4.49) ninguna cabina podia conectarse.
+            assert!(texto.contains("a2dp_source"), "el rol de enviar audio");
+            assert!(!texto.contains("a2dp_sink"), "nunca el rol de recibir audio");
             assert!(texto.contains("enable-hw-volume"), "sin volumen por hardware");
             assert!(texto.contains("enable-sbc-xq"), "sin SBC-XQ");
             assert!(!texto.contains("hfp_hf"), "nada de manos libres");
         }
         // El .conf tiene que ser SPA-JSON valido a ojo: llaves balanceadas.
         assert_eq!(CONF.matches('{').count(), CONF.matches('}').count());
+    }
+
+    #[test]
+    fn una_preparacion_antigua_no_cuenta_como_preparado() {
+        let tmp = std::env::temp_dir().join(format!("dj-prep-prueba-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        // Se simula XDG_CONFIG_HOME solo dentro de esta prueba.
+        let antes = std::env::var_os("XDG_CONFIG_HOME");
+        std::env::set_var("XDG_CONFIG_HOME", &tmp);
+        let (lua, conf) = rutas();
+        assert!(!estado_sinc().preparado && !estado_sinc().antigua, "sin archivos: nada");
+        std::fs::create_dir_all(lua.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(conf.parent().unwrap()).unwrap();
+        std::fs::write(&lua, LUA.replace("a2dp_source", "a2dp_sink")).unwrap();
+        std::fs::write(&conf, CONF.replace("a2dp_source", "a2dp_sink")).unwrap();
+        let e = estado_sinc();
+        assert!(e.antigua && !e.preparado, "la de la 0.4.49 es antigua, no preparada");
+        std::fs::write(&lua, LUA).unwrap();
+        std::fs::write(&conf, CONF).unwrap();
+        let e = estado_sinc();
+        assert!(e.preparado && !e.antigua);
+        match antes {
+            Some(v) => std::env::set_var("XDG_CONFIG_HOME", v),
+            None => std::env::remove_var("XDG_CONFIG_HOME"),
+        }
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     #[test]

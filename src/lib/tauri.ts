@@ -256,11 +256,12 @@ export const audioLlegaSonido = (salida: string) =>
 
 /** Preparacion del equipo para cabinas Bluetooth sencillas (ver preparacion_bt.rs). */
 export interface EstadoPreparacion {
-  preparado: boolean;
+  preparado: boolean; // archivos puestos y actuales
+  antigua: boolean; // hay una preparacion anterior distinta: volver a preparar
   rutas: string[];
 }
 export const btPreparacionEstado = (): Promise<EstadoPreparacion> => {
-  if (!isTauri()) return Promise.resolve({ preparado: false, rutas: [] });
+  if (!isTauri()) return Promise.resolve({ preparado: false, antigua: false, rutas: [] });
   return invoke<EstadoPreparacion>("bt_preparacion_estado");
 };
 /** Escribe la configuracion y reinicia WirePlumber UNA vez. Corta el sonido unos segundos. */
