@@ -76,6 +76,14 @@ Cada una salió de un fallo real en el equipo de alguien:
      44100 aunque el sistema vaya a 48000. Desde la 0.4.53 el motor se crea a
      48000 (`AudioEngine.ensure`). Si esto vuelve a fallar, esa es la medida a
      mirar primero: ¿sale sonido del motor y entra silencio al sistema?
+     La 0.4.53 igualó la frecuencia y **no bastó**. La otra diferencia medida
+     con Firefox es el margen: 75 ms (Firefox) contra 40 ms (la app). Ese
+     margen lo fija el navegador interno y **no se cambia desde la app**:
+     WebKitGTK ignora `latencyHint` y `PULSE_LATENCY_MSEC` no toca su salida de
+     GStreamer (los dos, comprobados aquí). Lo que sí funciona es una regla de
+     pipewire-pulse para un solo programa (`pulse.rules`, `pulse.min.quantum` y
+     `pulse.min.req`). Es el botón «Preparar equipo» desde la 0.4.54
+     (`preparacion_bt.rs`), comprobado aquí con la regla exacta.
    - **Lo que falla de verdad** (registro de wireplumber 0.4.17 en Mint 22.1):
      al tomar la app la cabina, el sistema intenta conectar el audio y falla,
      `2 of 2 PipeWire links failed to activate`, y **no lo reintenta**:

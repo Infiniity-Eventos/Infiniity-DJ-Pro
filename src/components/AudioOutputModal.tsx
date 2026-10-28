@@ -275,8 +275,8 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
     const quitar = preparacion?.preparado === true;
     askConfirm(
       quitar
-        ? "Quitar la preparación devuelve el Bluetooth del equipo a su configuración normal. El sonido se corta unos segundos. ¿Seguir?"
-        : "Preparar el equipo hace que el sistema le ofrezca a la cabina solo audio (sin manos libres), sin control de volumen por hardware y con SBC sencillo: es lo que estos módulos baratos aguantan. Reinicia el gestor de sonido UNA vez (el sonido se corta unos segundos). Se puede quitar después. ¿Seguir?",
+        ? "Quitar la preparación devuelve el sonido del equipo a su configuración normal. El sonido se corta unos segundos. ¿Seguir?"
+        : "Preparar el equipo le da al sonido de Infiniity DJ el mismo margen que tiene Firefox (75 ms en vez de 40), que es lo que necesita una cabina Bluetooth. Solo afecta a esta app. Reinicia el servicio de sonido UNA vez (el sonido se corta unos segundos) y después hay que cerrar y abrir la app. Se puede quitar. ¿Seguir?",
       () => {
         void (async () => {
           setOcupado(true);
@@ -498,10 +498,10 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
             <div className="out-bt-nota out-bt-fila">
               <span>
                 {preparacion?.preparado
-                  ? "Equipo preparado para cabinas Bluetooth sencillas (solo audio, SBC)."
+                  ? "Equipo preparado: el sonido de la app tiene margen para cabinas Bluetooth."
                   : preparacion?.antigua
-                    ? "Hay una preparación ANTIGUA (de una versión con un error) que impide conectar cabinas: vuelve a preparar el equipo."
-                    : "Si una cabina conecta pero no suena, prepara el equipo para cabinas sencillas."}
+                    ? "Hay una preparación ANTERIOR que ya no sirve: dale a Preparar equipo para cambiarla por la nueva."
+                    : "Si una cabina Bluetooth conecta pero no suena, prepara el equipo."}
               </span>
               <button className="btn" disabled={ocupado || buscando} onClick={alternarPreparacion}>
                 {preparacion?.preparado ? "Quitar preparación" : "Preparar equipo"}
