@@ -359,11 +359,11 @@ fn audio_set_output_sinc(sink: &str) -> Result<ResultadoSalida, String> {
     // REHACE su salida en el sistema, asi que si se movieran los flujos antes,
     // irian a una salida que deja de existir un instante despues.
     let mut arreglos: Vec<String> = Vec::new();
-    // Primero de todo: si la cabina es un nodo fantasma, reavivarla. Destruye y
-    // recrea la salida, asi que va antes que cualquier otra cosa.
-    if let Some(aviso) = reavivar_bluetooth(sink) {
-        arreglos.push(aviso);
-    }
+    // OJO, NO SE "REAVIVA" NADA AQUI (quitado en 0.4.51). Se hacia cuando la
+    // cabina marcaba `api.bluez5.transport = ""`, creyendo que eso era "sin
+    // canal". Falso: en un informe del 2026-10-27 esas mismas propiedades
+    // salian con YouTube sonando por la cabina y el sonido llegando a ella. El
+    // "remedio" apagaba y encendia el perfil de cabinas SANAS. Ver regla 8.
     if let Some(aviso) = asegurar_modo_musica(sink) {
         arreglos.push(aviso);
         // La salida acaba de rehacerse: darle un momento al sistema.
@@ -405,32 +405,13 @@ fn audio_set_output_sinc(sink: &str) -> Result<ResultadoSalida, String> {
         ));
     }
 
-    // Con una cabina Bluetooth, el sonido NO va directo: va por el puente (ver
-    // arriba). Por cable se quita el puente si lo hubiera y se va directo.
-    let destino: String = if kind_of(sink) == "bluetooth" {
-        match armar_puente(sink) {
-            Ok(()) => {
-                arreglos.push(
-                    "Con la cabina Bluetooth el sonido va por un puente del sistema: \
-                     el programa escribe en una salida normal y el equipo se encarga \
-                     de pasarselo a la cabina."
-                        .to_string(),
-                );
-                PUENTE.to_string()
-            }
-            Err(e) => {
-                // Que no se pueda montar no es motivo para no sonar: se intenta
-                // directo, como antes, y se dice lo que paso.
-                eprintln!("[salida_audio] sin puente, se va directo: {e}");
-                arreglos.push(format!("No se pudo usar el puente hacia la cabina: {e}"));
-                sink.to_string()
-            }
-        }
-    } else {
-        quitar_puente();
-        sink.to_string()
-    };
-    let sink = destino.as_str();
+    // Siempre DIRECTO, tambien con Bluetooth. El puente (0.4.41-0.4.50) se
+    // quito: le metia a la cabina una SEGUNDA conexion (un enlace del sistema)
+    // que podia fallar igual —«2 of 2 PipeWire links failed to activate» en el
+    // registro—, y cuando fallaba no habia forma de rehacerla, porque rehacer
+    // la conexion de la app no toca ese enlace. Si quedara uno de una version
+    // anterior, se retira aqui.
+    quitar_puente();
 
     let streams = list_streams()?;
     let mut movidos = 0u32;
@@ -640,33 +621,6 @@ pub fn quitar_puente() {
     }
 }
 
-/// Monta el puente hacia `destino` (la cabina). Devuelve por donde tiene que
-/// salir el sonido de la app a partir de ahora.
-fn armar_puente(destino: &str) -> Result<(), String> {
-    quitar_puente(); // nunca dos puentes a la vez
-    pactl(&[
-        "load-module",
-        "module-null-sink",
-        &format!("sink_name={PUENTE}"),
-        "sink_properties=device.description=Infiniity-DJ-puente",
-    ])
-    .map_err(|e| format!("No se pudo preparar el puente hacia la cabina: {e}"))?;
-    // 300 ms: el Bluetooth necesita margen, y este enlace es justo quien tiene
-    // que darselo para que el navegador interno no tenga que enterarse.
-    pactl(&[
-        "load-module",
-        "module-loopback",
-        &format!("source={PUENTE}.monitor"),
-        &format!("sink={destino}"),
-        "latency_msec=300",
-    ])
-    .map_err(|e| {
-        quitar_puente();
-        format!("No se pudo enlazar el puente con la cabina: {e}")
-    })?;
-    Ok(())
-}
-
 /// Si hay puente montado, ¿hacia que cabina va?
 fn destino_del_puente() -> Option<String> {
     let texto = pactl(&["list", "modules"]).ok()?;
@@ -689,142 +643,21 @@ fn destino_del_puente() -> Option<String> {
 // Nodo fantasma: la cabina esta conectada pero el sonido no tiene por donde ir
 // ---------------------------------------------------------------------------
 
-/// ¿Esta salida Bluetooth es un nodo fantasma?
+/// Propiedades Bluetooth crudas: `api.bluez5.transport` vacio y/o
+/// `api.bluez5.connection = "disconnected"`.
 ///
-/// EL FALLO DE VERDAD (encontrado el 2026-10-26 tras ocho versiones): en los
-/// tres informes de un evento, la salida de la cabina existia, estaba en
-/// RUNNING, aceptaba el flujo de la app (y hasta el de un enlace del propio
-/// sistema), el volumen arriba, en modo a2dp... y por ella no salia NADA (pico
-/// 0.00000). Las dos lineas que lo delataban, identicas las tres veces:
-///     api.bluez5.transport = ""
-///     api.bluez5.connection = "disconnected"
-/// `bluetoothctl` decia «Connected: yes», porque a nivel Bluetooth si estaba
-/// conectada. El desencaje es entre el Bluetooth y el servidor de sonido: el
-/// nodo nacio sin canal hacia el aparato. Pasa tras una reconexion (la cabina
-/// se desconecta sola y se vuelve a conectar): en todos los informes, justo
-/// antes, salia «Esa salida ya no esta disponible» y luego «Cabina conectada».
+/// NO SIGNIFICA "SIN CANAL" (corregido el 2026-10-27). Se creyo que si, y se
+/// construyo encima un "reavivado" que apagaba y encendia la cabina. Un informe
+/// tomado con YouTube sonando por la cabina —y el sonido llegando a ella,
+/// medido— mostraba estas MISMAS propiedades: en PipeWire 1.0.5 no reflejan el
+/// estado vivo del canal. Se deja solo como dato en el informe. La señal de
+/// verdad es medir lo que llega (`informe::medir_llegada`).
 fn es_fantasma(s: &Sink) -> bool {
     match (&s.transporte, &s.conexion_bt) {
         (Some(t), _) if t.is_empty() => true,
         (_, Some(c)) if c == "disconnected" => true,
         _ => false,
     }
-}
-
-/// Vuelve a abrir el canal de sonido hacia la cabina si el nodo es fantasma.
-///
-/// COMO: apagando y volviendo a encender el perfil de la tarjeta (`off` ->
-/// `a2dp-sink`). Eso destruye la salida y la crea de nuevo, y al crearla el
-/// servidor de sonido vuelve a pedirle al Bluetooth el transporte. Es el
-/// remedio conocido para este estado. Como destruye la salida, hay que hacerlo
-/// ANTES de mover ningun flujo a ella.
-///
-/// Devuelve que paso, para decirlo en pantalla y en el informe.
-fn reavivar_bluetooth(sink: &str) -> Option<String> {
-    let dir = direccion_de_sink(sink)?;
-    if sana(sink) == Some(true) {
-        return None; // tiene transporte: esta bien
-    }
-    // Hace poco ya se intento con esta cabina: no repetir la escalada (ver
-    // ULTIMO_REAVIVADO). Se avisa igual, porque el fallo sigue ahi.
-    {
-        let mut ultimo = ULTIMO_REAVIVADO.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some((cual, cuando)) = ultimo.as_ref() {
-            if cual == sink && cuando.elapsed() < ESPERA_ENTRE_REAVIVADOS {
-                let faltan = (ESPERA_ENTRE_REAVIVADOS - cuando.elapsed()).as_secs() / 60 + 1;
-                return Some(format!(
-                    "La cabina sigue conectada a medias (sin canal de sonido). Ya se intentó \
-                     reavivarla hace poco; no se repite hasta dentro de {faltan} min. Apaga la \
-                     cabina, enciéndela y conéctala otra vez, o pruébala por cable."
-                ));
-            }
-        }
-        *ultimo = Some((sink.to_string(), std::time::Instant::now()));
-    }
-    let mac = dir.replace('_', ":");
-    let mut pasos: Vec<&str> = Vec::new();
-
-    // ESCALON 1: reabrir el perfil de la tarjeta (off -> a2dp). Destruye la
-    // salida y la crea de nuevo; al crearla, el servidor de sonido vuelve a
-    // pedir el transporte. Lo mas suave; en un portatil del equipo NO basto.
-    if let Some(tarjeta) = tarjeta_de(&dir) {
-        let musica = tarjeta
-            .perfiles
-            .iter()
-            .find(|p| es_modo_musica(p))
-            .cloned()
-            .unwrap_or_else(|| "a2dp-sink".to_string());
-        let _ = pactl(&["set-card-profile", &tarjeta.name, "off"]);
-        std::thread::sleep(std::time::Duration::from_millis(900));
-        let _ = pactl(&["set-card-profile", &tarjeta.name, &musica]);
-        if esperar_sana(sink, 12) {
-            return Some(
-                "La cabina estaba conectada a medias (sin canal de sonido). Se reabrió la \
-                 conexión y ya tiene por dónde sonar."
-                    .to_string(),
-            );
-        }
-        pasos.push("reabrir la conexión");
-    }
-
-    // ESCALON 2 (seguro): probar la OTRA variante de A2DP de la tarjeta. Si
-    // tampoco, se vuelve a la de antes para no dejar la tarjeta cambiada. No
-    // toca nada del equipo fuera de esa tarjeta (ver `perfil_alternativo`).
-    if let Some(tarjeta) = tarjeta_de(&dir) {
-        if let Some(otra) = perfil_alternativo(&tarjeta.perfiles, &tarjeta.perfil_activo) {
-            let antes = tarjeta.perfil_activo.clone();
-            if pactl(&["set-card-profile", &tarjeta.name, &otra]).is_ok() {
-                if esperar_sana(sink, 20) {
-                    return Some(format!(
-                        "La cabina cerraba el canal de sonido con la variante «{antes}». \
-                         Con «{otra}» lo mantiene: ya tiene por dónde sonar."
-                    ));
-                }
-                let _ = pactl(&["set-card-profile", &tarjeta.name, &antes]);
-                std::thread::sleep(std::time::Duration::from_millis(800));
-            }
-            pasos.push("probar la otra variante del códec");
-        }
-    }
-
-    // NO HAY ESCALON 3 (reiniciar el adaptador o el sonido del equipo). Lo hubo
-    // en la 0.4.43 y se quito en la 0.4.45: no reabre el canal (es la cabina
-    // quien lo suelta) y en un evento entro en bucle, mato la conexion de la
-    // propia app, trabo el portatil y cancelo un arranque de audio en marcha.
-    let _ = &mac; // (la direccion se conserva por si vuelve a hacer falta)
-
-    Some(format!(
-        "La cabina sigue conectada a medias (sin canal de sonido) después de {}. \
-         Es la cabina la que suelta el canal de audio nada más abrirse. Apágala, \
-         enciéndela y conéctala otra vez; si sigue igual, usa esa cabina por cable.",
-        if pasos.is_empty() { "intentarlo".to_string() } else { pasos.join(", ") }
-    ))
-}
-
-/// La OTRA variante de musica que ofrece la tarjeta (p. ej. de `a2dp-sink`
-/// a `a2dp-sink-sbc_xq`, o al reves). None si no hay otra.
-///
-/// POR QUE: en el informe limpio del 2026-10-27 el Bluetooth del sistema
-/// registro el canal de audio creado y tomado («fd(40) ready») y medio minuto
-/// despues la salida volvia a estar sin transporte, sin un solo error de
-/// wireplumber. Eso ya no es un estado atascado: es la cabina CERRANDO el
-/// canal nada mas empezar a recibir, como si no le gustara lo que le llega.
-/// Cambiar la variante del codec (SBC contra SBC-XQ cambia el modo y el
-/// bitpool) es lo unico que altera lo que recibe la cabina sin tocar nada
-/// del equipo.
-fn perfil_alternativo(perfiles: &[String], activo: &str) -> Option<String> {
-    perfiles
-        .iter()
-        .filter(|p| es_modo_musica(p) && p.as_str() != activo)
-        // Primero la variante "a secas" o la XQ, que son las que todo aparato
-        // SBC entiende; lo exotico (aptX, LDAC) al final.
-        .min_by_key(|p| match p.as_str() {
-            "a2dp-sink" => 0,
-            "a2dp-sink-sbc_xq" | "a2dp-sink-sbc-xq" => 1,
-            x if x.contains("sbc") => 2,
-            _ => 3,
-        })
-        .cloned()
 }
 
 /// El modo de musica con el que arrancar una tarjeta: el SBC «a secas» si lo
@@ -837,24 +670,6 @@ fn perfil_musica_preferido(perfiles: &[String]) -> Option<String> {
         .cloned()
 }
 
-/// ¿La salida existe y tiene transporte? Some(true) sana, Some(false)
-/// fantasma, None no existe (o no se pudo consultar).
-fn sana(sink: &str) -> Option<bool> {
-    let sinks = parse_sinks(&pactl(&["list", "sinks"]).ok()?);
-    sinks.iter().find(|s| s.name == sink).map(|s| !es_fantasma(s))
-}
-
-/// Espera (hasta `intentos` x 400 ms) a que la salida exista Y tenga transporte.
-fn esperar_sana(sink: &str, intentos: u32) -> bool {
-    for _ in 0..intentos {
-        std::thread::sleep(std::time::Duration::from_millis(400));
-        if sana(sink) == Some(true) {
-            return true;
-        }
-    }
-    false
-}
-
 /// La tarjeta Bluetooth de una salida, por la direccion que comparten.
 fn tarjeta_de(dir: &str) -> Option<Tarjeta> {
     parse_cards(&pactl(&["list", "cards"]).ok()?)
@@ -864,7 +679,7 @@ fn tarjeta_de(dir: &str) -> Option<Tarjeta> {
 
 /// Para quien conecta la cabina (bluetooth.rs): busca su salida por la
 /// direccion y, si nacio fantasma, la reaviva. Espera a que la salida exista.
-pub fn reavivar_por_direccion(mac: &str) -> Option<String> {
+pub fn encender_tarjeta_si_hace_falta(mac: &str) -> Option<String> {
     let _candado = CANDADO_SALIDA.lock().unwrap_or_else(|e| e.into_inner());
     let marca = mac.to_uppercase().replace(':', "_");
     let buscar_salida = || -> Option<String> {
@@ -929,15 +744,10 @@ pub fn reavivar_por_direccion(mac: &str) -> Option<String> {
         }
     }
 
-    let Some(nombre) = nombre else {
-        return aviso_tarjeta;
-    };
-    // Con la salida ya existente, lo de siempre: comprobar el canal.
-    match (aviso_tarjeta, reavivar_bluetooth(&nombre)) {
-        (Some(a), Some(b)) => Some(format!("{a} {b}")),
-        (Some(a), None) => Some(a),
-        (None, b) => b,
-    }
+    // Y nada mas. Antes, con la salida ya existente, se "reavivaba" si marcaba
+    // `transport = ""`; esa señal resulto falsa (ver `audio_set_output_sinc`).
+    let _ = nombre;
+    aviso_tarjeta
 }
 
 /// Candado: aplicar la salida va de UNA en una.
@@ -949,18 +759,6 @@ pub fn reavivar_por_direccion(mac: &str) -> Option<String> {
 /// «modo manos libres» que no existia. Y dos reavivados a la vez son peores
 /// que ninguno.
 static CANDADO_SALIDA: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
-/// Cuando se intento por ultima vez reavivar cada cabina.
-///
-/// POR QUE: la interfaz aplica la salida varias veces seguidas, y en un evento
-/// el escalon fuerte (reiniciar el sonido del equipo) se disparo CINCO veces en
-/// dos minutos: cada reinicio mataba la conexion de sonido de la propia app,
-/// que al rehacerla volvia a aplicar la salida, que volvia a escalar. Un
-/// remedio que se repite en bucle es peor que el fallo. Una vez cada diez
-/// minutos por cabina, y punto.
-static ULTIMO_REAVIVADO: std::sync::Mutex<Option<(String, std::time::Instant)>> =
-    std::sync::Mutex::new(None);
-const ESPERA_ENTRE_REAVIVADOS: std::time::Duration = std::time::Duration::from_secs(600);
 
 /// 100% en la escala del servidor de sonido.
 const VOLUMEN_NORMAL: u32 = 65536;
@@ -1377,22 +1175,6 @@ Card #88
     }
 
     #[test]
-    fn perfil_alternativo_elige_la_otra_variante_de_musica() {
-        let v = |xs: &[&str]| xs.iter().map(|x| x.to_string()).collect::<Vec<_>>();
-        // La tarjeta del evento: SBC activo -> probar SBC-XQ.
-        let p = v(&["off", "a2dp-sink", "a2dp-sink-sbc_xq", "headset-head-unit"]);
-        assert_eq!(perfil_alternativo(&p, "a2dp-sink").as_deref(), Some("a2dp-sink-sbc_xq"));
-        // Y al reves.
-        assert_eq!(perfil_alternativo(&p, "a2dp-sink-sbc_xq").as_deref(), Some("a2dp-sink"));
-        // Nunca el de manos libres ni «off»; sin otra variante, None.
-        let solo = v(&["off", "a2dp-sink", "headset-head-unit"]);
-        assert_eq!(perfil_alternativo(&solo, "a2dp-sink"), None);
-        // Con variantes exoticas, primero las SBC.
-        let muchas = v(&["off", "a2dp-sink-aptx", "a2dp-sink-sbc_xq", "a2dp-sink"]);
-        assert_eq!(perfil_alternativo(&muchas, "a2dp-sink-aptx").as_deref(), Some("a2dp-sink"));
-    }
-
-    #[test]
     fn modo_manos_libres_no_cuenta_como_modo_musica() {
         assert!(es_modo_musica("a2dp-sink"));
         assert!(es_modo_musica("a2dp-sink-sbc-xq"));
@@ -1468,18 +1250,18 @@ Card #88
         assert!(s[0].muted, "«Mute: yes» tiene que verse");
     }
 
-    /// LA PRUEBA DEL PUENTE, contra el sonido real del equipo.
+    /// LA CABINA RECIBE EL SONIDO DIRECTO, contra el sonido real del equipo.
     ///
     /// Se finge una cabina Bluetooth: `kind_of` decide por el NOMBRE, asi que
     /// una salida de pega llamada «bluez_output...» recorre exactamente el
-    /// mismo camino que una cabina de verdad. Lo que se comprueba es lo unico
-    /// que importa: que al final LLEGUE SONIDO a la cabina.
+    /// mismo camino que una cabina de verdad. Se comprueba que el sonido va
+    /// DIRECTO (sin el puente de 0.4.41-0.4.50, que se quito), que no queda
+    /// ningun modulo del puente cargado, y que al final LLEGA SONIDO.
     ///
-    /// No prueba el Bluetooth en si (para eso hace falta el aparato), pero si
-    /// que el puente esta bien montado y que el sonido lo atraviesa.
+    /// No prueba el Bluetooth en si (para eso hace falta el aparato).
     #[test]
     #[ignore = "necesita pactl y el sonido del equipo"]
-    fn el_puente_lleva_el_sonido_hasta_la_cabina() {
+    fn la_cabina_bluetooth_recibe_el_sonido_directo() {
         let _candado = crate::CANDADO_SONIDO.lock().unwrap_or_else(|e| e.into_inner());
 
         const CABINA: &str = "bluez_output.99_99_99_99_99_99.1";
@@ -1533,25 +1315,15 @@ Card #88
         // antes de medir, que si no se mide su arranque y no su funcionamiento.
         std::thread::sleep(std::time::Duration::from_millis(1200));
 
-        // El sonido tiene que ir por el puente, no directo a la cabina.
+        // El sonido tiene que ir DIRECTO a la cabina, sin puente.
         let estado = audio_output_status_sinc(None).unwrap();
         assert!(estado.hay_flujo);
-        assert_eq!(
-            estado.salida.as_deref(),
-            Some(CABINA),
-            "el estado tiene que hablar de la CABINA, no del puente"
-        );
-        assert_eq!(
-            destino_del_puente().as_deref(),
-            Some(CABINA),
-            "el puente tiene que apuntar a la cabina"
-        );
-        // Y el puente no puede salir en la lista de salidas elegibles.
-        let lista = audio_outputs_sinc().unwrap();
+        assert_eq!(estado.salida.as_deref(), Some(CABINA), "directo a la cabina");
         assert!(
-            !lista.iter().any(|o| o.name == PUENTE),
-            "el puente es cosa interna, no se le ofrece al usuario"
+            modulos_del_puente().is_empty(),
+            "no puede quedar ningun modulo del puente cargado"
         );
+        assert_eq!(destino_del_puente(), None, "sin puente no hay destino de puente");
 
         // LO QUE DE VERDAD IMPORTA: que llegue sonido a la cabina. Con un
         // segundo intento por si la primera medida pillo al enlace cebandose.

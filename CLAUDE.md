@@ -65,36 +65,38 @@ Cada una salió de un fallo real en el equipo de alguien:
    velocidad van como curvas en los `AudioParam` (`AudioEngine.ts`), que corren
    en el hilo de audio pase lo que pase con la pantalla.
 
-8. **Con una cabina Bluetooth, "conectada" no significa "con sonido".** Un día
-   entero (2026-10-26, trece versiones) se fue en esto. El servidor de sonido
-   puede crear la salida de la cabina **sin canal hacia el aparato**: existe,
-   está en RUNNING, acepta el flujo de la app (y el de cualquier otro programa),
-   y por ella no sale nada. Se reconoce en `pactl list sinks` por
-   `api.bluez5.transport = ""` y `api.bluez5.connection = "disconnected"`
-   (`es_fantasma` en `salida_audio.rs`); el informe lo marca como `FANTASMA`.
-   El registro de wireplumber dice por qué: el canal se crea y la cabina lo
-   suelta nada más abrirse. Pasa tras una desconexión espontánea seguida de
-   reconexión. Lecciones pagadas:
-   - **Medir, no deducir.** `pactl` decía que todo estaba bien. Lo que destapó
-     el fallo fue grabar la salida (`medir_llegada`) y medir lo que sale del
-     motor (`medirNivelSalida`): sonido dentro, silencio fuera. Si no suena, el
-     primer paso es el botón **Guardar informe**, que viaja solo por Sync.
-   - **Nada de reiniciar el sonido del equipo ni el adaptador desde la app.**
-     No reabre el canal (es la cabina la que lo suelta) y en un evento dejó el
-     portátil trabado tras cinco reinicios en bucle. Peor que una cabina muda.
-   - **No mandar versiones a ciegas al equipo.** Sin poder reproducir aquí, cada
-     versión le cuesta al que prueba. Primero el informe, luego el cambio.
+8. **Con una cabina Bluetooth, hacer POCO y medir lo que llega.** Dos días
+   (26 y 27 de octubre de 2026, unas veinte versiones) se fueron en esto, y casi
+   todo lo que se creyó por el camino resultó falso. Lo que quedó demostrado:
+   - **Lo que falla de verdad** (registro de wireplumber 0.4.17 en Mint 22.1):
+     al tomar la app la cabina, el sistema intenta conectar el audio y falla,
+     `2 of 2 PipeWire links failed to activate`, y **no lo reintenta**:
+     `tried to link on last rescan, not retrying`. El flujo de la app queda
+     "enganchado" a la cabina en `pactl` y no llega nada. Firefox, que solo
+     abre su conexión y la deja quieta, suena por la misma cabina en el mismo
+     portátil (medido). Dos cabinas distintas fallaban igual: no era la cabina.
+   - **Por eso la app hace lo mínimo** con Bluetooth (`audio_set_output_sinc`):
+     salida general + mover el flujo, sin puentes ni cambios de perfil. Y si al
+     medir no llega sonido, **rehace su propia conexión** (`rehacerConexion`):
+     una conexión nueva el sistema sí la conecta desde cero. Máximo dos veces
+     (`comprobarQueLlega` en `salidaAudio.ts`).
+   - **`api.bluez5.transport = ""` NO significa "sin canal".** Sale igual con
+     YouTube sonando. Se construyó encima un "reavivado" que apagaba y
+     encendía cabinas sanas; quitado. Que una propiedad "suene" a algo no la
+     convierte en señal: antes de usarla, comprobarla en un caso que funcione.
+   - **Medir, no deducir.** Lo único fiable fue grabar la salida
+     (`medir_llegada`) y medir lo que sale del motor (`medirNivelSalida`). Si no
+     suena, el primer paso es **Guardar informe**, que viaja solo por Sync. Y
+     pedir también un informe **de cuando sí suena** (otro programa sonando):
+     sin una referencia buena se adivina.
+   - **Nada de reiniciar el sonido del equipo ni el adaptador desde la app**:
+     entró en bucle y trabó un portátil en pleno uso.
    - **Verificar antes de mandar, también lo "obvio".** En `bluez5.roles` de
-     WirePlumber los roles se nombran desde el PORTÁTIL: `a2dp_source` = envía
-     audio (cabinas), `a2dp_sink` = recibe (de un celular). Una versión puso
-     `a2dp_sink` sin comprobarlo y dejó un portátil sin poder conectar ninguna
-     cabina (`br-connection-profile-unavailable`). Se comprobó después en un
-     minuto, en este PC, mirando qué puntos registra bluetoothd. Ese minuto
-     va ANTES de publicar, no después. (`preparacion_bt.rs`)
-   - Sigue siendo cierto que la salida no se cambia arrastrando el flujo
-     (`AudioEngine.rehacerConexion()` la rehace y reanuda donde iba) y que hay
-     que comprobar que suena de verdad (`audio_output_status`), pero eso NO
-     era la causa del fallo de la cabina.
+     WirePlumber, `a2dp_source` = el portátil envía (cabinas), `a2dp_sink` =
+     recibe. Una versión lo invirtió sin comprobarlo y dejó un portátil sin
+     poder conectar ninguna cabina. Se comprueba en un minuto en este PC.
+   - **No mandar versiones a ciegas al equipo.** Cada una le cuesta al que
+     prueba. Primero el informe, luego el cambio.
 
 9. **Nada que tarde corre en el hilo de la ventana, y lo que tarda se ve.** Los
    comandos de Tauri declarados `fn` se ejecutan en el hilo de la ventana: si

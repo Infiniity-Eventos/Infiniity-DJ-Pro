@@ -47,20 +47,62 @@ let avisado = false;
  * Tarda unos segundos (graba de la salida), asi que va por detras y sin
  * bloquear nada.
  */
+/** Hay una comprobacion en marcha: no lanzar otra encima. */
+let comprobando = false;
+/** Cuando acabo sin exito la ultima comprobacion (para no repetirla en bucle). */
+let ultimoFracaso = 0;
+
 async function comprobarQueLlega(sink: string): Promise<void> {
-  const { showToast, decks } = useStore.getState();
-  if (!decks.A.isPlaying && !decks.B.isPlaying) return; // sin musica no hay nada que medir
+  const { showToast } = useStore.getState();
+  const hayMusica = () => {
+    const { decks } = useStore.getState();
+    return decks.A.isPlaying || decks.B.isPlaying;
+  };
+  if (!hayMusica()) return; // sin musica no hay nada que medir
+  // Una sola a la vez: `aplicarSalida` se llama varias veces seguidas al
+  // cambiar de salida (y la propia recuperacion la vuelve a llamar).
+  if (comprobando) return;
+  // Si hace poco ya se intento todo y no funciono, no repetirlo cada vez.
+  if (Date.now() - ultimoFracaso < 60000) return;
+  comprobando = true;
   try {
-    const r = await audioLlegaSonido(sink);
-    if (r.llega) return;
-    console.error("[salidaAudio] no llega sonido a la salida:", r.detalle);
+    let r = await audioLlegaSonido(sink);
+    // RECUPERACION (0.4.51). Lo que fallaba de verdad, segun el registro de un
+    // evento: el sistema intentaba conectar el audio de la app a la cabina,
+    // fallaba («2 of 2 PipeWire links failed to activate») y NO lo volvia a
+    // intentar («tried to link on last rescan, not retrying»). El audio se
+    // quedaba "enganchado" a la cabina sobre el papel y sin llegar. Lo que el
+    // sistema si hace es conectar desde cero una conexion NUEVA, como hace con
+    // Firefox. Asi que, si no llega, se rehace la conexion de sonido de la
+    // propia app (no toca nada del equipo) y se vuelve a medir. Dos veces como
+    // mucho: si con eso no llega, no es esto.
+    for (let intento = 1; intento <= 2 && !r.llega && hayMusica(); intento++) {
+      console.warn(`[salidaAudio] no llega sonido a la cabina; rehaciendo la conexión (intento ${intento})`, r.detalle);
+      showToast(
+        intento === 1
+          ? "La cabina no recibía el sonido; rehaciendo la conexión…"
+          : "Todavía no llega; un intento más…"
+      );
+      await rehacerConexionDeSonido();
+      // Darle al sistema un momento para conectar la conexion nueva.
+      await new Promise((listo) => window.setTimeout(listo, 1500));
+      r = await audioLlegaSonido(sink);
+    }
+    if (r.llega) {
+      return;
+    }
+    if (!hayMusica()) return;
+    ultimoFracaso = Date.now();
+    console.error("[salidaAudio] no llega sonido a la cabina tras rehacer la conexión:", r.detalle);
     showToast(
-      "La cabina no está recibiendo el sonido. Comprueba que esté encendida y con el volumen arriba; si lo está, dale a «Guardar informe»."
+      "La cabina no está recibiendo el sonido ni rehaciendo la conexión. Comprueba que esté encendida y con el volumen arriba; si lo está, dale a «Guardar informe»."
     );
   } catch (err) {
     // Que falle la comprobacion no es que falle el sonido: no se alarma, pero
     // queda en el registro.
     console.error("[salidaAudio] no se pudo comprobar si llega el sonido", err);
+  } finally {
+    comprobando = false;
   }
 }
 
@@ -227,9 +269,6 @@ export async function aplicarSalida(sink: string): Promise<number> {
 export async function comprobarSalida(sink: string): Promise<string | null> {
   const est = await audioOutputStatus(sink);
   if (!est.hay_flujo) return "la app se quedó sin conexión con el sonido del equipo";
-  if (est.fantasma) {
-    return "la cabina está conectada a medias (sin canal de sonido); vuelve a conectarla desde «Salida de audio»";
-  }
   if (est.pausado) return "el sistema tiene el sonido de la app en pausa";
   if (est.salida && est.salida !== sink) {
     return `el sonido se fue a «${est.salida}» en vez de la salida elegida`;

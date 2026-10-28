@@ -386,7 +386,7 @@ pub async fn bt_buscar(segundos: u32) -> Result<Vec<DispositivoBt>, String> {
 /// "De confianza" (`trust`) es importante para un evento: sin eso, el equipo
 /// no deja que la cabina se reconecte sola cuando se apaga y se vuelve a
 /// encender, y habria que repetir todo esto delante de la gente.
-/// Devuelve un aviso si hubo que reavivar la cabina (vacio si no hizo falta).
+/// Devuelve un aviso si hubo que encender la tarjeta de la cabina (vacio si no).
 #[tauri::command]
 pub async fn bt_conectar(mac: String) -> Result<String, String> {
     en_otro_hilo(move || conectar_sinc(&mac)).await
@@ -405,7 +405,7 @@ fn conectar_sinc(mac: &str) -> Result<String, String> {
 
     if info.conectado {
         // Ya estaba conectada... pero puede estarlo A MEDIAS (ver abajo).
-        return Ok(crate::salida_audio::reavivar_por_direccion(&mac).unwrap_or_default());
+        return Ok(crate::salida_audio::encender_tarjeta_si_hace_falta(&mac).unwrap_or_default());
     }
 
     if !info.emparejado {
@@ -439,13 +439,11 @@ fn conectar_sinc(mac: &str) -> Result<String, String> {
         _ => {}
     }
 
-    // CONECTADA NO ES LO MISMO QUE CON SONIDO. Tras una (re)conexion, el
-    // servidor de sonido puede crear la salida de la cabina SIN canal hacia
-    // ella: un nodo fantasma, que acepta el sonido y no lo saca por ningun
-    // lado. Fue el fallo real de un evento entero (ver salida_audio.rs,
-    // `es_fantasma`). Aqui, justo despues de conectar, es donde nace, y por
-    // eso aqui se comprueba y se reaviva.
-    Ok(crate::salida_audio::reavivar_por_direccion(&mac).unwrap_or_default())
+    // Tras (re)conectar, el sistema a veces deja la tarjeta de la cabina en
+    // «off» (sin salida de sonido que elegir): medido en un informe del
+    // 2026-10-27. Si pasa, se enciende en modo musica. Nada mas: el antiguo
+    // "reavivado" por `transport = ""` se quito porque esa señal era falsa.
+    Ok(crate::salida_audio::encender_tarjeta_si_hace_falta(&mac).unwrap_or_default())
 }
 
 /// Desconecta una cabina (sigue emparejada, para reconectarla de un toque).

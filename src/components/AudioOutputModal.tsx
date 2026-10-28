@@ -230,7 +230,7 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
           `hay flujo de sonido: ${e.hay_flujo} | va por: ${e.salida ?? "?"}` +
           ` | en pausa: ${e.pausado} | estado de la salida: ${e.estado || "?"}` +
           ` | volumen del equipo: ${e.volumen}% | silenciada por el equipo: ${e.silenciada}` +
-          ` | FANTASMA (conectada sin canal de sonido): ${e.fantasma}`;
+          ` | propiedad bluez transport vacío (NO fiable: sale igual cuando suena): ${e.fantasma}`;
       } catch (err) {
         estadoSalida = `(fallo al consultar: ${err instanceof Error ? err.message : String(err)})`;
       }
