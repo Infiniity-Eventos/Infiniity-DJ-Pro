@@ -68,6 +68,14 @@ Cada una salió de un fallo real en el equipo de alguien:
 8. **Con una cabina Bluetooth, hacer POCO y medir lo que llega.** Dos días
    (26 y 27 de octubre de 2026, unas veinte versiones) se fueron en esto, y casi
    todo lo que se creyó por el camino resultó falso. Lo que quedó demostrado:
+   - **La medida que lo partió en dos** (27-oct, 21:29, con la canción
+     sonando): el motor tenía sonido dentro (−11,3 dB) y **el flujo que la app
+     entregaba al sistema iba en silencio** (grabando solo ese flujo con
+     `parecord --monitor-stream`, `informe::medir_flujo_propio`). Firefox, que
+     entrega a 48000 Hz, sonaba por la misma salida; WebKitGTK crea el motor a
+     44100 aunque el sistema vaya a 48000. Desde la 0.4.53 el motor se crea a
+     48000 (`AudioEngine.ensure`). Si esto vuelve a fallar, esa es la medida a
+     mirar primero: ¿sale sonido del motor y entra silencio al sistema?
    - **Lo que falla de verdad** (registro de wireplumber 0.4.17 en Mint 22.1):
      al tomar la app la cabina, el sistema intenta conectar el audio y falla,
      `2 of 2 PipeWire links failed to activate`, y **no lo reintenta**:

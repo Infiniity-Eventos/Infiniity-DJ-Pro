@@ -161,7 +161,24 @@ class AudioEngine {
 
   ensure(): void {
     if (this.ctx) return;
-    const ctx = new AudioContext({ latencyHint: "playback" });
+    // A 48000 Hz, no a lo que elija el navegador (0.4.53).
+    //
+    // POR QUE: WebKitGTK crea el motor a 44100 aunque el sonido del sistema
+    // vaya a 48000. Con cable, el sistema convierte y no pasa nada. Con una
+    // cabina Bluetooth, NO: medido el 2026-10-27 con la cancion sonando, el
+    // motor tenia sonido dentro (-11.3 dB) y el flujo que la app entregaba al
+    // sistema iba en SILENCIO (pico 0.00000, grabando solo ese flujo). Firefox,
+    // que entrega a 48000, sonaba por esa misma salida en el mismo portatil.
+    // La cabina trabaja a 48000. Pidiendolo asi, no hay conversion que hacer.
+    // (Comprobado que WebKitGTK respeta `sampleRate`; si algun motor viejo no
+    // lo aceptara, se cae al de siempre en vez de quedarse sin sonido.)
+    let ctx: AudioContext;
+    try {
+      ctx = new AudioContext({ latencyHint: "playback", sampleRate: 48000 });
+    } catch (err) {
+      console.warn("[AudioEngine] el motor no acepta 48000 Hz; se usa su frecuencia por defecto", err);
+      ctx = new AudioContext({ latencyHint: "playback" });
+    }
     const master = ctx.createGain();
     master.gain.value = useStore.getState().masterVolume;
     // Limitador de seguridad al final: como la nivelacion ahora apunta mas
