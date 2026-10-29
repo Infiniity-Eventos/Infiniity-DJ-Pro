@@ -6,7 +6,7 @@
 - **Tarea:** manecillas (perillas) de efectos en el mezclador, por ejemplo bajarle solo a la voz de una canción, "y así".
 - **Inicio:** 2026-10-18
 - **Estado:** ✅ Terminada (0.4.19, 2026-10-18) · pendiente: confirmar las perillas de la DDJ-200 con la unidad
-- **Proyecto:** `~/Apps Zeven/Infiniity Dj Pro` · versión actual 0.4.18
+- **Proyecto:** `~/Apps Zeven/Infiniity Eventos/Infiniity Dj Pro` · versión actual 0.4.18
 
 ---
 

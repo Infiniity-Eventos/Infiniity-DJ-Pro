@@ -6,7 +6,7 @@
 - **Tarea:** que todas las PC del equipo usen la misma biblioteca de música, con el original en el PC de Camilo, sincronizada con Syncthing y manejada desde la app.
 - **Inicio:** 2026-10-18 (diseño acordado el 2026-10-17)
 - **Estado:** ✅ Terminada (0.4.0, 2026-10-18)
-- **Proyecto:** `~/Apps Zeven/Infiniity Dj Pro` (Tauri v2 + React)
+- **Proyecto:** `~/Apps Zeven/Infiniity Eventos/Infiniity Dj Pro` (Tauri v2 + React)
 
 ---
 

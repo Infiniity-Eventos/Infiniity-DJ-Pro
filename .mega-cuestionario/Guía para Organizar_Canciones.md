@@ -6,7 +6,7 @@
 - **Tarea:** una skill del repositorio que, cada semana, toma lo que hay en "Sin clasificar", identifica cada canción por internet, le escribe todos los metadatos dentro del MP3 (título, artista, género, BPM, etc.) y la mueve a su carpeta de género.
 - **Inicio:** 2026-10-18
 - **Estado:** ✅ Terminada (primera corrida real hecha el 2026-10-18)
-- **Proyecto:** `~/Apps Zeven/Infiniity Dj Pro` · biblioteca `~/Música/Infiniity Dj Pro` (Sync: PC original)
+- **Proyecto:** `~/Apps Zeven/Infiniity Eventos/Infiniity Dj Pro` · biblioteca `~/Música/Infiniity Dj Pro` (Sync: PC original)
 
 ---
 

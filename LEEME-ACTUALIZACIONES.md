@@ -10,7 +10,7 @@ dejar a nadie esperando una descarga en pleno evento.
 ## 1. Publicar una versión nueva (lo haces tú, aquí)
 
 ```bash
-cd "$HOME/Apps Zeven/Infiniity Dj Pro"
+cd "$HOME/Apps Zeven/Infiniity Eventos/Infiniity Dj Pro"
 ./publicar.sh 0.2.0 "Arreglado el vinilo que se trababa"
 ```
 

@@ -6,7 +6,7 @@
 - **Tarea:** dos formas de mezclar sola la música: (1) una **cola Automix** manual en una barra lateral donde se arrastran canciones y el programa las encadena sin silencios y con transiciones suaves; (2) un botón **"Poner automix"** junto a "Actualizar lista" que toma la carpeta (género o artista) que se está viendo y la mezcla sola buscando la mejor ruta para que no haya golpes de ritmo.
 - **Inicio:** 2026-10-18
 - **Estado:** ✅ Terminada (0.4.18; ajuste 0.4.20 tras el primer evento real, 2026-10-18)
-- **Proyecto:** `~/Apps Zeven/Infiniity Dj Pro` (Tauri + React) · versión actual 0.4.17
+- **Proyecto:** `~/Apps Zeven/Infiniity Eventos/Infiniity Dj Pro` (Tauri + React) · versión actual 0.4.17
 
 ---
 
