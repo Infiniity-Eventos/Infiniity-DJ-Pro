@@ -67,6 +67,23 @@ async function esperarSalidaDeCabina(mac: string): Promise<AudioOutput | undefin
 }
 
 /**
+ * Nombre para mostrar de una cabina. Si hay otra con el MISMO nombre, se le
+ * añade un codigo corto (lo ultimo de su direccion): «bluetooth · 7E93».
+ *
+ * POR QUE: muchas cabinas baratas se llaman todas «bluetooth» o «Bluetooth».
+ * En un portatil del equipo habia una «bluetooth» (apagada) y una «Bluetooth»
+ * (la buena) y no habia forma de saber cual era cual: le dieron siete veces a
+ * la equivocada. Con el codigo se distinguen, y se puede pegar el mismo codigo
+ * en una etiqueta en la cabina.
+ */
+function nombreVisible(d: DispositivoBt, todas: DispositivoBt[]): string {
+  const igual = todas.filter((x) => x.nombre.trim().toLowerCase() === d.nombre.trim().toLowerCase());
+  if (igual.length < 2) return d.nombre;
+  const codigo = d.mac.replace(/:/g, "").slice(-4).toUpperCase();
+  return `${d.nombre} · ${codigo}`;
+}
+
+/**
  * Elegir por donde suena la app: cabina, HDMI, parlante Bluetooth...
  *
  * Para que existe: al conectar el portatil a una cabina, el sonido seguia
@@ -439,7 +456,7 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
       if (!(await asegurarBtEncendido())) return;
       await prepararSiHaceFalta();
       const aviso = await btConectar(d.mac);
-      showToast(`Cabina conectada: ${d.nombre}`);
+      showToast(`Cabina conectada: ${nombreVisible(d, cabinas)}`);
       // Si hubo que reavivarla (conectada a medias, sin canal de sonido), que
       // se sepa: es justo el fallo que dejo un evento entero sin sonido.
       if (aviso) showToast(aviso);
@@ -471,7 +488,7 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
     setError(null);
     try {
       await btDesconectar(d.mac);
-      showToast(`Cabina desconectada: ${d.nombre}`);
+      showToast(`Cabina desconectada: ${nombreVisible(d, cabinas)}`);
       await cargarBt();
       await cargar();
     } catch (e) {
@@ -552,7 +569,7 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
 
           {cabinas.map((d) => (
             <div key={d.mac} className={`out-row out-row-fija ${d.conectado ? "active" : ""}`}>
-              <span className="out-name">{d.nombre}</span>
+              <span className="out-name">{nombreVisible(d, cabinas)}</span>
               {d.conectado ? (
                 <>
                   <span className="out-flag">conectada</span>

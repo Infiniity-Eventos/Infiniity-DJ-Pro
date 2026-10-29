@@ -152,6 +152,15 @@ fn explicar(texto: &str) -> String {
                 y que no este conectada a otro equipo o celular."
             .to_string();
     }
+    if t.contains("host is down") || t.contains("host-down") {
+        // Lo que se ve cuando se intenta conectar una cabina que no contesta.
+        // En un portatil del equipo salio siete veces seguidas: esa cabina
+        // estaba apagada, y la que se queria usar estaba conectada al otro
+        // portatil (una cabina conectada no se deja ver por los demas).
+        return "La cabina no responde: está apagada, lejos, o conectada a otro portátil. \
+                Si la está usando otro equipo, desconéctala ahí primero."
+            .to_string();
+    }
     if t.contains("not available") {
         return "Esa cabina ya no aparece. Dale a «Buscar cabinas» otra vez.".to_string();
     }
@@ -216,8 +225,33 @@ fn parse_info(texto: &str) -> Info {
         emparejado: false,
         altavoz: false,
     };
+    // Tipo de aparato segun el propio Bluetooth. Hace falta porque los
+    // PORTATILES con PipeWire tambien anuncian «Audio Sink» (pueden recibir
+    // sonido de un celular): en un portatil del equipo, la busqueda ofrecio el
+    // OTRO portatil como si fuera una cabina, y al tocarlo pedia un
+    // emparejamiento que no podia salir bien (2026-10-28).
+    let mut es_ordenador_o_telefono = false;
     for linea in texto.lines() {
         let t = linea.trim();
+        if let Some(v) = t.strip_prefix("Icon: ") {
+            let icono = v.trim();
+            if icono.starts_with("computer") || icono.starts_with("phone") {
+                es_ordenador_o_telefono = true;
+            }
+            continue;
+        }
+        if let Some(v) = t.strip_prefix("Class: ") {
+            // «Class: 0x007c010c (8126732)»: clase mayor en los bits 8-12.
+            // 0x01 = ordenador, 0x02 = telefono, 0x04 = audio/video (cabinas).
+            let hex = v.split_whitespace().next().unwrap_or("").trim_start_matches("0x");
+            if let Ok(clase) = u32::from_str_radix(hex, 16) {
+                let mayor = (clase >> 8) & 0x1F;
+                if mayor == 0x01 || mayor == 0x02 {
+                    es_ordenador_o_telefono = true;
+                }
+            }
+            continue;
+        }
         if let Some(v) = t.strip_prefix("Name: ") {
             if info.nombre.is_empty() {
                 info.nombre = v.trim().to_string();
@@ -233,6 +267,9 @@ fn parse_info(texto: &str) -> Info {
                 info.altavoz = true;
             }
         }
+    }
+    if es_ordenador_o_telefono {
+        info.altavoz = false;
     }
     info
 }
@@ -526,6 +563,39 @@ Device F4:73:35:88:AF:C7 Keyboard K380
             !i.altavoz,
             "un teclado no tiene Audio Sink y no debe salir como cabina"
         );
+    }
+
+    /// Salida real de `bluetoothctl info` de un PORTATIL del equipo: anuncia
+    /// «Audio Sink» igual que una cabina, pero es un ordenador.
+    const INFO_PORTATIL: &str = r#"Device 34:41:5D:00:00:01 (public)
+	Name: infiniity-HP-Pavilion-dv5-Notebook-PC
+	Class: 0x007c010c (8126732)
+	Icon: computer
+	Paired: no
+	Connected: no
+	UUID: Audio Sink                (0000110b-0000-1000-8000-00805f9b34fb)
+	UUID: Audio Source              (0000110a-0000-1000-8000-00805f9b34fb)
+"#;
+
+    #[test]
+    fn un_portatil_no_sale_como_cabina_aunque_anuncie_audio_sink() {
+        let p = parse_info(INFO_PORTATIL);
+        assert!(!p.altavoz, "un portatil no es una cabina");
+        // La cabina real (Class 0x00240418, audio/video) sigue siendo cabina.
+        let c = parse_info(&INFO_CABINA.replace("\tIcon: audio-headphones", "\tClass: 0x00240418 (2360344)\n\tIcon: audio-headphones"));
+        assert!(c.altavoz, "la cabina sigue siendo cabina");
+        // Un portatil sin icono pero con clase de ordenador, tampoco.
+        let sin_icono = parse_info(&INFO_PORTATIL.replace("\tIcon: computer\n", ""));
+        assert!(!sin_icono.altavoz);
+    }
+
+    #[test]
+    fn host_is_down_dice_que_hacer() {
+        let m = explicar("Failed to connect: org.bluez.Error.Failed br-connection-page-timeout Host is down");
+        // page-timeout va antes y tambien vale; con solo «Host is down»:
+        let m2 = explicar("avdtp_connect_cb() connect to 41:42:AA:A1:7E:93: Host is down (112)");
+        assert!(m.contains("encendida") || m.contains("no responde"), "{m}");
+        assert!(m2.contains("otro portátil"), "{m2}");
     }
 
     #[test]
