@@ -5,6 +5,7 @@ mod arranque;
 mod bpm;
 mod cache;
 mod ddj200;
+mod despierto;
 mod downloader;
 mod library;
 mod midi;
@@ -511,6 +512,7 @@ pub fn run() {
             bluetooth::bt_desconectar,
             informe::guardar_informe,
             informe::audio_llega_sonido,
+            despierto::mantener_despierto,
             preparacion_bt::bt_preparacion_estado,
             preparacion_bt::bt_asegurar_preparacion,
             preparacion_bt::bt_preparar_equipo,

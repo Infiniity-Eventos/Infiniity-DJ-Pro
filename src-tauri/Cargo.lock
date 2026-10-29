@@ -1655,6 +1655,8 @@ name = "infiniity-dj"
 version = "0.4.59"
 dependencies = [
  "flate2",
+ "gio",
+ "glib",
  "id3",
  "lzma-rs",
  "midir",

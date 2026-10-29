@@ -305,6 +305,20 @@ fn armar_informe(estado_app: &str, salida: &str) -> String {
     // el aparato colgo, un error de D-Bus— lo escribe el servidor de sonido en
     // su registro, y el demonio de Bluetooth en el suyo. Sin esto, el informe
     // dice "no suena" con todo lujo de detalle y no dice por que.
+    // Por si el portatil se durmio o apago la pantalla en plena musica: que
+    // pidio la app, quien mas bloquea, cuanto espera el equipo para dormirse y
+    // si se suspendio (el nucleo escribe «PM: suspend» al dormir y al volver).
+    let _ = write!(
+        t,
+        "=== MANTENER DESPIERTO (que no se suspenda ni apague la pantalla) ===\nla app: {}\n\n{}\n\n{}\n{}\n{}\n{}\n\nsuspensiones de este arranque:\n{}\n\n",
+        crate::despierto::estado(),
+        recoger("systemd-inhibit", &["--list", "--no-pager"]),
+        recoger("gsettings", &["list-recursively", "org.cinnamon.settings-daemon.plugins.power"]),
+        recoger("gsettings", &["get", "org.cinnamon.desktop.session", "idle-delay"]),
+        recoger("gsettings", &["list-recursively", "org.gnome.settings-daemon.plugins.power"]),
+        recoger("gsettings", &["get", "org.gnome.desktop.session", "idle-delay"]),
+        recoger("journalctl", &["-b", "-n", "40", "--no-pager", "-g", "PM: suspend|Suspending|suspend exit|Lid (closed|opened)|Power key|System is powering|Low battery|Critical"])
+    );
     let _ = write!(
         t,
         "=== SERVICIOS DE SONIDO DEL USUARIO (tienen que estar «active») ===\n{}\n\n",

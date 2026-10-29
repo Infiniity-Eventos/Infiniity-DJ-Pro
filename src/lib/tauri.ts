@@ -254,6 +254,10 @@ export interface Llegada {
 export const audioLlegaSonido = (salida: string) =>
   invoke<Llegada>("audio_llega_sonido", { salida });
 
+/** Que el portatil no se duerma ni apague la pantalla (ver despierto.rs). */
+export const mantenerDespierto = (activo: boolean) =>
+  invoke<string>("mantener_despierto", { activo });
+
 /** Preparacion del equipo para cabinas Bluetooth sencillas (ver preparacion_bt.rs). */
 export interface EstadoPreparacion {
   preparado: boolean; // archivos puestos y actuales

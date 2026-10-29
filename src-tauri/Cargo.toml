@@ -20,6 +20,12 @@ tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+# Hablar con el sistema por D-Bus (mantener el portatil despierto mientras
+# suena musica, ver despierto.rs). Ya venian dentro con el motor de la ventana
+# (misma version): no añaden nada al programa.
+gio = "0.18"
+glib = "0.18"
+
 # Lectura/organizacion de la biblioteca musical
 walkdir = "2"
 

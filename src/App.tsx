@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useMantenerDespierto } from "./lib/despierto";
 import { useStore } from "./state/store";
 import { reloadLibrary } from "./lib/library";
 import { useMidi } from "./hooks/useMidi";
@@ -40,6 +41,7 @@ export default function App() {
 
   useMidi();
   useSync();
+  useMantenerDespierto();
 
   // Arranque: preguntar a Rust como se esta dibujando (ver arranque.rs).
   // (La app ya es siempre de bajo consumo; el modo se guarda para el CSV de

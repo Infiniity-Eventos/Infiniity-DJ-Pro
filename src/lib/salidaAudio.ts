@@ -28,6 +28,7 @@
  */
 
 import { audioSetOutput, audioOutputStatus, audioLlegaSonido } from "./tauri";
+import { silencioPorMandos } from "./mandos";
 import { useStore } from "../state/store";
 
 /** La salida guardada ya esta aplicada al flujo de sonido que suena ahora. */
@@ -59,6 +60,13 @@ async function comprobarQueLlega(sink: string): Promise<void> {
     return decks.A.isPlaying || decks.B.isPlaying;
   };
   if (!hayMusica()) return; // sin musica no hay nada que medir
+  // Si los mandos no dejan salir la musica (crossfader del otro lado, volumen
+  // en 0), la cabina no tiene la culpa: decir que mover y no rehacer nada.
+  const porMandos = silencioPorMandos(useStore.getState());
+  if (porMandos) {
+    showToast(porMandos);
+    return;
+  }
   // Una sola a la vez: `aplicarSalida` se llama varias veces seguidas al
   // cambiar de salida (y la propia recuperacion la vuelve a llamar).
   if (comprobando) return;

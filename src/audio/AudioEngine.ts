@@ -34,6 +34,7 @@ import {
   rehacerConexionDeSonido,
   vigilarLlegada,
 } from "../lib/salidaAudio";
+import { pasoCrossfader } from "../lib/mandos";
 
 /**
  * Le pone un limite de tiempo a una promesa.
@@ -986,6 +987,17 @@ class AudioEngine {
 
     this.startFrom(id, d.offset);
     useStore.getState().patchDeck(id, { isPlaying: true });
+
+    // Play en un deck que el crossfader tiene tapado, con el otro deck parado:
+    // no se oye nada y no hay nada que mezclar. Se lleva el crossfader a este
+    // lado (el otro no suena, asi que el salto no se nota). Con el automix o
+    // una mezcla en marcha, el crossfader es suyo.
+    const st = useStore.getState();
+    const otro: DeckId = id === "A" ? "B" : "A";
+    if (!st.automix.encendido && !st.autoMixing && !st.decks[otro].isPlaying && pasoCrossfader(id, st.crossfader) <= 0.001) {
+      this.setCrossfader(id === "A" ? 0 : 1);
+      st.showToast(`Crossfader movido al Deck ${id} para que se oiga`);
+    }
 
     // Con una cabina Bluetooth: comprobar que le llega y recuperarlo si no.
     // Es el unico momento seguro (ya no hay nada cargando). Ver salidaAudio.ts.
