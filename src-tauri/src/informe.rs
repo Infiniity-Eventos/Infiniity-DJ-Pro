@@ -292,6 +292,12 @@ fn armar_informe(estado_app: &str, salida: &str) -> String {
         recoger("pactl", &["list", "cards"])
     );
     let _ = write!(t, "=== BLUETOOTH ===\n{}\n", detalle_bluetooth());
+    let _ = write!(
+        t,
+        "=== ULTIMA BUSQUEDA DE CABINAS (todo lo encontrado y por que se mostro o no) ===\n{}\n",
+        std::fs::read_to_string(crate::bluetooth::ruta_ultima_busqueda())
+            .unwrap_or_else(|_| "(todavia no se ha buscado en esta PC)".to_string())
+    );
 
     // EL PORQUE. Cuando una cabina Bluetooth queda "conectada a medias" (su
     // salida existe pero sin canal de sonido), `pactl` solo muestra el QUE. El

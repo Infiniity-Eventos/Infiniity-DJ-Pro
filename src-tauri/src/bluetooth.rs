@@ -216,43 +216,36 @@ struct Info {
     conectado: bool,
     emparejado: bool,
     altavoz: bool,
+    /// Datos crudos, para el registro de la ultima busqueda.
+    icono: String,
+    clase: Option<u32>,
+    audio_sink: bool,
+}
+
+impl Info {
+    fn vacia() -> Info {
+        Info {
+            nombre: String::new(),
+            conectado: false,
+            emparejado: false,
+            altavoz: false,
+            icono: String::new(),
+            clase: None,
+            audio_sink: false,
+        }
+    }
 }
 
 fn parse_info(texto: &str) -> Info {
-    let mut info = Info {
-        nombre: String::new(),
-        conectado: false,
-        emparejado: false,
-        altavoz: false,
-    };
-    // Tipo de aparato segun el propio Bluetooth. Hace falta porque los
-    // PORTATILES con PipeWire tambien anuncian «Audio Sink» (pueden recibir
-    // sonido de un celular): en un portatil del equipo, la busqueda ofrecio el
-    // OTRO portatil como si fuera una cabina, y al tocarlo pedia un
-    // emparejamiento que no podia salir bien (2026-10-28).
-    let mut es_ordenador_o_telefono = false;
+    let mut info = Info::vacia();
     for linea in texto.lines() {
         let t = linea.trim();
         if let Some(v) = t.strip_prefix("Icon: ") {
-            let icono = v.trim();
-            if icono.starts_with("computer") || icono.starts_with("phone") {
-                es_ordenador_o_telefono = true;
-            }
-            continue;
-        }
-        if let Some(v) = t.strip_prefix("Class: ") {
-            // «Class: 0x007c010c (8126732)»: clase mayor en los bits 8-12.
-            // 0x01 = ordenador, 0x02 = telefono, 0x04 = audio/video (cabinas).
+            info.icono = v.trim().to_string();
+        } else if let Some(v) = t.strip_prefix("Class: ") {
             let hex = v.split_whitespace().next().unwrap_or("").trim_start_matches("0x");
-            if let Ok(clase) = u32::from_str_radix(hex, 16) {
-                let mayor = (clase >> 8) & 0x1F;
-                if mayor == 0x01 || mayor == 0x02 {
-                    es_ordenador_o_telefono = true;
-                }
-            }
-            continue;
-        }
-        if let Some(v) = t.strip_prefix("Name: ") {
+            info.clase = u32::from_str_radix(hex, 16).ok();
+        } else if let Some(v) = t.strip_prefix("Name: ") {
             if info.nombre.is_empty() {
                 info.nombre = v.trim().to_string();
             }
@@ -260,18 +253,51 @@ fn parse_info(texto: &str) -> Info {
             info.conectado = v.trim() == "yes";
         } else if let Some(v) = t.strip_prefix("Paired: ") {
             info.emparejado = v.trim() == "yes";
-        } else if t.starts_with("UUID:") {
-            // "Audio Sink" (0000110b) es el servicio de los aparatos que
-            // REPRODUCEN sonido. Es lo que separa una cabina de un teclado.
-            if t.contains("0000110b") || t.contains("Audio Sink") {
-                info.altavoz = true;
-            }
+        } else if t.starts_with("UUID:") && (t.contains("0000110b") || t.contains("Audio Sink")) {
+            info.audio_sink = true;
         }
     }
-    if es_ordenador_o_telefono {
-        info.altavoz = false;
-    }
+    info.altavoz = es_cabina(info.audio_sink, &info.icono, info.clase);
     info
+}
+
+/// ¿Es una cabina? Decide con TRES señales del propio Bluetooth.
+///
+/// 1. El servicio «Audio Sink» (0000110b): el aparato reproduce sonido. PERO
+///    muchas cabinas baratas solo lo dicen DESPUES de emparejarse: en un
+///    portatil del equipo, la cabina «Bluetooth 2» no salio en la busqueda
+///    mientras la tele y el otro portatil si (2026-10-28); en el portatil donde
+///    se habia emparejado desde el sistema, si salia.
+/// 2. El TIPO de aparato (clase), que si viaja en la busqueda: audio/video con
+///    subtipo de altavoz, auriculares, audio portatil, coche o equipo de
+///    musica. Es lo que deja ver una cabina nueva antes de emparejarla.
+/// 3. El icono que BlueZ deriva de esa clase («audio-card»,
+///    «audio-headphones»...), por si la clase no viniera.
+///
+/// Y fuera, aunque anuncien «Audio Sink»: ordenadores y telefonos (los
+/// portatiles con PipeWire lo anuncian: salio el otro portatil como cabina) y
+/// pantallas y teles (salio una tele LG).
+fn es_cabina(audio_sink: bool, icono: &str, clase: Option<u32>) -> bool {
+    let (mayor, menor) = match clase {
+        Some(c) => ((c >> 8) & 0x1F, (c >> 2) & 0x3F),
+        None => (0, 0),
+    };
+    let ordenador_o_telefono = icono.starts_with("computer")
+        || icono.starts_with("phone")
+        || mayor == 0x01
+        || mayor == 0x02;
+    // Audio/video (0x04) con subtipo de imagen: grabadoras, camaras, monitores,
+    // pantallas con altavoz (teles), videoconferencia, consolas.
+    let pantalla = icono.starts_with("video")
+        || icono.starts_with("camera")
+        || (mayor == 0x04 && (0x0B..=0x12).contains(&menor));
+    if ordenador_o_telefono || pantalla {
+        return false;
+    }
+    // Subtipos de sonido: 0x01 cascos, 0x02 manos libres, 0x05 altavoz,
+    // 0x06 auriculares, 0x07 audio portatil, 0x08 coche, 0x0A equipo de musica.
+    let clase_de_sonido = mayor == 0x04 && [0x01, 0x02, 0x05, 0x06, 0x07, 0x08, 0x0A].contains(&menor);
+    audio_sink || clase_de_sonido || icono.starts_with("audio-")
 }
 
 /// ¿El Bluetooth del equipo esta encendido? (`bluetoothctl show`)
@@ -349,19 +375,25 @@ pub async fn bt_encender() -> Result<(), String> {
 
 /// Detalles de cada aparato conocido. Se consulta uno por uno porque la lista
 /// a secas solo trae direccion y nombre, y hace falta saber si es una cabina.
-fn detallar(parejas: Vec<(String, String)>) -> Vec<DispositivoBt> {
+fn detallar(parejas: Vec<(String, String)>) -> (Vec<DispositivoBt>, String) {
     let mut out = Vec::new();
+    let mut registro = String::new();
     // Tope por si una busqueda larga encuentra medio barrio: mas de esto no
     // cabe en pantalla y solo haria esperar al usuario.
     for (mac, nombre) in parejas.into_iter().take(30) {
         let info = bluetoothctl(&["info", &mac], PLAZO_CONSULTA)
             .map(|t| parse_info(&t))
-            .unwrap_or(Info {
-                nombre: String::new(),
-                conectado: false,
-                emparejado: false,
-                altavoz: false,
-            });
+            .unwrap_or_else(|_| Info::vacia());
+        registro.push_str(&format!(
+            "{mac}  «{}»  clase={}  icono={}  audio_sink={}  emparejada={}  conectada={}  -> {}\n",
+            if info.nombre.is_empty() { &nombre } else { &info.nombre },
+            info.clase.map(|c| format!("0x{c:06x}")).unwrap_or_else(|| "?".into()),
+            if info.icono.is_empty() { "?" } else { &info.icono },
+            info.audio_sink,
+            info.emparejado,
+            info.conectado,
+            if info.altavoz { "CABINA" } else { "no es cabina" },
+        ));
         out.push(DispositivoBt {
             mac,
             nombre: if info.nombre.is_empty() {
@@ -382,7 +414,7 @@ fn detallar(parejas: Vec<(String, String)>) -> Vec<DispositivoBt> {
             .then(b.emparejado.cmp(&a.emparejado))
             .then(a.nombre.to_lowercase().cmp(&b.nombre.to_lowercase()))
     });
-    out
+    (out, registro)
 }
 
 /// Cabinas que el equipo ya conoce (emparejadas o vistas hace poco).
@@ -393,7 +425,12 @@ pub async fn bt_dispositivos() -> Result<Vec<DispositivoBt>, String> {
 
 fn dispositivos_sinc() -> Result<Vec<DispositivoBt>, String> {
     let texto = bluetoothctl(&["devices"], PLAZO_CONSULTA)?;
-    Ok(detallar(parse_dispositivos(&texto)))
+    Ok(detallar(parse_dispositivos(&texto)).0)
+}
+
+/// Donde queda lo que encontro la ultima busqueda (para el informe).
+pub(crate) fn ruta_ultima_busqueda() -> std::path::PathBuf {
+    crate::arranque::dir_cache().join("ultima-busqueda-bt.txt")
 }
 
 /// Busca cabinas encendidas alrededor durante `segundos` y devuelve lo que haya.
@@ -412,7 +449,21 @@ pub async fn bt_buscar(segundos: u32) -> Result<Vec<DispositivoBt>, String> {
             &["--timeout", &tiempo, "scan", "on"],
             Duration::from_secs(u64::from(segundos) + 10),
         )?;
-        dispositivos_sinc()
+        let texto = bluetoothctl(&["devices"], PLAZO_CONSULTA)?;
+        let (lista, registro) = detallar(parse_dispositivos(&texto));
+        // Se guarda TODO lo que se encontro, cabina o no, con el porque de la
+        // decision. Sin esto, "no aparece mi cabina" era imposible de
+        // diagnosticar a distancia: lo encontrado se borra del Bluetooth al
+        // poco de terminar la busqueda y no llegaba al informe.
+        let cabecera = format!(
+            "Busqueda de {segundos} s, {} aparatos encontrados:\n",
+            lista.len()
+        );
+        let _ = std::fs::create_dir_all(crate::arranque::dir_cache());
+        if let Err(e) = std::fs::write(ruta_ultima_busqueda(), cabecera + &registro) {
+            eprintln!("[bluetooth] no se pudo guardar la ultima busqueda: {e}");
+        }
+        Ok(lista)
     })
     .await
 }
@@ -433,12 +484,7 @@ fn conectar_sinc(mac: &str) -> Result<String, String> {
     let mac = mac.to_string();
     let info = bluetoothctl(&["info", &mac], PLAZO_CONSULTA)
         .map(|t| parse_info(&t))
-        .unwrap_or(Info {
-            nombre: String::new(),
-            conectado: false,
-            emparejado: false,
-            altavoz: false,
-        });
+        .unwrap_or_else(|_| Info::vacia());
 
     if info.conectado {
         // Ya estaba conectada... pero puede estarlo A MEDIAS (ver abajo).
@@ -587,6 +633,45 @@ Device F4:73:35:88:AF:C7 Keyboard K380
         // Un portatil sin icono pero con clase de ordenador, tampoco.
         let sin_icono = parse_info(&INFO_PORTATIL.replace("\tIcon: computer\n", ""));
         assert!(!sin_icono.altavoz);
+    }
+
+    /// Una cabina SIN emparejar, tal como la ve la busqueda: sin servicios
+    /// todavia, pero con su clase (audio/video, altavoz) e icono.
+    const INFO_CABINA_NUEVA: &str = r#"Device 27:6C:A8:EF:45:96 (public)
+	Name: Bluetooth
+	Alias: Bluetooth
+	Class: 0x00240414 (2360340)
+	Icon: audio-card
+	Paired: no
+	Connected: no
+	RSSI: -62
+"#;
+
+    /// Una tele que anuncia «Audio Sink»: no es una cabina.
+    const INFO_TELE: &str = r#"Device 20:3D:BD:00:00:01 (public)
+	Name: webOS TV LED43LWSMARTBT
+	Class: 0x0008043c (525372)
+	Icon: video-display
+	Paired: no
+	Connected: no
+	UUID: Audio Sink                (0000110b-0000-1000-8000-00805f9b34fb)
+"#;
+
+    #[test]
+    fn una_cabina_nueva_sale_aunque_aun_no_diga_audio_sink() {
+        let c = parse_info(INFO_CABINA_NUEVA);
+        assert!(!c.audio_sink, "todavia no anuncia el servicio");
+        assert!(c.altavoz, "pero por su tipo de aparato ES una cabina");
+        // Solo con la clase (sin icono) tambien.
+        let sin_icono = parse_info(&INFO_CABINA_NUEVA.replace("\tIcon: audio-card\n", ""));
+        assert!(sin_icono.altavoz);
+    }
+
+    #[test]
+    fn una_tele_no_sale_como_cabina() {
+        let t = parse_info(INFO_TELE);
+        assert!(t.audio_sink, "la tele anuncia Audio Sink...");
+        assert!(!t.altavoz, "...pero es una pantalla, no una cabina");
     }
 
     #[test]

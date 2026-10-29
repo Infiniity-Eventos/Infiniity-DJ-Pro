@@ -10,7 +10,7 @@ use std::sync::OnceLock;
 use std::time::Duration;
 
 /// Carpeta propia para marcas y archivos de arranque (~/.cache/infiniity-dj).
-fn dir_cache() -> PathBuf {
+pub(crate) fn dir_cache() -> PathBuf {
     let base = std::env::var_os("XDG_CACHE_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache")))
