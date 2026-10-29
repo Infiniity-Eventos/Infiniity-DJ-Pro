@@ -264,6 +264,15 @@ export const btPreparacionEstado = (): Promise<EstadoPreparacion> => {
   if (!isTauri()) return Promise.resolve({ preparado: false, antigua: false, rutas: [] });
   return invoke<EstadoPreparacion>("bt_preparacion_estado");
 };
+/**
+ * Prepara el equipo para Bluetooth SOLO si todavia no lo esta (una vez por
+ * portatil). Devuelve `true` si lo hizo: entonces hay que rehacer la conexion
+ * de sonido de la app para que nazca con el margen.
+ */
+export const btAsegurarPreparacion = (): Promise<boolean> => {
+  if (!isTauri()) return Promise.resolve(false);
+  return invoke<boolean>("bt_asegurar_preparacion");
+};
 /** Escribe la configuracion y reinicia WirePlumber UNA vez. Corta el sonido unos segundos. */
 export const btPrepararEquipo = () => invoke<string>("bt_preparar_equipo");
 export const btQuitarPreparacion = () => invoke<string>("bt_quitar_preparacion");

@@ -88,8 +88,11 @@ Cada una salió de un fallo real en el equipo de alguien:
      portátil: con 40 ms la app entregaba silencio; con 75 ms, sonido pero
      entrecortado; con 200 ms (`node.latency 9600/48000`), la app entrega
      −7,2 dB y llegan −7,6 dB a la cabina. Si vuelve a cortarse, ese número es
-     lo primero que se toca. Para que un portátil nuevo suene por Bluetooth:
-     «Preparar equipo», cerrar y abrir la app, emparejar la cabina.
+     lo primero que se toca. Desde la 0.4.56 la preparación es **automática**:
+     la primera vez que un portátil conecta o elige una cabina, la app pone la
+     regla, reinicia pipewire-pulse UNA vez y rehace su propia conexión de
+     sonido (comprobado: una conexión nueva nace con el margen, sin cerrar la
+     app). Para el DJ es un toque: abrir «Audio» (busca solo) y tocar la cabina.
    - **Lo que falla de verdad** (registro de wireplumber 0.4.17 en Mint 22.1):
      al tomar la app la cabina, el sistema intenta conectar el audio y falla,
      `2 of 2 PipeWire links failed to activate`, y **no lo reintenta**:
@@ -112,7 +115,10 @@ Cada una salió de un fallo real en el equipo de alguien:
      pedir también un informe **de cuando sí suena** (otro programa sonando):
      sin una referencia buena se adivina.
    - **Nada de reiniciar el sonido del equipo ni el adaptador desde la app**:
-     entró en bucle y trabó un portátil en pleno uso.
+     entró en bucle y trabó un portátil en pleno uso. La única excepción es la
+     preparación automática, y solo porque es **una vez por portátil**: solo
+     si la regla no está puesta, solo al tocar una cabina, y si ese intento
+     falla no se repite hasta reabrir la app (`asegurar_preparacion_con`).
    - **Verificar antes de mandar, también lo "obvio".** En `bluez5.roles` de
      WirePlumber, `a2dp_source` = el portátil envía (cabinas), `a2dp_sink` =
      recibe. Una versión lo invirtió sin comprobarlo y dejó un portátil sin

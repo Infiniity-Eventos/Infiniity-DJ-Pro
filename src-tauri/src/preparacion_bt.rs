@@ -182,11 +182,68 @@ pub async fn bt_preparar_equipo() -> Result<String, String> {
         } else {
             reiniciar(&["pipewire-pulse"])?;
         }
-        Ok("Equipo preparado. Cierra Infiniity DJ y vuelve a abrirlo para que el sonido use \
-            el margen nuevo; luego conecta la cabina y dale play."
-            .to_string())
+        Ok("Equipo preparado para cabinas Bluetooth.".to_string())
     })
     .await
+}
+
+/// Ya se intento preparar en esta sesion y fallo: no reintentar solo.
+///
+/// POR QUE: preparar reinicia el sonido del equipo. Una version anterior que
+/// reiniciaba sola entro en bucle y trabo un portatil (regla 8). Esta solo
+/// reinicia si la regla NO esta puesta (una vez por portatil, para siempre), y
+/// si ese unico intento falla, no lo repite hasta reabrir la app.
+static PREPARACION_FALLIDA: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// Prepara el equipo SOLO si hace falta. Devuelve si tuvo que hacerlo (y por
+/// tanto reiniciar el sonido): quien llama tiene que rehacer la conexion de
+/// sonido de la app para que la nueva nazca con el margen.
+///
+/// `reiniciar_fn` va inyectado para poder probarlo sin tocar el sonido real.
+fn asegurar_preparacion_con(
+    reiniciar_fn: &dyn Fn(&[&str]) -> Result<(), String>,
+) -> Result<bool, String> {
+    use std::sync::atomic::Ordering;
+    if estado_sinc().preparado {
+        return Ok(false); // ya estaba: no se toca nada
+    }
+    if PREPARACION_FALLIDA.load(Ordering::SeqCst) {
+        return Err("La preparación del equipo ya falló en esta sesión; cierra y abre la app para \
+                    reintentarlo."
+            .to_string());
+    }
+    let resultado = (|| {
+        let habia_vieja = quitar_viejos()?;
+        let regla = ruta_regla();
+        if let Some(d) = regla.parent() {
+            std::fs::create_dir_all(d)
+                .map_err(|e| format!("No se pudo crear {}: {e}", d.display()))?;
+        }
+        std::fs::write(&regla, REGLA)
+            .map_err(|e| format!("No se pudo escribir {}: {e}", regla.display()))?;
+        if habia_vieja {
+            reiniciar_fn(&["wireplumber", "pipewire-pulse"])
+        } else {
+            reiniciar_fn(&["pipewire-pulse"])
+        }
+    })();
+    match resultado {
+        Ok(()) => Ok(true),
+        Err(e) => {
+            PREPARACION_FALLIDA.store(true, Ordering::SeqCst);
+            Err(e)
+        }
+    }
+}
+
+/// Al conectar o elegir una cabina: prepara el equipo si todavia no lo esta.
+/// Devuelve `true` si lo hizo (la interfaz rehace entonces la conexion de
+/// sonido de la app; comprobado que una conexion nueva nace con el margen sin
+/// cerrar la app).
+#[tauri::command]
+pub async fn bt_asegurar_preparacion() -> Result<bool, String> {
+    en_otro_hilo(|| asegurar_preparacion_con(&reiniciar)).await
 }
 
 /// Quita la regla (y lo anterior si quedara) y reinicia una vez.
@@ -225,8 +282,14 @@ mod pruebas {
         assert_eq!(REGLA.matches('[').count(), REGLA.matches(']').count());
     }
 
+    /// XDG_CONFIG_HOME es UNA variable para todo el proceso y las pruebas
+    /// corren a la vez: sin este candado, una cambia la carpeta mientras otra
+    /// la esta usando y fallan a ratos (paso al añadir la segunda).
+    static CANDADO_CONFIG: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     /// Simula XDG_CONFIG_HOME solo dentro de la prueba.
     fn con_config_temporal<F: FnOnce()>(nombre: &str, f: F) {
+        let _candado = CANDADO_CONFIG.lock().unwrap_or_else(|e| e.into_inner());
         let tmp = std::env::temp_dir().join(format!("dj-prep-{nombre}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).unwrap();
@@ -274,7 +337,37 @@ mod pruebas {
     }
 
     #[test]
+    fn asegurar_prepara_una_sola_vez_y_no_reinicia_si_ya_esta() {
+        con_config_temporal("asegurar", || {
+            let reinicios = std::cell::RefCell::new(Vec::<String>::new());
+            let falso = |svc: &[&str]| -> Result<(), String> {
+                reinicios.borrow_mut().push(svc.join("+"));
+                Ok(())
+            };
+            // Primera vez: escribe la regla y reinicia pipewire-pulse.
+            assert!(asegurar_preparacion_con(&falso).unwrap(), "tenia que preparar");
+            assert_eq!(*reinicios.borrow(), vec!["pipewire-pulse".to_string()]);
+            assert!(estado_sinc().preparado);
+            // Segunda y tercera: ya esta, no se toca nada ni se reinicia.
+            assert!(!asegurar_preparacion_con(&falso).unwrap());
+            assert!(!asegurar_preparacion_con(&falso).unwrap());
+            assert_eq!(reinicios.borrow().len(), 1, "un portatil se prepara UNA vez");
+
+            // Con la preparacion vieja de WirePlumber: la cambia y reinicia los dos.
+            let regla = ruta_regla();
+            std::fs::remove_file(&regla).unwrap();
+            let [lua, _] = rutas_viejas();
+            std::fs::create_dir_all(lua.parent().unwrap()).unwrap();
+            std::fs::write(&lua, "viejo").unwrap();
+            assert!(asegurar_preparacion_con(&falso).unwrap());
+            assert_eq!(reinicios.borrow().last().unwrap(), "wireplumber+pipewire-pulse");
+            assert!(!lua.exists(), "la preparacion vieja se retira");
+        });
+    }
+
+    #[test]
     fn la_regla_va_a_la_configuracion_del_usuario_de_pipewire_pulse() {
+        let _candado = CANDADO_CONFIG.lock().unwrap_or_else(|e| e.into_inner());
         let r = ruta_regla();
         assert!(
             r.ends_with(format!("pipewire/pipewire-pulse.conf.d/{NOMBRE_REGLA}")),

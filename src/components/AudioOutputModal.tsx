@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useStore } from "../state/store";
 import {
   audioOutputs,
@@ -8,6 +8,7 @@ import {
   btDispositivos,
   btEncender,
   btEstado,
+  btAsegurarPreparacion,
   btPreparacionEstado,
   btPrepararEquipo,
   btQuitarPreparacion,
@@ -18,7 +19,7 @@ import {
   type EstadoBt,
   type EstadoPreparacion,
 } from "../lib/tauri";
-import { aplicarSalida } from "../lib/salidaAudio";
+import { aplicarSalida, esBluetooth, olvidarSalidaAplicada, rehacerConexionDeSonido } from "../lib/salidaAudio";
 import { engine } from "../audio/AudioEngine";
 
 /** Cuanto busca cabinas. Menos no da tiempo a que una cabina conteste. */
@@ -143,6 +144,20 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
   }, [cargar, cargarBt]);
 
   /**
+   * Al abrir, si el Bluetooth del equipo ya esta encendido, se buscan cabinas
+   * solas: el DJ abre «Audio» y las ve, sin un boton mas. Si esta apagado no
+   * se enciende por su cuenta (un equipo que va por cable no tiene por que
+   * encenderlo); para eso esta «Buscar cabinas».
+   */
+  const buscadoAlAbrir = useRef(false);
+  useEffect(() => {
+    if (buscadoAlAbrir.current || !bt?.encendido) return;
+    buscadoAlAbrir.current = true;
+    void buscarCabinas(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bt?.encendido]);
+
+  /**
    * Cuenta atras mientras busca.
    *
    * No es un adorno: buscar cabinas tarda doce segundos, y sin NADA moviendose
@@ -167,6 +182,7 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
       // vuelve a mandar el sonido a su sitio lee la salida guardada. Si se
       // guardara despues, leeria la salida VIEJA y el sonido se volveria a la
       // anterior en mitad del cambio.
+      if (esBluetooth(salida.name)) await prepararSiHaceFalta();
       setAudioSink(salida.name);
       const movidos = await aplicarSalida(salida.name);
       setError(null);
@@ -275,7 +291,7 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
     const quitar = preparacion?.preparado === true;
     askConfirm(
       quitar
-        ? "Quitar la preparación devuelve el sonido del equipo a su configuración normal. El sonido se corta unos segundos. ¿Seguir?"
+        ? "Quitar la preparación devuelve el sonido del equipo a su configuración normal: útil si este portátil ya solo va por cable (con cable responde un poco más rápido). Las cabinas Bluetooth volverían a cortarse hasta que se prepare otra vez, cosa que pasa sola al tocar una cabina. El sonido se corta unos segundos. ¿Seguir?"
         : "Preparar el equipo le da al sonido de Infiniity DJ más margen (200 ms en vez de 40), que es lo que necesita una cabina Bluetooth para no cortarse. Solo afecta a esta app; con cable, el play y el crossfader responden un poco más tarde. Reinicia el servicio de sonido UNA vez (el sonido se corta unos segundos) y después hay que cerrar y abrir la app. Se puede quitar. ¿Seguir?",
       () => {
         void (async () => {
@@ -283,6 +299,10 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
           setError(null);
           try {
             const msg = quitar ? await btQuitarPreparacion() : await btPrepararEquipo();
+            // Se reinicio el sonido del equipo: la conexion de la app murio.
+            // Una nueva nace con la configuracion de ahora (sin cerrar la app).
+            olvidarSalidaAplicada();
+            await rehacerConexionDeSonido();
             showToast(msg);
             await cargarBt();
             await cargar();
@@ -318,6 +338,29 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
    * pasaba es que el Bluetooth del equipo estaba apagado. Si hay que hacerlo
    * siempre, que lo haga la app y lo diga.
    */
+  /**
+   * La primera vez que un portatil usa una cabina Bluetooth, se prepara SOLO:
+   * pone la regla del margen y reinicia el sonido una vez. Despues nunca mas.
+   *
+   * POR QUE AUTOMATICO (0.4.56): con muchos DJ, portatiles y cabinas, un paso
+   * a mano ("Preparar equipo", luego cerrar y abrir la app) es un paso que
+   * alguien se salta en un evento. Comprobado que tras preparar, una conexion
+   * de sonido NUEVA nace con el margen sin cerrar la app: por eso aqui se
+   * rehace la de la app y listo.
+   */
+  const prepararSiHaceFalta = async (): Promise<void> => {
+    if (preparacion?.preparado) return;
+    showToast("Preparando el equipo para Bluetooth (solo la primera vez)…");
+    const preparo = await btAsegurarPreparacion();
+    if (preparo) {
+      // El sonido del equipo se reinicio: la conexion de la app murio. Una
+      // nueva nace con el margen (si aun no habia motor, nacera asi al sonar).
+      olvidarSalidaAplicada();
+      await rehacerConexionDeSonido();
+    }
+    setPreparacion(await btPreparacionEstado());
+  };
+
   const asegurarBtEncendido = async (): Promise<boolean> => {
     if (bt?.encendido) return true;
     try {
@@ -335,7 +378,7 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
     }
   };
 
-  const buscarCabinas = async () => {
+  const buscarCabinas = async (automatica = false) => {
     setBuscando(true);
     setError(null);
     setAvisoBusqueda(null);
@@ -352,7 +395,12 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
       // Decir SIEMPRE como fue. Que la busqueda termine sin novedades y la
       // pantalla se quede igual que antes no se distingue de que haya fallado.
       const nuevas = encontradas.filter((d) => !conocidas.has(d.mac)).length;
-      if (encontradas.length === 0) {
+      // En la busqueda que se hace sola al abrir, no se comenta "no hay nada
+      // nuevo" si ya hay cabinas en la lista: el DJ no pidio buscar y es ruido.
+      // Si no hay NINGUNA, si se dice, porque es lo que tiene que saber.
+      if (automatica && encontradas.length > 0 && nuevas === 0) {
+        setAvisoBusqueda(null);
+      } else if (encontradas.length === 0) {
         setAvisoBusqueda(
           "No apareció ninguna cabina. Comprueba que esté encendida, cerca, y en modo emparejar (normalmente dejando pulsado su botón de Bluetooth)."
         );
@@ -389,6 +437,7 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
     setError(null);
     try {
       if (!(await asegurarBtEncendido())) return;
+      await prepararSiHaceFalta();
       const aviso = await btConectar(d.mac);
       showToast(`Cabina conectada: ${d.nombre}`);
       // Si hubo que reavivarla (conectada a medias, sin canal de sonido), que
@@ -441,10 +490,8 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
         <div className="dl-title">Salida de audio</div>
 
         <p className="out-hint">
-          Elige por dónde suena la música. Las cabinas Bluetooth se conectan aquí
-          mismo: enciende la cabina, dale a «Buscar cabinas» y conéctala — queda
-          sonando por ella sola. Al pasar a Bluetooth el sonido se corta un
-          instante: hay que rehacer la conexión para que la cabina suene de verdad.
+          Toca una cabina y suena por ella. La primera vez en cada portátil
+          tarda unos segundos más: el equipo se prepara solo.
         </p>
 
         <div className="out-bt">
@@ -494,17 +541,11 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
             </div>
           )}
 
-          {bt?.hay && (
+          {bt?.hay && preparacion?.preparado && (
             <div className="out-bt-nota out-bt-fila">
-              <span>
-                {preparacion?.preparado
-                  ? "Equipo preparado: el sonido de la app tiene margen para cabinas Bluetooth."
-                  : preparacion?.antigua
-                    ? "Hay una preparación ANTERIOR que ya no sirve: dale a Preparar equipo para cambiarla por la nueva."
-                    : "Si una cabina Bluetooth conecta pero no suena, prepara el equipo."}
-              </span>
+              <span>✅ Este portátil ya está listo para cabinas Bluetooth.</span>
               <button className="btn" disabled={ocupado || buscando} onClick={alternarPreparacion}>
-                {preparacion?.preparado ? "Quitar preparación" : "Preparar equipo"}
+                Quitar
               </button>
             </div>
           )}

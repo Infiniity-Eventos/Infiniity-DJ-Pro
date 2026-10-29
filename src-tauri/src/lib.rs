@@ -512,6 +512,7 @@ pub fn run() {
             informe::guardar_informe,
             informe::audio_llega_sonido,
             preparacion_bt::bt_preparacion_estado,
+            preparacion_bt::bt_asegurar_preparacion,
             preparacion_bt::bt_preparar_equipo,
             preparacion_bt::bt_quitar_preparacion,
             quit_app,
