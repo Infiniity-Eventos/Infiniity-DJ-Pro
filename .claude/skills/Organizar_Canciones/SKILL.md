@@ -68,6 +68,29 @@ la ignoran… Sync NO la ignora: es pequeña, no importa).
    sin preguntar (pedido del usuario el 2026-10-26) y se dice cuáles en el resumen, para volver a
    bajarlas.
 
+0b. **Leer las notas del equipo** (D23, siempre):
+   ```bash
+   python3 -I .claude/skills/Organizar_Canciones/scripts/notas.py "$BIB"
+   ```
+   En cualquier PC, clic derecho sobre una canción en la app deja una nota («No va en esta
+   carpeta», «El artista está mal», «Está repetida», o texto libre) que viaja por Sync a
+   `Sin clasificar/.notas/`. Cada nota trae la canción (`cancion`, relativa a la biblioteca), dónde
+   estaba (`carpeta`), quién (`equipo`) y cuándo; `existe`/`ruta_actual` dicen dónde está ahora.
+   - Ponlas **en el chat, numeradas, ANTES de la revisión de dudosas**: la nota tal cual, la canción,
+     y tu propuesta concreta (carpeta destino, artista correcto, de cuál es repetida…), comprobada
+     igual que cualquier otra canción (Deezer, duración, las reglas de abajo).
+   - Una nota **pide**, no autoriza: casi siempre es sobre una canción que ya está en una carpeta de
+     género, así que se aplica con `--forzar` **solo con el sí del usuario** para esa nota. Borrar,
+     igual que siempre: solo con su permiso para esa canción.
+   - Cuando una nota quede resuelta (arreglada, o descartada porque estaba bien, diciendo por qué),
+     retírala con la respuesta:
+     ```bash
+     python3 -I .claude/skills/Organizar_Canciones/scripts/notas.py "$BIB" --atender "<archivo>" --respuesta "Movida a Merengue"
+     ```
+     Al salir de «Sin clasificar», Sync la borra en todas las PC y la marca ✎ desaparece de la app.
+     Las que el usuario deje para después se quedan (salen otra vez la próxima corrida).
+   - Varias notas iguales de PC distintas sobre la misma canción: atiéndelas juntas.
+
 1. **Identificar** (no toca archivos; tarda ~2 s por canción, internet):
    ```bash
    python3 -I .claude/skills/Organizar_Canciones/scripts/identificar.py "$BIB/Sin clasificar" --biblioteca "$BIB" --salida "$BIB/.organizar/candidatos-$(date +%F).json"
@@ -113,7 +136,7 @@ la ignoran… Sync NO la ignora: es pequeña, no importa).
    propón crear la carpeta; si el usuario dice sí, crea la carpeta, mueve esas canciones, reescribe
    `TCON` y quita `INFINIITY_GENERO_SUGERIDO` (usa `aplicar.py --forzar` con un plan de esas
    canciones y el género nuevo), y bórralas de `en_espera` en `estado.json`.
-6. **Resumen final** en el chat (y si quedaron originales por borrar, decirlo): cuántas organizadas por carpeta, cuántas quedaron en Sin clasificar
+6. **Resumen final** en el chat (y si quedaron originales por borrar, decirlo): notas del equipo atendidas y pendientes, cuántas organizadas por carpeta, cuántas quedaron en Sin clasificar
    y por qué, repetidas resueltas, carpetas nuevas, y recordar que Sync reenviará los archivos.
    Luego, en la app, "Actualizar lista" muestra todo con BPM y artista (la app lee las etiquetas).
 

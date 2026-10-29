@@ -254,6 +254,49 @@ export interface Llegada {
 export const audioLlegaSonido = (salida: string) =>
   invoke<Llegada>("audio_llega_sonido", { salida });
 
+/** Nota del equipo sobre una cancion; viaja al PC original (ver notas.rs). */
+export interface Nota {
+  cancion: string; // ruta relativa a la carpeta de musica
+  nombre: string;
+  carpeta: string;
+  texto: string;
+  equipo: string;
+  fecha: string;
+  programa: string;
+  archivo: string; // nombre del archivo de la nota (para quitarla)
+}
+
+// En el modo navegador de prueba las notas viven en memoria (solo para ver la pantalla).
+let notasDePrueba: Nota[] = [];
+export const notaGuardar = async (carpetaMusica: string, rutaCancion: string, nombre: string, texto: string) => {
+  if (pruebaNavegador()) {
+    const n: Nota = {
+      cancion: rutaCancion.replace(carpetaMusica + "/", ""),
+      nombre,
+      carpeta: rutaCancion.replace(carpetaMusica + "/", "").split("/").slice(0, -1).join("/"),
+      texto: texto.trim(),
+      equipo: "navegador",
+      fecha: new Date().toISOString(),
+      programa: "prueba",
+      archivo: `prueba-${Date.now()}.json`,
+    };
+    notasDePrueba = [...notasDePrueba, n];
+    return n;
+  }
+  return invoke<Nota>("nota_guardar", { carpetaMusica, rutaCancion, nombre, texto });
+};
+export const notasLeer = async (carpetaMusica: string) => {
+  if (pruebaNavegador()) return notasDePrueba;
+  return invoke<Nota[]>("notas_leer", { carpetaMusica });
+};
+export const notaQuitar = async (carpetaMusica: string, archivo: string) => {
+  if (pruebaNavegador()) {
+    notasDePrueba = notasDePrueba.filter((n) => n.archivo !== archivo);
+    return;
+  }
+  return invoke<void>("nota_quitar", { carpetaMusica, archivo });
+};
+
 /** Que el portatil no se duerma ni apague la pantalla (ver despierto.rs). */
 export const mantenerDespierto = (activo: boolean) =>
   invoke<string>("mantener_despierto", { activo });

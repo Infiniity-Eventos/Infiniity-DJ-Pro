@@ -32,6 +32,16 @@ export function TrackList() {
   const setLibrary = useStore((s) => s.setLibrary);
   const showToast = useStore((s) => s.showToast);
   const libraryLoading = useStore((s) => s.libraryLoading);
+  const musicRoot = useStore((s) => s.musicRoot);
+  const notas = useStore((s) => s.notas);
+  // Notas por cancion (ruta relativa), para marcar las filas que tienen alguna.
+  const notasPorCancion = useMemo(() => {
+    const m = new Map<string, string[]>();
+    for (const n of notas) m.set(n.cancion, [...(m.get(n.cancion) ?? []), n.texto]);
+    return m;
+  }, [notas]);
+  const notasDe = (t: TrackInfo) =>
+    musicRoot && t.path.startsWith(musicRoot + "/") ? notasPorCancion.get(t.path.slice(musicRoot.length + 1)) : undefined;
 
   const tracks = useMemo(() => {
     if (!library) return [];
@@ -228,8 +238,18 @@ export function TrackList() {
               }
             }}
             onDoubleClick={() => loadToDeck("A", t)}
+            onContextMenu={(e) => {
+              // Clic derecho: nota para el PC principal («no va en esta carpeta»...).
+              e.preventDefault();
+              useStore.getState().abrirNota(t);
+            }}
           >
-            <span className="t-name" title={t.name}>
+            <span className="t-name" title={`${t.name}\n(clic derecho: dejar una nota)`}>
+              {notasDe(t) && (
+                <span className="t-nota" title={`Nota: ${notasDe(t)!.join(" / ")}`}>
+                  ✎{" "}
+                </span>
+              )}
               {t.title ?? t.name}
               {t.artist && <span className="t-artist"> · {t.artist}</span>}
             </span>

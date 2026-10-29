@@ -55,7 +55,7 @@ fn version_de(programa: &str) -> String {
         .to_string()
 }
 
-fn nombre_del_equipo() -> String {
+pub(crate) fn nombre_del_equipo() -> String {
     std::fs::read_to_string("/proc/sys/kernel/hostname")
         .map(|s| s.trim().to_string())
         .unwrap_or_else(|_| "equipo-desconocido".to_string())
@@ -352,7 +352,7 @@ fn armar_informe(estado_app: &str, salida: &str) -> String {
 }
 
 /// Fecha y hora legibles, sin traerse una libreria entera para esto.
-fn chrono_simple() -> String {
+pub(crate) fn chrono_simple() -> String {
     let salida = recoger("date", &["+%Y-%m-%d %H:%M:%S"]);
     if salida.starts_with('(') {
         // `date` fallo: al menos dejar algo que ordene los informes.
@@ -366,7 +366,7 @@ fn chrono_simple() -> String {
 }
 
 /// Nombre de archivo sin caracteres que den problemas al viajar entre PC.
-fn limpiar_nombre(s: &str) -> String {
+pub(crate) fn limpiar_nombre(s: &str) -> String {
     s.chars()
         .map(|c| if c.is_alphanumeric() || c == '-' || c == ' ' { c } else { '-' })
         .collect()

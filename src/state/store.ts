@@ -6,7 +6,7 @@
  */
 
 import { create } from "zustand";
-import type { LibraryData, SyncEstado } from "../lib/tauri";
+import type { LibraryData, Nota, SyncEstado, TrackInfo } from "../lib/tauri";
 
 export type DeckId = "A" | "B";
 
@@ -106,6 +106,8 @@ interface AppStore {
   toast: string | null;
   avisoCentral: string | null; // aviso grande en el centro de la pantalla, se desvanece solo
   confirmBox: ConfirmBox | null; // aviso de confirmacion
+  notas: Nota[]; // notas del equipo sobre canciones (ver notas.rs)
+  notaDe: TrackInfo | null; // cancion con el cuadro de notas abierto
   promptBox: { message: string; defaultValue: string; onSubmit: (v: string) => void } | null; // pedir un dato (sin bloquear el audio)
   downloaderOpen: boolean; // modal de descarga de YouTube abierto
   downloads: DownloadItem[]; // descargas en curso (en segundo plano)
@@ -140,6 +142,8 @@ interface AppStore {
   showAvisoCentral: (msg: string) => void;
   askConfirm: (message: string, onYes: () => void, extra?: Omit<ConfirmBox, "message" | "onYes">) => void;
   closeConfirm: () => void;
+  setNotas: (n: Nota[]) => void;
+  abrirNota: (t: TrackInfo | null) => void;
   askPrompt: (message: string, defaultValue: string, onSubmit: (v: string) => void) => void;
   closePrompt: () => void;
   setDownloaderOpen: (v: boolean) => void;
@@ -247,6 +251,8 @@ export const useStore = create<AppStore>((set, get) => ({
   toast: null,
   avisoCentral: null,
   confirmBox: null,
+  notas: [],
+  notaDe: null,
   promptBox: null,
   downloaderOpen: false,
   downloads: [],
@@ -320,6 +326,8 @@ export const useStore = create<AppStore>((set, get) => ({
   },
   askConfirm: (message, onYes, extra) => set({ confirmBox: { message, onYes, ...(extra ?? {}) } }),
   closeConfirm: () => set({ confirmBox: null }),
+  setNotas: (notas) => set({ notas }),
+  abrirNota: (notaDe) => set({ notaDe }),
   askPrompt: (message, defaultValue, onSubmit) =>
     set({ promptBox: { message, defaultValue, onSubmit } }),
   closePrompt: () => set({ promptBox: null }),

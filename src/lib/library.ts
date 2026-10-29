@@ -2,6 +2,7 @@
 
 import { ensureUnclassified, readLibrary } from "./tauri";
 import { useStore } from "../state/store";
+import { recargarNotas } from "./notas";
 
 export async function reloadLibrary(): Promise<void> {
   const { musicRoot, setLibrary, setLibraryLoading, showToast } = useStore.getState();
@@ -12,6 +13,7 @@ export async function reloadLibrary(): Promise<void> {
     await ensureUnclassified(musicRoot).catch(() => {});
     const lib = await readLibrary(musicRoot);
     setLibrary(lib);
+    void recargarNotas();
   } catch {
     showToast("No se pudo leer la carpeta de musica");
   } finally {

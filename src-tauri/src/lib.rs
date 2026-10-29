@@ -9,6 +9,7 @@ mod despierto;
 mod downloader;
 mod library;
 mod midi;
+mod notas;
 mod bluetooth;
 mod informe;
 mod preparacion_bt;
@@ -513,6 +514,9 @@ pub fn run() {
             informe::guardar_informe,
             informe::audio_llega_sonido,
             despierto::mantener_despierto,
+            notas::nota_guardar,
+            notas::notas_leer,
+            notas::nota_quitar,
             preparacion_bt::bt_preparacion_estado,
             preparacion_bt::bt_asegurar_preparacion,
             preparacion_bt::bt_preparar_equipo,
