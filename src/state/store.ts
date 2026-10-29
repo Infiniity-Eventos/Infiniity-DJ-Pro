@@ -35,6 +35,10 @@ export interface DeckInfo {
   volume: number; // 0..1 (fader del deck)
   rate: number; // playbackRate actual (1.0 = natural)
   loading: boolean;
+  /** Que esta haciendo la carga ahora ("leyendo el archivo"...), para mostrarlo grande. */
+  cargaPaso: string;
+  /** Date.now() al empezar a cargar (para el contador de segundos). */
+  cargaDesde: number;
   fx: FxValues; // perillas de efectos (ver AudioEngine.setFx)
 }
 
@@ -162,6 +166,8 @@ const emptyDeck = (): DeckInfo => ({
   volume: 1,
   rate: 1,
   loading: false,
+  cargaPaso: "",
+  cargaDesde: 0,
   fx: { ...FX_NEUTRO },
 });
 

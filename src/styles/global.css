@@ -1846,3 +1846,44 @@ body {
     grid-template-columns: 190px minmax(0, 1fr) 44px;
   }
 }
+
+/* Aviso grande mientras un deck carga una cancion (ver DeckPanel). Plano y
+   opaco a proposito: nada de desenfoque ni animaciones (theme.css). */
+.deck {
+  position: relative;
+}
+.deck-cargando {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  text-align: center;
+  border-radius: var(--radius-lg);
+  background: rgba(249, 248, 255, 0.92);
+  border: 2px dashed var(--accent);
+  pointer-events: none;
+}
+.deck-cargando-titulo {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: var(--accent-strong);
+}
+.deck-cargando-nombre {
+  max-width: 100%;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.deck-cargando-texto {
+  font-size: 14px;
+  color: var(--text-2);
+}

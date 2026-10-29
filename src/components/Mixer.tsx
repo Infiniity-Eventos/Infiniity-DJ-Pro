@@ -39,6 +39,8 @@ export function Mixer() {
   }, []);
 
   const canMix = !!decks.A.trackPath && !!decks.B.trackPath;
+  // Mientras un deck carga, mezclar no puede salir bien: el boton lo dice.
+  const deckCargando = decks.A.loading ? "A" : decks.B.loading ? "B" : null;
 
   const doMix = async () => {
     if (automixBloquea()) return;
@@ -59,12 +61,18 @@ export function Mixer() {
     <div className="glass glass-strong mixer">
       <button
         className={`btn ${autoMixing ? "btn" : "btn-accent"} mix-btn`}
-        disabled={(!canMix && !autoMixing) || automixOn}
+        disabled={(!canMix && !autoMixing) || automixOn || (!!deckCargando && !autoMixing)}
         onClick={doMix}
       >
-        {autoMixing ? (automixOn ? "AUTOMIX" : "CANCELAR") : "MEZCLAR"}
+        {autoMixing ? (automixOn ? "AUTOMIX" : "CANCELAR") : deckCargando && !automixOn ? "ESPERA..." : "MEZCLAR"}
         <span className="mix-sub">
-          {automixOn ? "lo maneja el automix" : autoMixing ? "mezcla en curso..." : "transición automática"}
+          {automixOn
+            ? "lo maneja el automix"
+            : autoMixing
+            ? "mezcla en curso..."
+            : deckCargando
+            ? `cargando Deck ${deckCargando}`
+            : "transición automática"}
         </span>
       </button>
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { engine } from "../audio/AudioEngine";
 import { automixBloquea } from "../audio/Automix";
 import { useStore, FX_NEUTRO, type DeckId, type FxKey } from "../state/store";
@@ -24,6 +24,17 @@ export function DeckPanel({ deckId }: { deckId: DeckId }) {
   const [dragOver, setDragOver] = useState(false);
 
   const hasTrack = !!deck.trackPath;
+
+  // Segundos de carga, para que el aviso se vea vivo (regla 9: una espera sin
+  // señales parece un cuelgue). Un tic por segundo, nada en bucle (theme.css).
+  const [segCarga, setSegCarga] = useState(0);
+  useEffect(() => {
+    if (!deck.loading) return;
+    const tic = () => setSegCarga(Math.floor((Date.now() - deck.cargaDesde) / 1000));
+    tic();
+    const t = window.setInterval(tic, 1000);
+    return () => window.clearInterval(t);
+  }, [deck.loading, deck.cargaDesde]);
 
   // Soltar una cancion (arrastrada desde la lista) la carga en este deck.
   const onDropTrack = (e: React.DragEvent) => {
@@ -84,6 +95,20 @@ export function DeckPanel({ deckId }: { deckId: DeckId }) {
       onDragLeave={() => setDragOver(false)}
       onDrop={onDropTrack}
     >
+      {/* Antes era un «cargando...» chiquito y el equipo le daba play o MEZCLAR
+          sin saber que la cancion aun no estaba lista. Deja pasar los clics
+          (pointer-events: none): soltar otra cancion encima sigue funcionando,
+          y el play explica por que todavia no suena. */}
+      {deck.loading && (
+        <div className="deck-cargando" role="status">
+          <div className="deck-cargando-titulo">CARGANDO...</div>
+          <div className="deck-cargando-nombre">{deck.trackName}</div>
+          <div className="deck-cargando-texto">
+            Todavía no suena. Espera unos segundos: {deck.cargaPaso}
+            {segCarga > 0 ? ` (${segCarga} s)` : ""}
+          </div>
+        </div>
+      )}
       <div className="deck-header">
         <span className="deck-badge">Deck {deckId}</span>
         <span className="deck-bpm">

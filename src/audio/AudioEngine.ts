@@ -560,6 +560,8 @@ class AudioEngine {
       rate: 1,
       duration: 0,
       loading: true,
+      cargaPaso: "leyendo el archivo",
+      cargaDesde: Date.now(),
     });
 
     let bytes: ArrayBuffer;
@@ -574,6 +576,7 @@ class AudioEngine {
       return false;
     }
     if (d.loadToken !== token) return false; // se cargo otra cancion mientras leiamos
+    patchDeck(id, { cargaPaso: "preparando el sonido" });
 
     let buffer: AudioBuffer;
     try {
@@ -967,6 +970,13 @@ class AudioEngine {
 
   async play(id: DeckId): Promise<void> {
     const d = this.deck(id);
+    // Mientras carga, d.buffer todavia es la cancion ANTERIOR: darle play
+    // sonaria la vieja desde el principio. Y no hacer nada en silencio fue lo
+    // que desconcerto al equipo («le doy play y no suena»): se dice.
+    if (useStore.getState().decks[id].loading) {
+      useStore.getState().showToast(`El Deck ${id} todavía está cargando la canción: espera unos segundos`);
+      return;
+    }
     if (!d.buffer || d.playing) return;
     if (!(await this.despertar())) return;
 
@@ -1337,6 +1347,11 @@ class AudioEngine {
     const { settings } = st;
     const f = this.deck(from);
     const t = this.deck(to);
+    for (const id of [from, to]) {
+      if (st.decks[id].loading) {
+        return { ok: false, reason: `El Deck ${id} todavía está cargando la canción: espera unos segundos` };
+      }
+    }
     if (!t.buffer) {
       return { ok: false, reason: `Carga una cancion en el Deck ${to} primero` };
     }
