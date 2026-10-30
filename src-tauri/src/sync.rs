@@ -727,6 +727,18 @@ pub fn quitar_pc(id: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Original: borra el aviso de una PC que intentó entrar con un código viejo.
+/// No la bloquea: si vuelve a intentar, el aviso aparece otra vez.
+pub fn descartar_rechazada(id: &str) -> Result<(), String> {
+    let c = leer_config();
+    if c.rol != Rol::Original {
+        return Err("Solo el PC original tiene estos avisos".to_string());
+    }
+    api_enviar(&c.apikey, "DELETE", &format!("/rest/cluster/pending/devices?device={id}"), None)?;
+    eprintln!("sync: aviso de PC con codigo viejo descartado: {id}");
+    Ok(())
+}
+
 fn compartir_carpeta_con(apikey: &str, carpeta: &str, dispositivo: &str) -> Result<(), String> {
     let mut f = api_get(apikey, &format!("/rest/config/folders/{carpeta}"))?;
     let mut devs = f["devices"].as_array().cloned().unwrap_or_default();
@@ -954,8 +966,13 @@ pub struct PcConectada {
 /// podia saber que lo unico que faltaba era pasar el codigo nuevo.
 #[derive(Serialize, Clone)]
 pub struct PcRechazada {
+    /// Para poder descartar la solicitud desde el panel.
+    pub id: String,
     pub nombre: String,
-    /// Desde cuándo lo está intentando (como lo da Syncthing).
+    /// Último intento (Syncthing la actualiza cada vez que la rechaza). Se
+    /// muestra porque una solicitud vieja sigue guardada aunque esa PC ya
+    /// haya entrado con otro nombre: el 30-oct salía «PORTATIL GRIS está
+    /// intentando entrar» con un último intento de cinco días atrás.
     pub desde: String,
 }
 
@@ -1099,6 +1116,7 @@ pub fn estado() -> SyncEstado {
                         continue; // trae el codigo bueno: entra sola en la otra vuelta
                     }
                     e.rechazadas.push(PcRechazada {
+                        id: id.clone(),
                         // Sin el secreto, que es privado.
                         nombre: nombre.split('|').nth(1).unwrap_or(nombre).to_string(),
                         desde: info["time"].as_str().unwrap_or("").to_string(),

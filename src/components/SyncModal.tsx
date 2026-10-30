@@ -7,6 +7,7 @@ import {
   syncAutorizar,
   syncInstalarServicio,
   syncQuitarPc,
+  syncDescartarRechazada,
   syncRenombrarPc,
   syncSalir,
   syncLog,
@@ -130,11 +131,29 @@ export function SyncModal() {
               </div>
             )}
             {sync.rechazadas.length > 0 && (
-              <div className="dl-warn" style={{ marginBottom: 12 }}>
-                ⚠ {sync.rechazadas.length === 1 ? "Una PC está intentando entrar" : `${sync.rechazadas.length} PC están intentando entrar`} con un
-                código que ya no sirve:{" "}
-                <b>{sync.rechazadas.map((r) => r.nombre || "sin nombre").join(", ")}</b>. Mándale el código de
-                abajo; mientras tanto se queda esperando sin recibir nada.
+              <div className="dl-warn sync-rechazadas">
+                <div>
+                  ⚠ {sync.rechazadas.length === 1 ? "Una PC intentó entrar" : `${sync.rechazadas.length} PC intentaron entrar`} con un
+                  código que ya no sirve. Si sigue en uso, mándale el código de abajo. Si ya entró con otro nombre o
+                  ya no existe, descarta el aviso (si vuelve a intentar, aparece otra vez).
+                </div>
+                {sync.rechazadas.map((r) => (
+                  <div key={r.id} className="sync-rechazada">
+                    <span>
+                      <b>{r.nombre || "sin nombre"}</b>
+                      <span className="sync-dim"> · {(r.desde ? cuandoSeVio(r.desde, "último intento") : "sin fecha")}</span>
+                    </span>
+                    <button
+                      className="btn dl-mini"
+                      disabled={!!ocupado}
+                      onClick={() =>
+                        void correr("descartar", () => syncDescartarRechazada(r.id), "Aviso descartado")
+                      }
+                    >
+                      Descartar
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
             <div className="sync-sub">Código para las demás PC (cópialo y mándalo por WhatsApp):</div>
@@ -342,20 +361,20 @@ const DIAS = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
 const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 
 /** "Última vez: hoy 21:30" / "ayer 18:05" / "lun 27 oct, 14:10". */
-function cuandoSeVio(iso: string): string {
+function cuandoSeVio(iso: string, que = "Última vez"): string {
   if (!iso) return "Nunca se ha conectado";
   const f = new Date(iso);
-  if (isNaN(f.getTime())) return `Última vez: ${iso}`;
+  if (isNaN(f.getTime())) return `${que}: ${iso}`;
   const hora = f.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
   const dia = new Date(f);
   dia.setHours(0, 0, 0, 0);
   const dias = Math.round((hoy.getTime() - dia.getTime()) / 86400000);
-  if (dias <= 0) return `Última vez: hoy ${hora}`;
-  if (dias === 1) return `Última vez: ayer ${hora}`;
+  if (dias <= 0) return `${que}: hoy ${hora}`;
+  if (dias === 1) return `${que}: ayer ${hora}`;
   const anio = f.getFullYear() !== hoy.getFullYear() ? ` ${f.getFullYear()}` : "";
-  return `Última vez: ${DIAS[f.getDay()]} ${f.getDate()} ${MESES[f.getMonth()]}${anio}, ${hora}`;
+  return `${que}: ${DIAS[f.getDay()]} ${f.getDate()} ${MESES[f.getMonth()]}${anio}, ${hora}`;
 }
 
 /** Texto corto para el botón de la barra: el estado en tres palabras. */

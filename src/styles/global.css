@@ -1275,6 +1275,16 @@ body {
   padding: 10px 12px;
   user-select: text;
 }
+.sync-rechazadas {
+  margin-bottom: 12px;
+}
+.sync-rechazada {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+}
 .sync-pcs {
   list-style: none;
   padding: 0;

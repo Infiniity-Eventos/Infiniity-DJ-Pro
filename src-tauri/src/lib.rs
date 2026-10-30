@@ -349,6 +349,13 @@ async fn sync_quitar_pc(id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn sync_descartar_rechazada(id: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || sync::descartar_rechazada(&id))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 async fn sync_instalar_servicio() -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(sync::instalar_servicio_agente)
         .await
@@ -489,6 +496,7 @@ pub fn run() {
             sync_musica,
             sync_instalar_servicio,
             sync_quitar_pc,
+            sync_descartar_rechazada,
             sync_renombrar_pc,
             sync_salir,
             sync_log,

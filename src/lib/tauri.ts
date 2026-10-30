@@ -94,8 +94,9 @@ export interface PcConectada {
 }
 /** Original: una PC intentando entrar con un código que ya no sirve. */
 export interface PcRechazada {
+  id: string;
   nombre: string;
-  desde: string; // desde cuándo lo intenta
+  desde: string; // último intento
 }
 export interface SyncEstado {
   rol: SyncRol;
@@ -126,6 +127,7 @@ export const syncAutorizar = (autorizado: boolean, pausaManual: boolean) =>
 export const syncMusica = (sonando: boolean) => invoke<void>("sync_musica", { sonando });
 export const syncInstalarServicio = () => invoke<string>("sync_instalar_servicio");
 export const syncQuitarPc = (id: string) => invoke<void>("sync_quitar_pc", { id });
+export const syncDescartarRechazada = (id: string) => invoke<void>("sync_descartar_rechazada", { id });
 export const syncRenombrarPc = (id: string, nombre: string) => invoke<void>("sync_renombrar_pc", { id, nombre });
 export const syncSalir = () => invoke<void>("sync_salir");
 export const syncLog = () => invoke<string>("sync_log");
