@@ -44,7 +44,7 @@ clasificadas. El orden lo controla solo Camilo. En las PC del equipo no existe "
 | D12 | **Toda la biblioteca** en todas las PC. | Cualquier PC sirve para cualquier evento. |
 | D13 | En modo equipo se **bloquea** mover/arrastrar a carpeta y crear carpeta. | Con D2, mover una canción allá la borraría en todas. |
 | D14 | La app **evita duplicados** por nombre al descargar y **limpia los conflictos** (`*.sync-conflict-*`) sola. | Dos PC bajando la misma canción. |
-| D15 | La sincronización **se pausa sola mientras suene un deck**, **avisando en pantalla** que está en pausa por eso (no es un bug), y la persona puede **pausar/continuar a mano** desde el panel de Sync. | CPU/disco en portátiles flojos en pleno evento; que no parezca un fallo. |
+| D15 | ~~La sincronización **se pausa sola mientras suene un deck**, **avisando en pantalla** que está en pausa por eso (no es un bug), y la persona puede **pausar/continuar a mano** desde el panel de Sync. | CPU/disco en portátiles flojos en pleno evento; que no parezca un fallo. | **CAMBIADA el 2026-10-30:** ya no se pausa con música; sigue en segundo plano (Syncthing va con prioridad baja y lo que suena está en memoria, no se toca). Pedido de Camilo: en un evento casi siempre suena algo y nunca sincronizaba.
 
 ---
 
@@ -122,3 +122,4 @@ Fase C — prueba y publicación
 - **2026-10-18** — Se abre la guía. Investigación previa: la app ya instala herramientas en su carpeta sin sudo (`downloader.rs`), el caché de BPM es por ruta absoluta (S1), la pantalla de bienvenida (`Welcome.tsx`) es donde iría el código de emparejamiento, y existe una configuración previa de Syncthing en este PC (S7). Ronda 1 entregada.
 - **2026-10-18** — Ronda 1 respondida. No hace falta ronda 2. Plan escrito; se empieza por la fase A.
 - **2026-10-18** — Construido y probado con dos instancias en este PC (ver mensaje del commit). Decidido sobre la marcha: (1) `limitBandwidthInLan: true`, sin eso el freno no aplicaba en la red local; (2) las banderas de sesión (autorizado/música/pausa) van en `sync-sesion.json` y se borran al abrir la app, para que la app y `--sync-cli` vean lo mismo; (3) la dirección del original se puede fijar con `INFINIITY_DJ_SYNC_DIRECCION_ORIGINAL` (solo pruebas); (4) `--sync-cli` quedó como herramienta de diagnóstico. Tropiezos: el tar.gz trae otro archivo llamado "syncthing" (perfil de firewall); `--no-default-folder` no existe en `serve`; la config se guardaba antes de generar la clave de la API. Publicado como 0.4.0. Cuestionario HTML borrado (ya respondido).
+- **2026-10-30** — D15 cambiada: la música ya no frena la sincronización (0.4.64). Queda solo la pausa manual.

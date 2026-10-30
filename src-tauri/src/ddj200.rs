@@ -37,7 +37,8 @@ const NOTE_LOAD: u8 = 0x46;
 // --- Control Change de perillas/faders (status 0xBn) ---
 const CC_TEMPO: u8 = 0x00; // slider de tempo del deck
 const CC_VOLUME: u8 = 0x13; // fader de volumen del canal
-const CC_JOG: u8 = 0x22; // giro del plato (jog)
+const CC_JOG: u8 = 0x22; // giro del plato (jog), tocando la cara de arriba
+const CC_JOG_ARO: u8 = 0x21; // giro del plato tomado por el aro (sin tocar arriba)
 const CC_CROSSFADER: u8 = 0x1F; // crossfader (llega como global)
 // Perillas de efectos (numeros documentados de la DDJ-200; se confirman con la
 // unidad real, como el resto). El EQ llega por el canal del deck; el filtro
@@ -102,7 +103,7 @@ pub fn map_message(msg: &[u8]) -> Option<ControlEvent> {
                 CC_EQ_LOW if deck != GLOBAL => Some(ControlEvent { action: "graves".to_string(), deck, value: norm }),
                 CC_FILTRO_DECK1 if channel == 6 => Some(ControlEvent { action: "filtro".to_string(), deck: 0, value: norm }),
                 CC_FILTRO_DECK2 if channel == 6 => Some(ControlEvent { action: "filtro".to_string(), deck: 1, value: norm }),
-                CC_JOG => {
+                CC_JOG | CC_JOG_ARO => {
                     // Los jog envian valores relativos centrados en 64 (0x40):
                     // >64 = adelante, <64 = atras.
                     let rel = (data2 as i32 - 64) as f64 / 64.0;

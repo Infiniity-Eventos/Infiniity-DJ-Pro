@@ -80,6 +80,12 @@ interface Deck {
   analisis: AnalisisCancion | null; // silencios, outro, primer golpe (ver analisis.ts)
   /** Rampa de velocidad en curso (programada en el reloj de audio). null si no hay. */
   rampa: { t0: number; r0: number; r1: number; dur: number } | null;
+  /**
+   * Empujón del plato (jog): desde `startCtxTime` la velocidad va por `factor`
+   * durante `dur` segundos y vuelve sola a `rate`. Programado en el AudioParam
+   * (regla 7). null si no hay.
+   */
+  empuje: { factor: number; dur: number } | null;
   fx: NodosFx;
 }
 
@@ -235,6 +241,7 @@ class AudioEngine {
         loadToken: 0,
         analisis: null,
         rampa: null,
+        empuje: null,
         fx,
       };
     };
@@ -524,6 +531,7 @@ class AudioEngine {
     };
     const arranque = when !== undefined ? Math.max(when, this.ctx.currentTime) : 0;
     src.start(arranque, off, Math.max(0.01, fin - off));
+    d.empuje = null;
     d.source = src;
     d.offset = off;
     d.startCtxTime = arranque || this.ctx.currentTime;
@@ -1090,6 +1098,55 @@ class AudioEngine {
     this.seekTo(id, this.getPosition(id) + seconds);
   }
 
+  /**
+   * Plato de la controladora (jog). `rel` es el giro de un tic (-1..1).
+   *
+   * POR QUE NO ES UN SALTO: antes cada tic hacia `nudge` = parar la fuente y
+   * arrancar otra. Girando llegan decenas de tics por segundo, asi que eran
+   * decenas de cortes por segundo: el 30-oct en la DDJ-200 "suena como si
+   * hiciera corto". Sonando, el plato hace lo de un DJ: acelera o frena la
+   * cancion un instante (la misma fuente, sin cortes) y vuelve sola a su
+   * velocidad. En pausa no suena nada, asi que ahi si busca.
+   */
+  empujar(id: DeckId, rel: number): void {
+    const d = this.deck(id);
+    if (!d.buffer) return;
+    if (!d.playing || !d.source || !this.ctx) {
+      this.seekTo(id, this.getPosition(id) + rel * 2);
+      return;
+    }
+    // Una rampa de velocidad (sincronizar tempo) manda; el plato espera.
+    if (d.rampa) return;
+    this.plegarEmpuje(id);
+    const now = this.ctx.currentTime;
+    if (d.startCtxTime > now) return; // programada para arrancar mas tarde
+    const factor = 1 + clamp(rel * 6, -0.3, 0.3);
+    const dur = 0.08; // los tics llegan cada pocos ms: girando, no se nota el regreso
+    d.offset = this.getPosition(id);
+    d.startCtxTime = now;
+    d.empuje = { factor, dur };
+    const p = d.source.playbackRate;
+    p.cancelScheduledValues(now);
+    p.setValueAtTime(d.rate * factor, now);
+    p.setValueAtTime(d.rate, now + dur);
+  }
+
+  /** Deja la contabilidad al dia tras un empujon y la velocidad en `rate`. */
+  private plegarEmpuje(id: DeckId): void {
+    const d = this.deck(id);
+    if (!d.empuje || !this.ctx) return;
+    if (d.playing) {
+      d.offset = this.getPosition(id);
+      d.startCtxTime = this.ctx.currentTime;
+    }
+    d.empuje = null;
+    if (d.source) {
+      const p = d.source.playbackRate;
+      p.cancelScheduledValues(this.ctx.currentTime);
+      p.value = d.rate;
+    }
+  }
+
   /** Velocidad real en este instante (en mitad de una rampa va cambiando). */
   private rateActual(d: Deck): number {
     if (!d.rampa || !this.ctx) return d.rate;
@@ -1100,6 +1157,7 @@ class AudioEngine {
 
   /** Cierra la rampa en curso dejando la contabilidad (posicion, velocidad) al dia. */
   private plegarRampa(id: DeckId): void {
+    this.plegarEmpuje(id);
     const d = this.deck(id);
     if (!d.rampa || !this.ctx) return;
     const pos = this.getPosition(id);
@@ -1118,6 +1176,7 @@ class AudioEngine {
   setRate(id: DeckId, rate: number): void {
     const d = this.deck(id);
     this.cancelRateAnim(id);
+    this.plegarEmpuje(id);
     if (d.playing && this.ctx) {
       // Rebasar la contabilidad de posicion para que no de un salto.
       d.offset = this.getPosition(id);
@@ -1164,6 +1223,8 @@ class AudioEngine {
         avance = t < dur ? r0 * t + ((r1 - r0) * t * t) / (2 * dur) : ((r0 + r1) / 2) * dur + r1 * (t - dur);
       } else {
         avance = t * d.rate;
+        // Lo que adelantó o atrasó el empujón del plato.
+        if (d.empuje) avance += d.rate * (d.empuje.factor - 1) * Math.min(t, d.empuje.dur);
       }
       return clamp(d.offset + avance, 0, d.buffer.duration);
     }

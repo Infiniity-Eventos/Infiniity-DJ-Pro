@@ -46,7 +46,7 @@ export function useMidi() {
           break;
         }
         case "jog":
-          engine.nudge(deckId, ev.value * 0.05);
+          engine.empujar(deckId, ev.value);
           break;
         default:
           break;

@@ -928,13 +928,20 @@ pub fn marcar(autorizado: Option<bool>, musica: Option<bool>, pausa_manual: Opti
 pub fn aplicar_velocidad() -> Result<(), String> {
     let c = leer_config();
     // RECIBIR se frena hasta que la persona autorice (es lo que pidieron
-    // decidir), y con musica o pausa. ENVIAR (lo que ella misma agrego) va
-    // libre salvo con musica o pausa: con el freno en las dos direcciones, 1,3
-    // GB de descargas de una PC tardaban ~7 h en llegar al original.
+    // decidir), y con pausa manual. ENVIAR (lo que ella misma agrego) va
+    // libre salvo con pausa: con el freno en las dos direcciones, 1,3 GB de
+    // descargas de una PC tardaban ~7 h en llegar al original.
+    //
+    // La MUSICA ya no frena (30-oct, pedido de Camilo: "que lo haga en segundo
+    // plano"). Antes (D15) se paraba todo mientras sonaba un deck, y en un
+    // evento eso es casi siempre: nunca sincronizaba. No toca lo que suena:
+    // la cancion de un deck esta entera en memoria (AudioBuffer), el archivo
+    // en disco ya no se lee. Y Syncthing corre con prioridad baja
+    // (setLowPriority, comprobado activo), asi que cede la CPU al sonido.
     let (recibir, enviar) = match c.rol {
         Rol::Equipo => {
             let b = banderas();
-            (!b.autorizado || b.musica || b.pausa_manual, b.musica || b.pausa_manual)
+            (!b.autorizado || b.pausa_manual, b.pausa_manual)
         }
         // El original nunca se frena: es el punto de encuentro.
         _ => (false, false),

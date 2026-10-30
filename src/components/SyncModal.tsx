@@ -292,9 +292,8 @@ export function SyncModal() {
             </div>
             <div className="sync-row sync-dim">
               {!sync.autorizado && "En espera de tu autorización."}
-              {sync.autorizado && sync.musica && "⏸ En pausa mientras suena música (no es un fallo): sigue sola al parar."}
-              {sync.autorizado && !sync.musica && sync.pausa_manual && "⏸ En pausa (la pausaste tú)."}
-              {sync.autorizado && !sync.musica && !sync.pausa_manual && "▶ Sincronizando cuando hay algo pendiente."}
+              {sync.autorizado && sync.pausa_manual && "⏸ En pausa (la pausaste tú)."}
+              {sync.autorizado && !sync.pausa_manual && "▶ Sincronizando en segundo plano, también con música sonando."}
             </div>
             <div className="sync-acciones">
               {(!sync.autorizado || sync.pausa_manual) && (
@@ -395,10 +394,9 @@ export function etiquetaSync(e: ReturnType<typeof useStore.getState>["sync"]): {
   // asi que nadie iba a pedir un codigo nuevo.
   if (e.codigo_rechazado) return { texto: "Sync: código no aceptado", clase: "sync-warn" };
   if (!e.original_conectado) return { texto: "Sync: sin conexión", clase: "sync-off" };
-  if (e.por_subir > 0 && !e.musica && !e.pausa_manual) return { texto: `Sync: subiendo ${e.por_subir}`, clase: "sync-on" };
+  if (e.por_subir > 0 && !e.pausa_manual) return { texto: `Sync: subiendo ${e.por_subir}`, clase: "sync-on" };
   if (e.pendientes === 0) return { texto: "Sync: al día", clase: "sync-on" };
   if (!e.autorizado) return { texto: `Sync: faltan ${e.pendientes}`, clase: "sync-warn" };
-  if (e.musica) return { texto: "Sync: pausa (música)", clase: "sync-warn" };
   if (e.pausa_manual) return { texto: "Sync: en pausa", clase: "sync-warn" };
   return { texto: `Sync: bajando ${e.pendientes}`, clase: "sync-on" };
 }
