@@ -182,8 +182,11 @@ export function SyncModal() {
                       <b className="sync-pc-nombre" title={p.nombre}>
                         {p.nombre}
                       </b>
-                      <span className="sync-dim">
-                        {p.conectado ? "Conectada ahora" : cuandoSeVio(p.ultimo_visto)}
+                      <span className="sync-pc-titulo">
+                        <span className="sync-dim">
+                          {p.conectado ? "Conectada ahora" : cuandoSeVio(p.ultimo_visto)}
+                        </span>
+                        <EtiquetaVersion version={p.version} />
                       </span>
                     </div>
                     <div
@@ -353,6 +356,45 @@ export function SyncModal() {
         )}
       </div>
     </div>
+  );
+}
+
+/** -1, 0 o 1 comparando "0.4.62" con "0.4.64" número a número. */
+function compararVersion(a: string, b: string): number {
+  const x = a.split(".").map(Number);
+  const y = b.split(".").map(Number);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    const d = (x[i] ?? 0) - (y[i] ?? 0);
+    if (d !== 0) return d < 0 ? -1 : 1;
+  }
+  return 0;
+}
+
+/**
+ * Versión de una PC del equipo comparada con la de este PC (el original, que
+ * es el que publica). Las PC con una versión anterior a la 0.4.65 no anuncian
+ * nada: con eso basta para saber que no han actualizado.
+ */
+function EtiquetaVersion({ version }: { version: string }) {
+  if (!version) {
+    return (
+      <span className="sync-ver viejo" title="Esa PC tiene una versión anterior a la 0.4.65: todavía no ha actualizado">
+        sin actualizar
+      </span>
+    );
+  }
+  const c = compararVersion(version, __APP_VERSION__);
+  if (c < 0) {
+    return (
+      <span className="sync-ver viejo" title={`Esa PC tiene la ${version}; la última es la ${__APP_VERSION__}`}>
+        {version} · sin actualizar
+      </span>
+    );
+  }
+  return (
+    <span className="sync-ver ok" title="Tiene la última versión">
+      {version} ✓
+    </span>
   );
 }
 

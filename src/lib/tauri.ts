@@ -91,6 +91,7 @@ export interface PcConectada {
   conectado: boolean;
   ultimo_visto: string;
   completado: number; // % de la Biblioteca que esa PC ya tiene
+  version: string; // versión de la app en esa PC ("" = anterior a 0.4.65)
 }
 /** Original: una PC intentando entrar con un código que ya no sirve. */
 export interface PcRechazada {

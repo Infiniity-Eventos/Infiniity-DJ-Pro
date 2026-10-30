@@ -205,6 +205,34 @@ pub fn dir_bpm_compartido() -> PathBuf {
     d
 }
 
+/// Cada PC deja su versión de la app en la carpeta compartida pequeña (la del
+/// BPM), en `version-<id de Syncthing>.json`, y el original la lee para
+/// decir en el panel quién ya actualizó. Va por Syncthing porque es lo único
+/// que ya conecta a todas las PC; con el id de Syncthing como nombre no hay
+/// que adivinar qué archivo es de qué PC. Solo se escribe si cambió.
+fn anunciar_version(mi_id: &str) {
+    if mi_id.is_empty() {
+        return;
+    }
+    let ruta = dir_bpm_compartido().join(format!("version-{mi_id}.json"));
+    let texto = serde_json::json!({ "version": env!("CARGO_PKG_VERSION") }).to_string();
+    if std::fs::read_to_string(&ruta).ok().as_deref() == Some(texto.as_str()) {
+        return;
+    }
+    if let Err(e) = std::fs::write(&ruta, &texto) {
+        eprintln!("AVISO sync: no se pudo anunciar la versión ({}): {e}", ruta.display());
+    }
+}
+
+/// La versión que anunció otra PC ("" si no hay archivo todavía).
+fn version_de(id: &str) -> String {
+    std::fs::read_to_string(dir_bpm_compartido().join(format!("version-{id}.json")))
+        .ok()
+        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+        .and_then(|v| v["version"].as_str().map(str::to_string))
+        .unwrap_or_default()
+}
+
 fn ruta_syncthing() -> Option<PathBuf> {
     let p = dir_bin().join("syncthing");
     if p.is_file() {
@@ -963,6 +991,9 @@ pub struct PcConectada {
     pub ultimo_visto: String,
     /// Porcentaje de lo que esa PC tiene de la Biblioteca (0-100).
     pub completado: f64,
+    /// Versión de la app en esa PC (la anuncia ella misma, ver
+    /// `anunciar_version`). Vacío = todavía no ha abierto una 0.4.65 o más.
+    pub version: String,
 }
 
 /// Original: una PC que esta tocando la puerta con un codigo que no sirve.
@@ -1057,6 +1088,7 @@ pub fn estado() -> SyncEstado {
     let conexiones = api_get(&c.apikey, "/rest/system/connections").unwrap_or_default();
     let dispositivos = api_get(&c.apikey, "/rest/config/devices").unwrap_or_default();
     let yo = mi_id(&c.apikey).unwrap_or_default();
+    anunciar_version(&yo);
     // "lastSeen" de cada PC. Lo de /rest/system/connections ("at") es la hora
     // de la consulta, no la de la última conexión: no sirve para decir cuándo
     // se fue un portátil.
@@ -1102,6 +1134,7 @@ pub fn estado() -> SyncEstado {
                     .unwrap_or("")
                     .to_string(),
                 completado,
+                version: version_de(id),
             });
         }
     }
