@@ -108,6 +108,8 @@ interface AppStore {
   confirmBox: ConfirmBox | null; // aviso de confirmacion
   notas: Nota[]; // notas del equipo sobre canciones (ver notas.rs)
   notaDe: TrackInfo | null; // cancion con el cuadro de notas abierto
+  /** Canción pedida para la pre-escucha en audífonos (`n` cambia en cada pedido). */
+  preescuchaPedida: { ruta: string; nombre: string; desde: number; n: number } | null;
   promptBox: { message: string; defaultValue: string; onSubmit: (v: string) => void } | null; // pedir un dato (sin bloquear el audio)
   downloaderOpen: boolean; // modal de descarga de YouTube abierto
   downloads: DownloadItem[]; // descargas en curso (en segundo plano)
@@ -144,6 +146,8 @@ interface AppStore {
   closeConfirm: () => void;
   setNotas: (n: Nota[]) => void;
   abrirNota: (t: TrackInfo | null) => void;
+  pedirPreescucha: (ruta: string, nombre: string, desde?: number) => void;
+  cerrarPreescucha: () => void;
   askPrompt: (message: string, defaultValue: string, onSubmit: (v: string) => void) => void;
   closePrompt: () => void;
   setDownloaderOpen: (v: boolean) => void;
@@ -253,6 +257,7 @@ export const useStore = create<AppStore>((set, get) => ({
   confirmBox: null,
   notas: [],
   notaDe: null,
+  preescuchaPedida: null,
   promptBox: null,
   downloaderOpen: false,
   downloads: [],
@@ -328,6 +333,9 @@ export const useStore = create<AppStore>((set, get) => ({
   closeConfirm: () => set({ confirmBox: null }),
   setNotas: (notas) => set({ notas }),
   abrirNota: (notaDe) => set({ notaDe }),
+  pedirPreescucha: (ruta, nombre, desde = 0) =>
+    set((s) => ({ preescuchaPedida: { ruta, nombre, desde, n: (s.preescuchaPedida?.n ?? 0) + 1 } })),
+  cerrarPreescucha: () => set({ preescuchaPedida: null }),
   askPrompt: (message, defaultValue, onSubmit) =>
     set({ promptBox: { message, defaultValue, onSubmit } }),
   closePrompt: () => set({ promptBox: null }),

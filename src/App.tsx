@@ -21,6 +21,7 @@ if (import.meta.env.DEV) {
 import { Welcome } from "./components/Welcome";
 import { ConfirmModal } from "./components/ConfirmModal";
 import { PromptModal } from "./components/PromptModal";
+import { Preescucha } from "./components/Preescucha";
 import { NotaModal } from "./components/NotaModal";
 import { StatsMonitor } from "./components/StatsMonitor";
 import { DownloadModal } from "./components/DownloadModal";
@@ -154,6 +155,7 @@ export default function App() {
       <ConfirmModal />
       <PromptModal />
       <NotaModal />
+      <Preescucha />
       <UpdateModal />
       <SyncModal />
       <StatsMonitor />

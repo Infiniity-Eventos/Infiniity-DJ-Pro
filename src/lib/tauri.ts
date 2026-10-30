@@ -174,6 +174,32 @@ export interface AudioOutput {
   active: boolean; // true en la salida por la que suena la app ahora
 }
 export const audioOutputs = () => invoke<AudioOutput[]>("audio_outputs");
+
+// --- Pre-escucha en audífonos de cable (ver src-tauri/src/preescucha.rs) ---
+export interface SalidaAudifonos {
+  name: string;
+  description: string;
+  audifonos: boolean | null; // true: conector de audífonos; false: parlantes del portátil
+}
+export interface OpcionesPreescucha {
+  salidas: SalidaAudifonos[];
+  principal: string; // por donde suena la música
+}
+export interface EstadoPreescucha {
+  sonando: boolean;
+  ruta: string;
+  sink: string;
+  posicion: number;
+  duracion: number;
+  error: string | null;
+  volumen: number;
+}
+export const preescuchaOpciones = () => invoke<OpcionesPreescucha>("preescucha_opciones");
+export const preescuchaTocar = (ruta: string, desde: number, sink: string) =>
+  invoke<EstadoPreescucha>("preescucha_tocar", { ruta, desde, sink });
+export const preescuchaParar = () => invoke<EstadoPreescucha>("preescucha_parar");
+export const preescuchaEstado = () => invoke<EstadoPreescucha>("preescucha_estado");
+export const preescuchaVolumen = (volumen: number) => invoke<void>("preescucha_volumen", { volumen });
 /** Como fue el cambio de salida (ver `ResultadoSalida` en salida_audio.rs). */
 export interface ResultadoSalida {
   movidos: number; // flujos de sonido movidos (0 = la app aun no sonaba)

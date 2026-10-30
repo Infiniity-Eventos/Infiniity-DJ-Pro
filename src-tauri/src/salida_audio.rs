@@ -91,6 +91,9 @@ struct Sink {
     /// Solo en salidas Bluetooth: `api.bluez5.connection` ("connected" o
     /// "disconnected"). La segunda, junto con el transporte vacio, es el fantasma.
     conexion_bt: Option<String>,
+    /// Conector activo de la salida ("analog-output-headphones",
+    /// "analog-output-speaker"...). Vacío si la salida no tiene conectores.
+    puerto: String,
 }
 
 fn list_sinks() -> Result<Vec<Sink>, String> {
@@ -113,6 +116,7 @@ fn parse_sinks(text: &str) -> Vec<Sink> {
                 volume: u32::MAX,
                 transporte: None,
                 conexion_bt: None,
+                puerto: String::new(),
             });
             continue;
         }
@@ -134,6 +138,12 @@ fn parse_sinks(text: &str) -> Vec<Sink> {
         if cur.state.is_empty() {
             if let Some(v) = t.strip_prefix("State: ") {
                 cur.state = v.trim().to_string();
+                continue;
+            }
+        }
+        if cur.puerto.is_empty() {
+            if let Some(v) = t.strip_prefix("Active Port: ") {
+                cur.puerto = v.trim().to_string();
                 continue;
             }
         }
@@ -179,9 +189,9 @@ fn default_sink() -> Option<String> {
 /// Un flujo de sonido en curso (un programa sonando).
 pub(crate) struct Stream {
     pub(crate) index: u32,
-    sink: u32,
+    pub(crate) sink: u32,
     pid: Option<u32>,
-    app: String,
+    pub(crate) app: String,
     /// El servidor de sonido tiene el flujo en pausa (no pide muestras).
     corked: bool,
 }
@@ -257,7 +267,15 @@ fn is_ours(pid: u32) -> bool {
 }
 
 /// ¿Este flujo de sonido es de la app?
+///
+/// La PRE-ESCUCHA no cuenta, aunque la lance la app: es un `pacat` hijo
+/// nuestro que va a los audífonos. Si contara, elegir la cabina la arrastraría
+/// a la cabina y la oiría todo el público. Se reconoce por su nombre de
+/// programa (ver preescucha.rs).
 pub(crate) fn stream_is_ours(s: &Stream) -> bool {
+    if s.app == crate::preescucha::CLIENTE {
+        return false;
+    }
     if let Some(pid) = s.pid {
         if is_ours(pid) {
             return true;
@@ -288,6 +306,77 @@ fn kind_of(name: &str) -> &'static str {
 // ---------------------------------------------------------------------------
 // Comandos que llama la interfaz
 // ---------------------------------------------------------------------------
+
+/// Una salida donde se puede pre-escuchar (audífonos de cable).
+#[derive(Serialize, Clone)]
+pub struct SalidaAudifonos {
+    pub name: String,
+    pub description: String,
+    /// Some(true) = el conector activo es el de audífonos; Some(false) = son
+    /// los parlantes del portátil (los audífonos no están enchufados); None =
+    /// esa salida no dice qué conector usa (USB, etc.).
+    pub audifonos: Option<bool>,
+}
+
+/// Lo que necesita la pre-escucha para elegir dónde sonar.
+#[derive(Serialize, Clone)]
+pub struct OpcionesPreescucha {
+    /// Salidas de cable que NO son por donde suena la música.
+    pub salidas: Vec<SalidaAudifonos>,
+    /// Por donde suena la música ahora (para explicarlo si no hay opciones).
+    pub principal: String,
+}
+
+/// Salida por donde suena la música AHORA (nombre técnico): la de nuestro
+/// flujo; si todavía no suena, la general del equipo.
+pub(crate) fn salida_principal() -> Option<String> {
+    let sinks = list_sinks().ok()?;
+    let nuestra = list_streams()
+        .unwrap_or_default()
+        .into_iter()
+        .find(|s| stream_is_ours(s) && s.sink != u32::MAX)
+        .map(|s| s.sink);
+    match nuestra {
+        Some(i) => sinks.into_iter().find(|s| s.index == i).map(|s| s.name),
+        None => default_sink(),
+    }
+}
+
+/// Dónde se puede pre-escuchar: solo CABLE (no Bluetooth: dos aparatos
+/// Bluetooth a la vez en un portátil flojo cortan la cabina, se decidió el
+/// 30-oct) y nunca la misma salida por donde suena la música, porque la
+/// pre-escucha la oiría todo el mundo.
+pub(crate) fn opciones_preescucha_sinc() -> Result<OpcionesPreescucha, String> {
+    let sinks = list_sinks()?;
+    let principal = salida_principal().unwrap_or_default();
+    let principal_desc = sinks
+        .iter()
+        .find(|s| s.name == principal)
+        .map(|s| if s.description.is_empty() { s.name.clone() } else { s.description.clone() })
+        .unwrap_or_else(|| principal.clone());
+    let salidas = sinks
+        .iter()
+        .filter(|s| s.name != PUENTE && s.name != principal)
+        .filter(|s| kind_of(&s.name) != "bluetooth" && s.transporte.is_none())
+        // HDMI es la pantalla o el proyector, no unos audífonos.
+        .filter(|s| kind_of(&s.name) != "hdmi")
+        .map(|s| {
+            let p = s.puerto.to_lowercase();
+            SalidaAudifonos {
+                name: s.name.clone(),
+                description: if s.description.is_empty() { s.name.clone() } else { s.description.clone() },
+                audifonos: if p.contains("headphone") {
+                    Some(true)
+                } else if p.contains("speaker") {
+                    Some(false)
+                } else {
+                    None
+                },
+            }
+        })
+        .collect();
+    Ok(OpcionesPreescucha { salidas, principal: principal_desc })
+}
 
 /// Salidas de audio disponibles ahora mismo.
 ///
@@ -353,6 +442,9 @@ pub async fn audio_set_output(sink: String) -> Result<ResultadoSalida, String> {
 
 fn audio_set_output_sinc(sink: &str) -> Result<ResultadoSalida, String> {
     let _candado = CANDADO_SALIDA.lock().unwrap_or_else(|e| e.into_inner());
+    // La música va a ir por donde estaba sonando la pre-escucha: se para, o
+    // los dos sonidos saldrían mezclados para todo el público.
+    crate::preescucha::parar_si_usa(sink);
     // ANTES de mover nada: dejar la salida en condiciones de sonar.
     //
     // El orden importa. Cambiar el modo de trabajo de una cabina Bluetooth

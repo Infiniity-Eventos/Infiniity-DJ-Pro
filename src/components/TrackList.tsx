@@ -1,3 +1,4 @@
+import { IconAudifonos } from "./Icons";
 import { useMemo, useState } from "react";
 import { engine } from "../audio/AudioEngine";
 import { automix, automixBloquea } from "../audio/Automix";
@@ -270,6 +271,13 @@ export function TrackList() {
               </button>
               <button className="btn load-btn load-b" title="Cargar en Deck B" onClick={() => loadToDeck("B", t)}>
                 B
+              </button>
+              <button
+                className="btn load-btn load-oir"
+                title="Pre-escuchar en los audífonos de cable (el público no la oye)"
+                onClick={() => useStore.getState().pedirPreescucha(t.path, t.title ?? t.name)}
+              >
+                <IconAudifonos size={14} />
               </button>
             </span>
           </div>

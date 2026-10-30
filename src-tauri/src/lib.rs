@@ -13,6 +13,7 @@ mod notas;
 mod bluetooth;
 mod informe;
 mod preparacion_bt;
+mod preescucha;
 mod salida_audio;
 mod sync;
 mod sysmon;
@@ -262,6 +263,7 @@ fn midi_disconnect(state: tauri::State<AppState>) -> Result<(), String> {
 
 #[tauri::command]
 fn quit_app(app: tauri::AppHandle) {
+    preescucha::parar_al_salir();
     app.exit(0);
 }
 
@@ -513,6 +515,11 @@ pub fn run() {
             salida_audio::audio_outputs,
             salida_audio::audio_set_output,
             salida_audio::audio_output_status,
+            preescucha::preescucha_opciones,
+            preescucha::preescucha_tocar,
+            preescucha::preescucha_parar,
+            preescucha::preescucha_estado,
+            preescucha::preescucha_volumen,
             bluetooth::bt_estado,
             bluetooth::bt_encender,
             bluetooth::bt_dispositivos,

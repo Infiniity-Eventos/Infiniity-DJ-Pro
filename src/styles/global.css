@@ -2045,3 +2045,94 @@ body {
   color: var(--accent-strong);
   font-weight: 700;
 }
+
+/* ---------------- Pre-escucha en audífonos (Preescucha.tsx) ---------------- */
+.preescucha {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  width: min(620px, calc(100vw - 32px));
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* Encima de la lista, debajo de los paneles (ver capas en .toast). */
+  z-index: 95;
+}
+.pre-fila {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.pre-icono {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: 50%;
+  color: #fff;
+  background: var(--accent);
+}
+.pre-titulo {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.pre-titulo b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.pre-etiqueta {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-dim);
+}
+.pre-tiempo {
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+  width: 38px;
+  text-align: center;
+  flex: none;
+}
+.pre-barra {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--track-bg);
+  overflow: hidden;
+  cursor: pointer;
+}
+.pre-barra > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.pre-vol {
+  width: 90px;
+  flex: none;
+}
+.pre-dim {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.pre-dim select {
+  flex: 1;
+  min-width: 0;
+}
+.pre-aviso {
+  font-size: 12px;
+  margin: 0;
+}
+.load-btn.load-oir {
+  display: inline-grid;
+  place-items: center;
+}

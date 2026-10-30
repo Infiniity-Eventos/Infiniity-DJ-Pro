@@ -14,7 +14,7 @@ const PERILLAS: { key: FxKey; etiqueta: string; titulo: string }[] = [
 import { setManualBpm } from "../lib/tauri";
 import { Vinyl } from "./Vinyl";
 import { ProgressBar } from "./ProgressBar";
-import { IconPrev, IconNext, IconPlay, IconPause } from "./Icons";
+import { IconPrev, IconNext, IconPlay, IconPause, IconAudifonos } from "./Icons";
 
 export function DeckPanel({ deckId }: { deckId: DeckId }) {
   const deck = useStore((s) => s.decks[deckId]);
@@ -177,6 +177,17 @@ export function DeckPanel({ deckId }: { deckId: DeckId }) {
           onClick={() => !automixBloquea() && engine.nudge(deckId, 5)}
         >
           <IconNext />
+        </button>
+        <button
+          className="btn btn-icon"
+          disabled={!hasTrack}
+          title="Pre-escuchar esta canción en los audífonos de cable, desde donde va (el público no la oye)"
+          onClick={() =>
+            deck.trackPath &&
+            useStore.getState().pedirPreescucha(deck.trackPath, deck.trackName ?? "", engine.getPosition(deckId))
+          }
+        >
+          <IconAudifonos size={18} />
         </button>
 
         <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8 }}>
