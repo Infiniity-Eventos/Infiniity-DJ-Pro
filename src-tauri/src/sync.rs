@@ -939,6 +939,8 @@ pub struct PcConectada {
     pub id: String,
     pub nombre: String,
     pub conectado: bool,
+    /// Última vez que se le vio conectada (fecha ISO de Syncthing). Vacío si
+    /// nunca entró. Con la PC conectada, es ahora mismo.
     pub ultimo_visto: String,
     /// Porcentaje de lo que esa PC tiene de la Biblioteca (0-100).
     pub completado: f64,
@@ -1031,6 +1033,10 @@ pub fn estado() -> SyncEstado {
     let conexiones = api_get(&c.apikey, "/rest/system/connections").unwrap_or_default();
     let dispositivos = api_get(&c.apikey, "/rest/config/devices").unwrap_or_default();
     let yo = mi_id(&c.apikey).unwrap_or_default();
+    // "lastSeen" de cada PC. Lo de /rest/system/connections ("at") es la hora
+    // de la consulta, no la de la última conexión: no sirve para decir cuándo
+    // se fue un portátil.
+    let stats = api_get(&c.apikey, "/rest/stats/device").unwrap_or_default();
     if let Some(lista) = dispositivos.as_array() {
         for d in lista {
             let id = d["deviceID"].as_str().unwrap_or("");
@@ -1063,7 +1069,14 @@ pub fn estado() -> SyncEstado {
                     nombre.clone()
                 },
                 conectado,
-                ultimo_visto: con["at"].as_str().unwrap_or("").to_string(),
+                // A la PC que nunca se conectó Syncthing le pone la fecha
+                // cero en hora local: "1969-12-31T19:00:00-05:00" aquí en
+                // Colombia (medido), no "1970".
+                ultimo_visto: stats[id]["lastSeen"]
+                    .as_str()
+                    .filter(|t| !t.starts_with("19"))
+                    .unwrap_or("")
+                    .to_string(),
                 completado,
             });
         }

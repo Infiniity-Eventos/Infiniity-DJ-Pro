@@ -154,41 +154,68 @@ export function SyncModal() {
             <div className="sync-sub">PC del equipo:</div>
             {sync.pcs.length === 0 && <div className="modal-msg">Ninguna todavía. En cuanto una entre con el código, aparece aquí.</div>}
             <ul className="sync-pcs">
-              {sync.pcs.map((p) => (
-                <li key={p.id}>
-                  <span className={`midi-dot ${p.conectado ? "on" : "off"}`} />
-                  <b>{p.nombre}</b>
-                  <span className="sync-dim">
-                    {p.conectado ? ` · conectada · tiene el ${Math.round(p.completado)}% de la biblioteca` : " · desconectada"}
-                  </span>
-                  <span className="spacer" />
-                  <button
-                    className="btn dl-mini"
-                    disabled={!!ocupado}
-                    title="Ponerle un nombre para saber qué PC es"
-                    onClick={() =>
-                      askPrompt("Nombre para esta PC (ej: Portátil Sharon)", p.nombre, (n) => {
-                        if (n.trim()) void correr("renombrar", () => syncRenombrarPc(p.id, n), "Nombre guardado");
-                      })
-                    }
-                  >
-                    Renombrar
-                  </button>
-                  <button
-                    className="btn dl-mini sync-peligro"
-                    disabled={!!ocupado}
-                    title="Sacarla del grupo: deja de recibir y de subir, y no puede volver a entrar con el código actual"
-                    onClick={() =>
-                      askConfirm(
-                        `¿Quitar a "${p.nombre}" del grupo? Deja de recibir y de subir música, y no podrá volver a entrar con el código actual (solo con uno nuevo).`,
-                        () => void correr("quitar", () => syncQuitarPc(p.id), `${p.nombre} quitada del grupo`)
-                      )
-                    }
-                  >
-                    Quitar
-                  </button>
-                </li>
-              ))}
+              {sync.pcs.map((p) => {
+                const pct = Math.round(p.completado);
+                return (
+                  <li key={p.id} className={p.conectado ? "" : "sync-pc-off"}>
+                    <span className={`midi-dot ${p.conectado ? "on" : "off"}`} />
+                    <div className="sync-pc-info">
+                      <b className="sync-pc-nombre" title={p.nombre}>
+                        {p.nombre}
+                      </b>
+                      <span className="sync-dim">
+                        {p.conectado ? "Conectada ahora" : cuandoSeVio(p.ultimo_visto)}
+                      </span>
+                    </div>
+                    <div
+                      className="sync-pc-pct"
+                      title={
+                        p.conectado
+                          ? `Tiene el ${pct}% de la biblioteca`
+                          : `La última vez que se conectó quedó con el ${pct}% de la biblioteca de hoy`
+                      }
+                    >
+                      <span className="sync-pc-num">
+                        {!p.conectado && !p.ultimo_visto ? (
+                          <span className="sync-dim">—</span>
+                        ) : (
+                          <>
+                            {pct}%{!p.conectado && <span className="sync-dim"> al irse</span>}
+                          </>
+                        )}
+                      </span>
+                      <span className="sync-pc-barra">
+                        <span className={pct >= 100 ? "llena" : ""} style={{ width: `${Math.min(100, pct)}%` }} />
+                      </span>
+                    </div>
+                    <button
+                      className="btn dl-mini"
+                      disabled={!!ocupado}
+                      title="Ponerle un nombre para saber qué PC es"
+                      onClick={() =>
+                        askPrompt("Nombre para esta PC (ej: Portátil Sharon)", p.nombre, (n) => {
+                          if (n.trim()) void correr("renombrar", () => syncRenombrarPc(p.id, n), "Nombre guardado");
+                        })
+                      }
+                    >
+                      Renombrar
+                    </button>
+                    <button
+                      className="btn dl-mini sync-peligro"
+                      disabled={!!ocupado}
+                      title="Sacarla del grupo: deja de recibir y de subir, y no puede volver a entrar con el código actual"
+                      onClick={() =>
+                        askConfirm(
+                          `¿Quitar a "${p.nombre}" del grupo? Deja de recibir y de subir música, y no podrá volver a entrar con el código actual (solo con uno nuevo).`,
+                          () => void correr("quitar", () => syncQuitarPc(p.id), `${p.nombre} quitada del grupo`)
+                        )
+                      }
+                    >
+                      Quitar
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
 
             <div className="sync-sub">Aunque la app esté cerrada:</div>
@@ -309,6 +336,26 @@ export function SyncModal() {
       </div>
     </div>
   );
+}
+
+const DIAS = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
+const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+
+/** "Última vez: hoy 21:30" / "ayer 18:05" / "lun 27 oct, 14:10". */
+function cuandoSeVio(iso: string): string {
+  if (!iso) return "Nunca se ha conectado";
+  const f = new Date(iso);
+  if (isNaN(f.getTime())) return `Última vez: ${iso}`;
+  const hora = f.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+  const dia = new Date(f);
+  dia.setHours(0, 0, 0, 0);
+  const dias = Math.round((hoy.getTime() - dia.getTime()) / 86400000);
+  if (dias <= 0) return `Última vez: hoy ${hora}`;
+  if (dias === 1) return `Última vez: ayer ${hora}`;
+  const anio = f.getFullYear() !== hoy.getFullYear() ? ` ${f.getFullYear()}` : "";
+  return `Última vez: ${DIAS[f.getDay()]} ${f.getDate()} ${MESES[f.getMonth()]}${anio}, ${hora}`;
 }
 
 /** Texto corto para el botón de la barra: el estado en tres palabras. */
