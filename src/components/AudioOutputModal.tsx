@@ -483,6 +483,59 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
     }
   };
 
+  /**
+   * Conecta unos audífonos Bluetooth PARA LA PRE-ESCUCHA, dejando la música
+   * donde está (pedido del 31-oct: «a veces los audífonos van por Bluetooth y
+   * la cabina por cable»). Es lo contrario de «Conectar», que manda la música
+   * al aparato.
+   *
+   * - Solo si la música va por cable: dos aparatos Bluetooth a la vez en un
+   *   portátil flojo cortan la cabina (decidido el 30-oct).
+   * - No prepara el equipo (no reinicia el sonido): esa preparación es para
+   *   la conexión de la música, y la pre-escucha va por su propio programa.
+   * - Al conectar un aparato Bluetooth, el sistema puede tomarlo como salida
+   *   general y la música se iría a los audífonos. Por eso, antes de conectar
+   *   se apunta la salida de la música y después se vuelve a fijar ahí.
+   */
+  const conectarAudifonos = async (d: DispositivoBt) => {
+    const musica = (salidas ?? []).find((s) => s.active);
+    if (!musica) {
+      setError("No sé por dónde suena la música ahora. Elige abajo la salida de la cabina (la de cable) y vuelve a intentarlo.");
+      return;
+    }
+    if (esBluetooth(musica.name)) {
+      setError(
+        `La música sale por Bluetooth («${musica.description}»). Para usar audífonos Bluetooth, la cabina tiene que ir por cable: conéctala al portátil y elígela abajo. Dos aparatos Bluetooth a la vez cortan la cabina.`
+      );
+      return;
+    }
+    setConectando(d.mac);
+    setError(null);
+    try {
+      if (!(await asegurarBtEncendido())) return;
+      // Fijar la música en el cable ANTES de conectar (ver arriba).
+      setAudioSink(musica.name);
+      const aviso = await btConectar(d.mac);
+      if (aviso) showToast(aviso);
+      const salida = await esperarSalidaDeCabina(d.mac);
+      // Pase lo que pase con los audífonos, la música vuelve a su sitio.
+      await aplicarSalida(musica.name);
+      if (!salida) {
+        setError(
+          `«${d.nombre}» quedó conectado, pero el equipo todavía no lo ofrece como salida de sonido. Espera unos segundos y abre la pre-escucha otra vez. La música sigue por «${musica.description}».`
+        );
+      } else {
+        showToast(`Audífonos listos: ${nombreVisible(d, cabinas)}. La música sigue por «${musica.description}».`);
+      }
+      await cargarBt();
+      await cargar();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setConectando(null);
+    }
+  };
+
   const desconectarCabina = async (d: DispositivoBt) => {
     setConectando(d.mac);
     setError(null);
@@ -508,7 +561,9 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
 
         <p className="out-hint">
           Toca una cabina y suena por ella. La primera vez en cada portátil
-          tarda unos segundos más: el equipo se prepara solo.
+          tarda unos segundos más: el equipo se prepara solo. ¿Audífonos
+          Bluetooth y cabina por cable? Elige abajo la salida de cable y toca
+          «Como audífonos» en los audífonos.
         </p>
 
         <div className="out-bt">
@@ -592,6 +647,14 @@ export function AudioOutputModal({ onClose }: { onClose: () => void }) {
                     onClick={() => void conectarCabina(d)}
                   >
                     {conectando === d.mac ? "Conectando..." : "Conectar"}
+                  </button>
+                  <button
+                    className="btn"
+                    disabled={ocupado || conectando !== null}
+                    title="Conecta este aparato como audífonos para la pre-escucha. La música sigue por el cable."
+                    onClick={() => void conectarAudifonos(d)}
+                  >
+                    Como audífonos
                   </button>
                 </>
               )}

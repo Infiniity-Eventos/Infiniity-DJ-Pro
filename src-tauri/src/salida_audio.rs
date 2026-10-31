@@ -316,6 +316,8 @@ pub struct SalidaAudifonos {
     /// los parlantes del portátil (los audífonos no están enchufados); None =
     /// esa salida no dice qué conector usa (USB, etc.).
     pub audifonos: Option<bool>,
+    /// Audífonos Bluetooth (solo se ofrecen si la música va por cable).
+    pub bluetooth: bool,
 }
 
 /// Lo que necesita la pre-escucha para elegir dónde sonar.
@@ -342,40 +344,57 @@ pub(crate) fn salida_principal() -> Option<String> {
     }
 }
 
-/// Dónde se puede pre-escuchar: solo CABLE (no Bluetooth: dos aparatos
-/// Bluetooth a la vez en un portátil flojo cortan la cabina, se decidió el
-/// 30-oct) y nunca la misma salida por donde suena la música, porque la
-/// pre-escucha la oiría todo el mundo.
+/// Dónde se puede pre-escuchar. Nunca la misma salida por donde suena la
+/// música, porque la pre-escucha la oiría todo el mundo.
+///
+/// Bluetooth SOLO si la música va por cable (pedido del 31-oct: «a veces los
+/// audífonos van por Bluetooth y la cabina por cable»). Si la música ya va
+/// por Bluetooth, unos audífonos Bluetooth serían dos aparatos Bluetooth a la
+/// vez en un portátil flojo y la cabina se corta (decidido el 30-oct): en ese
+/// caso, como antes, solo cable.
 pub(crate) fn opciones_preescucha_sinc() -> Result<OpcionesPreescucha, String> {
     let sinks = list_sinks()?;
     let principal = salida_principal().unwrap_or_default();
+    Ok(opciones_preescucha_de(&sinks, &principal))
+}
+
+fn opciones_preescucha_de(sinks: &[Sink], principal: &str) -> OpcionesPreescucha {
     let principal_desc = sinks
         .iter()
         .find(|s| s.name == principal)
         .map(|s| if s.description.is_empty() { s.name.clone() } else { s.description.clone() })
-        .unwrap_or_else(|| principal.clone());
+        .unwrap_or_else(|| principal.to_string());
+    let es_bt = |s: &Sink| kind_of(&s.name) == "bluetooth" || s.transporte.is_some();
+    let musica_por_bt = kind_of(principal) == "bluetooth"
+        || sinks.iter().any(|s| s.name == principal && s.transporte.is_some());
     let salidas = sinks
         .iter()
         .filter(|s| s.name != PUENTE && s.name != principal)
-        .filter(|s| kind_of(&s.name) != "bluetooth" && s.transporte.is_none())
+        .filter(|s| !(musica_por_bt && es_bt(s)))
         // HDMI es la pantalla o el proyector, no unos audífonos.
         .filter(|s| kind_of(&s.name) != "hdmi")
         .map(|s| {
             let p = s.puerto.to_lowercase();
+            let bluetooth = es_bt(s);
             SalidaAudifonos {
                 name: s.name.clone(),
                 description: if s.description.is_empty() { s.name.clone() } else { s.description.clone() },
-                audifonos: if p.contains("headphone") {
+                // Unos audífonos Bluetooth conectados son audífonos: no hay
+                // conector que mirar (y así se eligen antes que los parlantes).
+                audifonos: if bluetooth {
+                    Some(true)
+                } else if p.contains("headphone") {
                     Some(true)
                 } else if p.contains("speaker") {
                     Some(false)
                 } else {
                     None
                 },
+                bluetooth,
             }
         })
         .collect();
-    Ok(OpcionesPreescucha { salidas, principal: principal_desc })
+    OpcionesPreescucha { salidas, principal: principal_desc }
 }
 
 /// Salidas de audio disponibles ahora mismo.
@@ -1431,6 +1450,45 @@ Card #88
             llegada.starts_with("LLEGA SONIDO"),
             "el puente no llevo el sonido hasta la cabina: {llegada}"
         );
+    }
+
+    fn sink_de_prueba(name: &str, puerto: &str) -> Sink {
+        Sink {
+            index: 0,
+            name: name.to_string(),
+            description: name.to_string(),
+            state: "IDLE".to_string(),
+            muted: false,
+            volume: 65536,
+            transporte: if name.starts_with("bluez") { Some("/org/bluez/t".to_string()) } else { None },
+            conexion_bt: None,
+            puerto: puerto.to_string(),
+        }
+    }
+
+    /// Pedido del 31-oct: cabina por cable y audífonos por Bluetooth. Pero
+    /// nunca dos aparatos Bluetooth a la vez (decidido el 30-oct).
+    #[test]
+    fn preescucha_bluetooth_solo_si_la_musica_va_por_cable() {
+        let sinks = vec![
+            sink_de_prueba("alsa_output.pci-0000_00_1f.3.analog-stereo", "analog-output-headphones"),
+            sink_de_prueba("bluez_output.AA_BB_CC_DD_EE_FF.1", ""),
+            sink_de_prueba("alsa_output.pci-0000_01_00.1.hdmi-stereo", ""),
+        ];
+        // Música por cable: los audífonos Bluetooth se ofrecen, como audífonos.
+        let o = opciones_preescucha_de(&sinks, "alsa_output.pci-0000_00_1f.3.analog-stereo");
+        let nombres: Vec<_> = o.salidas.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(nombres, vec!["bluez_output.AA_BB_CC_DD_EE_FF.1"]);
+        assert!(o.salidas[0].bluetooth);
+        assert_eq!(o.salidas[0].audifonos, Some(true));
+
+        // Música por Bluetooth: otros Bluetooth NO; el cable sí.
+        let mut con_otra = sinks;
+        con_otra.push(sink_de_prueba("bluez_output.11_22_33_44_55_66.1", ""));
+        let o = opciones_preescucha_de(&con_otra, "bluez_output.AA_BB_CC_DD_EE_FF.1");
+        let nombres: Vec<_> = o.salidas.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(nombres, vec!["alsa_output.pci-0000_00_1f.3.analog-stereo"]);
+        assert!(!o.salidas[0].bluetooth);
     }
 
     #[test]

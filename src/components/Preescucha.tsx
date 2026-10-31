@@ -40,7 +40,8 @@ function elegirSalida(o: OpcionesPreescucha): string | null {
 }
 
 /**
- * Barra de PRE-ESCUCHA: suena SOLO en los audífonos de cable (ver
+ * Barra de PRE-ESCUCHA: suena SOLO en los audífonos, de cable o Bluetooth si
+ * la cabina va por cable (ver
  * src-tauri/src/preescucha.rs). Aparece al tocar el botón de audífonos de una
  * canción o de un deck. No toca nada del sonido de la cabina.
  */
@@ -209,6 +210,7 @@ export function Preescucha() {
             {opciones.salidas.map((s) => (
               <option key={s.name} value={s.name}>
                 {s.description}
+                {s.bluetooth ? " (Bluetooth)" : ""}
               </option>
             ))}
           </select>
@@ -219,8 +221,8 @@ export function Preescucha() {
       {opciones && opciones.salidas.length === 0 && (
         <div className="dl-warn pre-aviso">
           No hay dónde pre-escuchar: la música sale por «{opciones.principal}», y por esa misma salida la oiría todo
-          el mundo. La pre-escucha necesita la cabina por Bluetooth (u otra salida) y los audífonos de cable en el
-          portátil.
+          el mundo. Hace falta una de dos: la cabina por Bluetooth y los audífonos de cable, o la cabina por cable y
+          los audífonos Bluetooth (en «Audio», toca «Como audífonos»).
         </div>
       )}
       {salidaActual?.audifonos === false && (

@@ -175,11 +175,12 @@ export interface AudioOutput {
 }
 export const audioOutputs = () => invoke<AudioOutput[]>("audio_outputs");
 
-// --- Pre-escucha en audífonos de cable (ver src-tauri/src/preescucha.rs) ---
+// --- Pre-escucha en audífonos (ver src-tauri/src/preescucha.rs) ---
 export interface SalidaAudifonos {
   name: string;
   description: string;
   audifonos: boolean | null; // true: conector de audífonos; false: parlantes del portátil
+  bluetooth: boolean; // audífonos Bluetooth (solo se ofrecen si la música va por cable)
 }
 export interface OpcionesPreescucha {
   salidas: SalidaAudifonos[];

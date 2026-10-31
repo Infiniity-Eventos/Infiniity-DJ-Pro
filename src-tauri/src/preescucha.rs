@@ -1,4 +1,5 @@
-//! PRE-ESCUCHA: oír en audífonos de CABLE una canción mientras la cabina
+//! PRE-ESCUCHA: oír en audífonos (de cable, o Bluetooth si la cabina va por
+//! cable: pedido del 31-oct) una canción mientras la cabina
 //! sigue con la suya (pedido del equipo el 30-oct: "para saber cómo suena la
 //! otra canción que sigue").
 //!
@@ -156,7 +157,7 @@ fn tocar_sinc(ruta: String, desde: f64, sink: String) -> Result<EstadoPreescucha
     // Nunca por donde suena la música: la oiría todo el público.
     if let Some(principal) = crate::salida_audio::salida_principal() {
         if principal == sink {
-            return Err("Esa es la misma salida por donde suena la música: la pre-escucha la oiría todo el mundo. Conecta la cabina por Bluetooth o por otra salida.".to_string());
+            return Err("Esa es la misma salida por donde suena la música: la pre-escucha la oiría todo el mundo. La pre-escucha tiene que ir por otra salida (audífonos de cable, o audífonos Bluetooth si la cabina va por cable).".to_string());
         }
     }
     let mut g = bloquear();
@@ -265,6 +266,11 @@ fn sonar(
         }
     }
 
+    // Audífonos Bluetooth: más margen. Con la cabina se midió (28-oct) que un
+    // margen corto llega en silencio o entrecortado por Bluetooth, y 200 ms
+    // suenan bien. Aquí se pone algo más: en la pre-escucha el retraso no
+    // importa, que se corte sí.
+    let latencia = if sink.starts_with("bluez") { "--latency-msec=300" } else { "--latency-msec=150" };
     let mut p = clean_command("pacat")
         .args([
             "--playback",
@@ -276,7 +282,7 @@ fn sonar(
             &format!("--client-name={CLIENTE}"),
             "--stream-name=Pre-escucha",
             "--property=media.role=preescucha",
-            "--latency-msec=150",
+            latencia,
         ])
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
