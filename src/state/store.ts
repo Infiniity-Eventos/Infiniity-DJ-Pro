@@ -54,6 +54,16 @@ export interface ItemCola {
   fallo: string | null; // no se pudo cargar: se salta y se muestra el porque
 }
 
+/** Audífonos de los decks (ver lib/audifonos.ts y src-tauri/src/cue.rs). */
+export interface EstadoAudifonos {
+  A: boolean; // el deck A suena en los audífonos
+  B: boolean;
+  volumen: number; // 0..1, aparte del VOL general
+  sink: string | null; // salida de los audífonos (nombre técnico)
+  abriendo: boolean; // buscando los audífonos / arrancando
+  error: string; // por qué no suenan (vacío si todo bien)
+}
+
 export interface EstadoAutomix {
   encendido: boolean;
   cola: ItemCola[];
@@ -121,6 +131,8 @@ interface AppStore {
   syncAviso: boolean; // aviso "te falta sincronizar" (equipo, una vez por sesion)
   automix: EstadoAutomix;
   efectosSonando: Record<string, boolean>; // botones de efecto (drops) que estan sonando
+  audifonos: EstadoAudifonos;
+  patchAudifonos: (p: Partial<EstadoAudifonos>) => void;
 
   setModoDibujo: (m: { software: boolean; motivo: string }) => void;
   setMusicRoot: (p: string | null) => void;
@@ -286,6 +298,8 @@ export const useStore = create<AppStore>((set, get) => ({
   notas: [],
   notaDe: null,
   preescuchaPedida: null,
+  audifonos: { A: false, B: false, volumen: 0.8, sink: null, abriendo: false, error: "" },
+  patchAudifonos: (p) => set((st) => ({ audifonos: { ...st.audifonos, ...p } })),
   promptBox: null,
   youtubePlegado: panelesIniciales.youtube,
   downloads: [],

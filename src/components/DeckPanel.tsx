@@ -3,6 +3,7 @@ import { engine } from "../audio/AudioEngine";
 import { automixBloquea } from "../audio/Automix";
 import { useStore, FX_NEUTRO, type DeckId, type FxKey } from "../state/store";
 import { Perilla } from "./Perilla";
+import { alternarAudifonos } from "../lib/audifonos";
 
 const PERILLAS: { key: FxKey; etiqueta: string; titulo: string }[] = [
   { key: "graves", etiqueta: "Graves", titulo: "Graves: al centro no cambia nada; abajo los quita, arriba los sube" },
@@ -21,6 +22,8 @@ export function DeckPanel({ deckId }: { deckId: DeckId }) {
   const patchDeck = useStore((s) => s.patchDeck);
   const showToast = useStore((s) => s.showToast);
   const library = useStore((s) => s.library);
+  const enAudifonos = useStore((s) => s.audifonos[deckId]);
+  const abriendoAudifonos = useStore((s) => s.audifonos.abriendo);
   const [dragOver, setDragOver] = useState(false);
 
   const hasTrack = !!deck.trackPath;
@@ -178,30 +181,23 @@ export function DeckPanel({ deckId }: { deckId: DeckId }) {
         >
           <IconNext />
         </button>
+        {/* Audífonos como en un mixer: este deck COMPLETO en los audífonos,
+            sin importar la barra ni su volumen. El público no oye nada distinto.
+            Funciona también con el automix encendido (solo escucha). */}
         <button
-          className="btn btn-icon"
-          disabled={!hasTrack}
-          title="Pre-escuchar esta canción en los audífonos de cable, desde donde va (el público no la oye)"
-          onClick={() =>
-            deck.trackPath &&
-            useStore.getState().pedirPreescucha(deck.trackPath, deck.trackName ?? "", engine.getPosition(deckId))
+          className={`btn deck-cue ${enAudifonos ? "activo" : ""}`}
+          disabled={abriendoAudifonos}
+          aria-pressed={enAudifonos}
+          title={
+            enAudifonos
+              ? `El Deck ${deckId} suena en tus audífonos. Clic para quitarlo (el público no nota nada).`
+              : `Oír el Deck ${deckId} en tus audífonos, sin importar la barra (el público no lo oye)`
           }
+          onClick={() => void alternarAudifonos(deckId)}
         >
           <IconAudifonos size={18} />
+          <span>{abriendoAudifonos && !enAudifonos ? "..." : enAudifonos ? "EN AUDÍFONOS" : "AUDÍFONOS"}</span>
         </button>
-
-        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 12, color: "var(--text-dim)" }}>Vol</span>
-          <input
-            className="vol-slider"
-            type="range"
-            min={0}
-            max={1}
-            step={0.01}
-            value={deck.volume}
-            onChange={(e) => !automixBloquea() && engine.setVolume(deckId, parseFloat(e.target.value))}
-          />
-        </div>
       </div>
     </div>
   );

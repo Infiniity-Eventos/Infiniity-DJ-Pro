@@ -201,6 +201,21 @@ export const preescuchaTocar = (ruta: string, desde: number, sink: string) =>
 export const preescuchaParar = () => invoke<EstadoPreescucha>("preescucha_parar");
 export const preescuchaEstado = () => invoke<EstadoPreescucha>("preescucha_estado");
 export const preescuchaVolumen = (volumen: number) => invoke<void>("preescucha_volumen", { volumen });
+// --- Audífonos de los decks (ver src-tauri/src/cue.rs) ---
+export interface EstadoCue {
+  abierto: boolean;
+  sink: string;
+  error: string | null; // por qué se cerró sola
+  perdidos: number; // trozos tirados porque no daba abasto (se oye un corte)
+}
+export const cueAbrir = (sink: string, rate: number) => invoke<EstadoCue>("cue_abrir", { sink, rate });
+export const cueCerrar = () => invoke<void>("cue_cerrar");
+export const cueEstado = () => invoke<EstadoCue>("cue_estado");
+/** Un trozo de sonido en crudo (s16le estéreo). Va como bytes, sin JSON. */
+export const cueDatos = (pcm: Uint8Array) => {
+  if (!isTauri()) return Promise.reject(new Error("(modo navegador) comando no disponible: cue_datos"));
+  return tauriInvoke<void>("cue_datos", pcm);
+};
 /** Como fue el cambio de salida (ver `ResultadoSalida` en salida_audio.rs). */
 export interface ResultadoSalida {
   movidos: number; // flujos de sonido movidos (0 = la app aun no sonaba)

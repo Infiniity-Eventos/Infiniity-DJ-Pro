@@ -134,27 +134,61 @@ export function Mixer() {
   );
 }
 
+/** El slider vertical va girado: su ANCHO tiene que ser el ALTO de su columna. */
+function useLargo() {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      el.style.setProperty("--largo", `${el.clientHeight}px`);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return ref;
+}
+
 /**
- * Columna de cada deck: cuanto SUENA (su volumen por el crossfader, con el
- * mismo corte que applyCrossfader en AudioEngine). NO es un medidor de audio:
- * medir la señal obliga a leerla y repintar sin parar, y la app vive en bajo
- * consumo. Solo cambia cuando cambia el volumen o el crossfader (durante una
- * mezcla, a la cadencia con que el motor actualiza el crossfader).
+ * VOLUMEN de cada deck (31-oct: antes estas columnas solo MOSTRABAN cuanto
+ * sonaba el deck y la gente intentaba moverlas; ahora son el volumen, como en
+ * un mixer, y el «Vol» de abajo de cada deck se quito). Debajo del control, una
+ * rayita muestra cuanto llega de verdad al publico: el volumen por la barra
+ * (mismo corte que applyCrossfader). No es un medidor de audio: medir la senal
+ * obliga a leerla y repintar sin parar, y la app vive en bajo consumo.
  */
 function Canal({ deckId }: { deckId: "A" | "B" }) {
   const deck = useStore((s) => s.decks[deckId]);
   const x = useStore((s) => s.crossfader);
+  const automixOn = useStore((s) => s.automix.encendido);
+  const trackRef = useLargo();
   const corte = deckId === "A" ? (x <= 0.5 ? 1 : 2 * (1 - x)) : x >= 0.5 ? 1 : 2 * x;
   const nivel = deck.trackPath ? deck.volume * corte : 0;
   return (
     <div
       className={`canal canal-${deckId.toLowerCase()} ${deck.isPlaying ? "" : "quieto"}`}
-      title={`Cuánto suena el Deck ${deckId}: su volumen por el crossfader (${Math.round(nivel * 100)}%)`}
+      title={
+        automixOn
+          ? `Volumen del Deck ${deckId}: lo maneja el automix`
+          : `Volumen del Deck ${deckId} (${Math.round(deck.volume * 100)}%). Al público llega ${Math.round(nivel * 100)}% por la barra.`
+      }
     >
-      <span className="canal-letra">{deckId}</span>
-      <div className="canal-barra">
-        <div className="canal-nivel" style={{ height: `${Math.round(nivel * 100)}%` }} />
+      <span className="canal-valor">{Math.round(deck.volume * 100)}</span>
+      <div className="master-track canal-track" ref={trackRef}>
+        <div className="canal-llega" style={{ height: `${Math.round(nivel * 100)}%` }} />
+        <input
+          className="vol-slider master-slider"
+          type="range"
+          min={0}
+          max={1}
+          step={0.01}
+          value={deck.volume}
+          onChange={(e) => !automixBloquea() && engine.setVolume(deckId, parseFloat(e.target.value))}
+          onMouseDown={() => automixOn && automixBloquea()}
+          aria-label={`Volumen del Deck ${deckId}`}
+        />
       </div>
+      <span className="canal-letra">{deckId}</span>
     </div>
   );
 }

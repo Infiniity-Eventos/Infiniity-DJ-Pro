@@ -464,6 +464,7 @@ fn audio_set_output_sinc(sink: &str) -> Result<ResultadoSalida, String> {
     // La música va a ir por donde estaba sonando la pre-escucha: se para, o
     // los dos sonidos saldrían mezclados para todo el público.
     crate::preescucha::parar_si_usa(sink);
+    crate::cue::cerrar_si_usa(sink);
     // ANTES de mover nada: dejar la salida en condiciones de sonar.
     //
     // El orden importa. Cambiar el modo de trabajo de una cabina Bluetooth

@@ -43,7 +43,8 @@ function elegirSalida(o: OpcionesPreescucha): string | null {
  * Barra de PRE-ESCUCHA: suena SOLO en los audífonos, de cable o Bluetooth si
  * la cabina va por cable (ver
  * src-tauri/src/preescucha.rs). Aparece al tocar el botón de audífonos de una
- * canción o de un deck. No toca nada del sonido de la cabina.
+ * canción de la LISTA (los de los decks son otra cosa: lib/audifonos.ts). No
+ * toca nada del sonido de la cabina.
  */
 export function Preescucha() {
   const pedida = useStore((s) => s.preescuchaPedida);

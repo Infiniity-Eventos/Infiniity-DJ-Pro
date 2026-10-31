@@ -110,14 +110,17 @@ textarea {
 
 .decks-row {
   display: grid;
-  grid-template-columns: 1fr 300px 1fr;
+  /* minmax(0, 1fr) y no 1fr: con 1fr, un nombre de cancion largo ensanchaba
+   * su deck (1fr no baja de lo que mide el contenido) y a veces sacaba la
+   * pantalla del borde. Asi los dos decks miden SIEMPRE lo mismo. */
+  grid-template-columns: minmax(0, 1fr) 300px minmax(0, 1fr);
   gap: 12px;
   flex: 0 0 auto;
 }
 
 @media (max-width: 1200px) {
   .decks-row {
-    grid-template-columns: 1fr 250px 1fr;
+    grid-template-columns: minmax(0, 1fr) 250px minmax(0, 1fr);
   }
 }
 
@@ -213,6 +216,7 @@ textarea {
   flex-direction: column;
   gap: 12px;
   padding: 16px;
+  min-width: 0;
 }
 .deck.drag-over {
   outline: 2px dashed var(--accent);
@@ -393,32 +397,47 @@ input[type="range"]::-webkit-slider-thumb {
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  width: 26px;
+  width: 44px;
 }
 .canal-letra {
   font-size: 13px;
   font-weight: 800;
   color: var(--accent-strong);
 }
-.canal-barra {
-  flex: 1 1 auto;
-  width: 10px;
-  min-height: 40px;
-  border-radius: 6px;
-  background: var(--slider-track);
-  position: relative;
-  overflow: hidden;
+.canal-valor {
+  font-size: 12px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
 }
-.canal-nivel {
+/* Lo que llega al publico (volumen x barra), detras del control. */
+.canal-llega {
   position: absolute;
-  left: 0;
-  right: 0;
+  left: 50%;
   bottom: 0;
-  border-radius: 6px;
+  width: 6px;
+  transform: translateX(-50%);
+  border-radius: 3px;
   background: linear-gradient(to top, var(--accent-strong), var(--accent));
+  opacity: 0.35;
+  pointer-events: none;
 }
-.canal.quieto .canal-nivel {
-  opacity: 0.4;
+.canal.quieto .canal-llega {
+  opacity: 0.15;
+}
+/* Boton de audifonos del deck (pre-escucha como en un mixer). */
+.btn.deck-cue {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+.btn.deck-cue.activo {
+  background: var(--accent);
+  border-color: var(--accent-strong);
+  color: #fff;
 }
 .mixer .efectos-block {
   display: flex;
@@ -2170,6 +2189,24 @@ body {
 .t-nota {
   color: var(--accent-strong);
   font-weight: 700;
+}
+
+/* ---------------- Audífonos de los decks (AudifonosBarra.tsx) ---------------- */
+.audifonos-barra {
+  position: fixed;
+  left: 18px;
+  bottom: 18px;
+  width: min(320px, calc(100vw - 32px));
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 95;
+}
+.audifonos-barra select {
+  flex: 1;
+  min-width: 0;
 }
 
 /* ---------------- Pre-escucha en audífonos (Preescucha.tsx) ---------------- */

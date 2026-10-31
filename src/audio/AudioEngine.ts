@@ -70,6 +70,8 @@ interface Deck {
   normGain: GainNode; // auto-nivelacion: iguala la sonoridad entre canciones
   volumeGain: GainNode;
   xfadeGain: GainNode;
+  /** Audífonos: copia del deck ANTES del volumen y de la barra (0 apagado, 1 encendido). */
+  cueGain: GainNode;
   naturalBpm: number | null;
   rate: number; // playbackRate actual (1 = natural)
   offset: number; // posicion (seg) donde arranco la reproduccion actual / donde quedo en pausa
@@ -151,6 +153,18 @@ class AudioEngine {
   private rateAnim: Record<DeckId, { intervalo: number; fin: number; resolver: (ok: boolean) => void } | null> = { A: null, B: null };
   private mixAnim: { intervalo: number; fin: number; t0: number; x0: number; x1: number; dur: number; resolver: (ok: boolean) => void } | null = null;
   private tokenSeq = 0;
+  /**
+   * AUDIFONOS (guia .mega-cuestionario/Guía para Audífonos.md): los decks con
+   * el boton de audifonos encendido se suman en `cueBus`, ANTES del volumen del
+   * deck y de la barra, y `cueProc` los copia en trozos que `cueEnvio` le pasa
+   * a Rust (cue.rs -> pacat -> audifonos). `cueBus` no va a la cabina: lo que
+   * oye el publico no cambia en nada. Solo existe `cueProc` mientras haya
+   * algun deck en audifonos (en un portatil flojo, no gastar si no se usa).
+   */
+  private cueBus: GainNode | null = null;
+  private cueProc: ScriptProcessorNode | null = null;
+  private cueMudo: GainNode | null = null;
+  private cueEnvio: ((pcm: Uint8Array) => void) | null = null;
   /** Avisa cuando una cancion termina sola (fin natural). Lo usa el automix. */
   onFinNatural: ((id: DeckId) => void) | null = null;
   /** Efectos de un toque (drops): audio decodificado y, si suena, su fuente. */
@@ -217,21 +231,33 @@ class AudioEngine {
     limiter.connect(medidor);
     this.medidor = medidor;
 
-    const makeDeck = (): Deck => {
+    const cueBus = ctx.createGain();
+    cueBus.gain.value = useStore.getState().audifonos.volumen;
+    this.cueBus = cueBus;
+    this.cueProc = null;
+    this.cueMudo = null;
+
+    const makeDeck = (id: DeckId): Deck => {
       const normGain = ctx.createGain();
       const volumeGain = ctx.createGain();
       const xfadeGain = ctx.createGain();
+      const cueGain = ctx.createGain();
       const fx = this.crearFx(ctx);
       normGain.connect(fx.graves);
       fx.swapLow.connect(volumeGain);
       volumeGain.connect(xfadeGain);
       xfadeGain.connect(master);
+      // Audifonos: se toma antes del volumen y de la barra (como un mixer).
+      cueGain.gain.value = useStore.getState().audifonos[id] ? 1 : 0;
+      fx.swapLow.connect(cueGain);
+      cueGain.connect(cueBus);
       return {
         buffer: null,
         source: null,
         normGain,
         volumeGain,
         xfadeGain,
+        cueGain,
         naturalBpm: null,
         rate: 1,
         offset: 0,
@@ -248,8 +274,10 @@ class AudioEngine {
 
     this.ctx = ctx;
     this.master = master;
-    this.decks = { A: makeDeck(), B: makeDeck() };
+    this.decks = { A: makeDeck("A"), B: makeDeck("B") };
     this.applyCrossfader(useStore.getState().crossfader);
+    // Tras rehacer la conexion, los audifonos siguen como estaban.
+    this.actualizarCaptura();
 
     this.vigilarMotor(ctx);
     this.vigilarSalida();
@@ -258,6 +286,90 @@ class AudioEngine {
     // es el momento de mandarla a la salida elegida (la cabina), ANTES de que
     // suene la primera cancion por los parlantes del portatil.
     void aplicarSalidaGuardada();
+  }
+
+  // -------- Audifonos de los decks --------
+
+  /** Frecuencia del motor (los trozos de los audifonos van a esta frecuencia). */
+  frecuencia(): number {
+    this.ensure();
+    return this.ctx!.sampleRate;
+  }
+
+  /**
+   * Quien recibe los trozos de los audifonos (null = nadie: no se copia nada).
+   * Lo maneja lib/audifonos.ts.
+   */
+  setCueEnvio(envio: ((pcm: Uint8Array) => void) | null): void {
+    this.cueEnvio = envio;
+    this.actualizarCaptura();
+  }
+
+  /** Enciende o apaga un deck en los audifonos. No toca lo que oye el publico. */
+  setCueDeck(id: DeckId, on: boolean): void {
+    const d = this.deck(id);
+    const t = this.ctx!.currentTime;
+    // Fundido de 20 ms: sin chasquido al encender o apagar.
+    d.cueGain.gain.cancelScheduledValues(t);
+    d.cueGain.gain.setTargetAtTime(on ? 1 : 0, t, 0.02);
+    this.actualizarCaptura();
+  }
+
+  setCueVolumen(v: number): void {
+    this.ensure();
+    const t = this.ctx!.currentTime;
+    this.cueBus!.gain.cancelScheduledValues(t);
+    this.cueBus!.gain.setTargetAtTime(clamp(v, 0, 1.5), t, 0.02);
+  }
+
+  /** Crea o quita el copiador segun haga falta (algun deck en audifonos y alguien que reciba). */
+  private actualizarCaptura(): void {
+    const ctx = this.ctx;
+    if (!ctx || !this.cueBus) return;
+    const a = useStore.getState().audifonos;
+    const hace = !!this.cueEnvio && (a.A || a.B);
+    if (hace && !this.cueProc) {
+      // ScriptProcessor y no AudioWorklet: funciona en todos los WebKitGTK que
+      // hay en los equipos, y no necesita archivos aparte. 2048 muestras
+      // (~43 ms) por trozo: menos seria mas trabajo para un portatil flojo.
+      const proc = ctx.createScriptProcessor(2048, 2, 2);
+      const mudo = ctx.createGain();
+      mudo.gain.value = 0;
+      proc.onaudioprocess = (e) => {
+        const envio = this.cueEnvio;
+        if (!envio) return;
+        const ib = e.inputBuffer;
+        const l = ib.getChannelData(0);
+        const r = ib.numberOfChannels > 1 ? ib.getChannelData(1) : l;
+        const n = l.length;
+        const out = new Int16Array(n * 2);
+        for (let i = 0; i < n; i++) {
+          const vl = l[i] > 1 ? 1 : l[i] < -1 ? -1 : l[i];
+          const vr = r[i] > 1 ? 1 : r[i] < -1 ? -1 : r[i];
+          out[2 * i] = vl * 32767;
+          out[2 * i + 1] = vr * 32767;
+        }
+        envio(new Uint8Array(out.buffer));
+      };
+      this.cueBus.connect(proc);
+      // El motor solo hace trabajar al copiador si su salida va a algun lado:
+      // va a la cabina pero por un volumen en CERO (no suma nada).
+      proc.connect(mudo);
+      mudo.connect(ctx.destination);
+      this.cueProc = proc;
+      this.cueMudo = mudo;
+    } else if (!hace && this.cueProc) {
+      this.cueProc.onaudioprocess = null;
+      try {
+        this.cueBus.disconnect(this.cueProc);
+      } catch (err) {
+        console.warn("[AudioEngine] audifonos: no se pudo desconectar el copiador", err);
+      }
+      this.cueProc.disconnect();
+      this.cueMudo?.disconnect();
+      this.cueProc = null;
+      this.cueMudo = null;
+    }
   }
 
   private deck(id: DeckId): Deck {

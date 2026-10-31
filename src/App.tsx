@@ -22,6 +22,7 @@ import { Welcome } from "./components/Welcome";
 import { ConfirmModal } from "./components/ConfirmModal";
 import { PromptModal } from "./components/PromptModal";
 import { Preescucha } from "./components/Preescucha";
+import { AudifonosBarra } from "./components/AudifonosBarra";
 import { NotaModal } from "./components/NotaModal";
 import { StatsMonitor } from "./components/StatsMonitor";
 import { YoutubePanel } from "./components/YoutubePanel";
@@ -160,6 +161,7 @@ export default function App() {
       <PromptModal />
       <NotaModal />
       <Preescucha />
+      <AudifonosBarra />
       <UpdateModal />
       <SyncModal />
       <StatsMonitor />
