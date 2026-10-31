@@ -1652,7 +1652,7 @@ dependencies = [
 
 [[package]]
 name = "infiniity-dj"
-version = "0.4.67"
+version = "0.4.68"
 dependencies = [
  "flate2",
  "gio",
