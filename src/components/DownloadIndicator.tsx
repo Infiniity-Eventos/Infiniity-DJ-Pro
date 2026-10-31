@@ -3,15 +3,28 @@ import { retryDownload } from "../lib/downloads";
 
 /**
  * Chip flotante (abajo a la derecha) con las descargas en curso o fallidas.
- * Si una falla (p. ej. 429 de YouTube), NO se pierde: queda con Reintentar.
+ * Solo con el panel de YouTube plegado: abierto, las muestra el propio panel.
  */
 export function DownloadIndicator() {
   const downloads = useStore((s) => s.downloads);
-  const removeDownload = useStore((s) => s.removeDownload);
   if (downloads.length === 0) return null;
-
   return (
     <div className="dl-indicator">
+      <ListaDescargas />
+    </div>
+  );
+}
+
+/**
+ * Las descargas en curso o fallidas. Si una falla (p. ej. 429 de YouTube), NO
+ * se pierde: queda con Reintentar.
+ */
+export function ListaDescargas() {
+  const downloads = useStore((s) => s.downloads);
+  const removeDownload = useStore((s) => s.removeDownload);
+
+  return (
+    <>
       {downloads.map((d) => {
         const failed = d.status === "error";
         return (
@@ -53,6 +66,6 @@ export function DownloadIndicator() {
           </div>
         );
       })}
-    </div>
+    </>
   );
 }

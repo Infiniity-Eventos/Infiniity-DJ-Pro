@@ -24,7 +24,7 @@ import { PromptModal } from "./components/PromptModal";
 import { Preescucha } from "./components/Preescucha";
 import { NotaModal } from "./components/NotaModal";
 import { StatsMonitor } from "./components/StatsMonitor";
-import { DownloadModal } from "./components/DownloadModal";
+import { YoutubePanel } from "./components/YoutubePanel";
 import { DownloadIndicator } from "./components/DownloadIndicator";
 import { UpdateModal } from "./components/UpdateModal";
 import { AudioOutputModal } from "./components/AudioOutputModal";
@@ -35,9 +35,8 @@ export default function App() {
   const sync = useStore((s) => s.sync);
   const toast = useStore((s) => s.toast);
   const avisoCentral = useStore((s) => s.avisoCentral);
-  const downloaderOpen = useStore((s) => s.downloaderOpen);
   const automixPlegada = useStore((s) => s.automix.plegada);
-  const setDownloaderOpen = useStore((s) => s.setDownloaderOpen);
+  const youtubePlegado = useStore((s) => s.youtubePlegado);
   const audioModalOpen = useStore((s) => s.audioModalOpen);
   const setAudioModalOpen = useStore((s) => s.setAudioModalOpen);
 
@@ -141,10 +140,15 @@ export default function App() {
         <Mixer />
         <DeckPanel deckId="B" />
       </div>
-      <div className={`library-area ${automixPlegada ? "automix-plegada-area" : ""}`}>
+      {/* Carpetas · Lista · Automix · YouTube. Automix y YouTube se pliegan
+          a una tira estrecha; la clase dice cuáles para repartir el ancho. */}
+      <div
+        className={`library-area ${automixPlegada ? "am-plegado" : "am-abierto"} ${youtubePlegado ? "yt-plegado" : "yt-abierto"}`}
+      >
         <FolderTree />
         <TrackList />
         <AutomixBar />
+        <YoutubePanel />
       </div>
       {toast && <div className="glass glass-strong toast">{toast}</div>}
       {avisoCentral && (
@@ -159,8 +163,8 @@ export default function App() {
       <UpdateModal />
       <SyncModal />
       <StatsMonitor />
-      <DownloadIndicator />
-      {downloaderOpen && <DownloadModal onClose={() => setDownloaderOpen(false)} />}
+      {/* Con el panel de YouTube abierto, las descargas se ven en él. */}
+      {youtubePlegado && <DownloadIndicator />}
       {audioModalOpen && <AudioOutputModal onClose={() => setAudioModalOpen(false)} />}
     </div>
   );

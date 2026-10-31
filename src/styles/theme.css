@@ -73,7 +73,7 @@ body {
 .toast,
 .aviso-central,
 .modal-box,
-.agregar-menu {
+.config-menu {
   box-shadow: 0 6px 20px rgba(42, 22, 80, 0.18);
 }
 
@@ -147,13 +147,18 @@ body {
 .topbar .sync-dim {
   color: #d9cdfb;
 }
-/* El menu de "Agregar canciones" cuelga de la barra pero es un panel normal */
-.topbar .agregar-menu .btn {
+/* El menu de "Configuración" cuelga de la barra pero es un panel normal */
+.topbar .config-menu .btn:hover {
+  background: #f3eefe;
+}
+.topbar .config-menu .btn {
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
   background: #ffffff;
   border-color: var(--borde);
   color: var(--text-1);
 }
-.topbar .agregar-menu .sync-dim {
+.topbar .config-menu .sync-dim {
   color: var(--text-dim);
 }
 

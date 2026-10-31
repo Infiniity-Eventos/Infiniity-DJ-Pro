@@ -15,7 +15,7 @@ import {
 import { EVENTO_BUSCAR_ACTUALIZACION } from "./UpdateModal";
 import { reloadLibrary } from "../lib/library";
 import { etiquetaSync } from "./SyncModal";
-import { IconInfinito } from "./Icons";
+import { IconEngranaje, IconInfinito } from "./Icons";
 
 export function TopBar() {
   const musicRoot = useStore((s) => s.musicRoot);
@@ -23,7 +23,6 @@ export function TopBar() {
   const midiPort = useStore((s) => s.midiPort);
   const setMidi = useStore((s) => s.setMidi);
   const showToast = useStore((s) => s.showToast);
-  const setDownloaderOpen = useStore((s) => s.setDownloaderOpen);
   const sync = useStore((s) => s.sync);
   const setSyncOpen = useStore((s) => s.setSyncOpen);
   const etiqueta = etiquetaSync(sync);
@@ -70,7 +69,6 @@ export function TopBar() {
       showToast(`No se pudo agregar la carpeta: ${e}`);
     }
   };
-  const [menuAgregar, setMenuAgregar] = useState(false);
 
 
   const toggleMidi = async () => {
@@ -90,6 +88,16 @@ export function TopBar() {
     }
   };
 
+  const [menu, setMenu] = useState(false);
+  // Lo que pide atención se ve SIN abrir el menú (regla 4: si algo falla, que
+  // se vea): un código de Sync no aceptado, PC sin entrar...
+  const avisoSync = etiqueta.clase === "sync-warn";
+  // Cada opción cierra el menú y luego hace lo suyo.
+  const opcion = (accion: () => void) => () => {
+    setMenu(false);
+    accion();
+  };
+
   return (
     <div className="glass topbar">
       <span className="brand-wrap">
@@ -98,114 +106,87 @@ export function TopBar() {
       </span>
       <span className="app-version" title="Versión instalada">v{__APP_VERSION__}</span>
 
-      {/* Sin boton "Carpeta": la biblioteca es siempre la sincronizada (en el
-          original, la carpeta madre). Pedido explicito: nada de carpetas locales. */}
-      <button
-        className={`btn no-drag ${etiqueta.clase}`}
-        onClick={() => setSyncOpen(true)}
-        title="Sincronización de la biblioteca entre las PC"
-      >
-        🔁 {etiqueta.texto}
-      </button>
-      <button
-        className="btn no-drag"
-        onClick={() => setDownloaderOpen(true)}
-        title="Buscar y descargar canciones de YouTube"
-      >
-        ⬇️ YouTube
-      </button>
-      <span className="agregar-wrap no-drag">
-        <button
-          className="btn"
-          onClick={() => setMenuAgregar((v) => !v)}
-          disabled={!musicRoot}
-          title="Copiar canciones de este computador a la biblioteca (van a Sin clasificar)"
-        >
-          ＋ Agregar canciones
-        </button>
-        {menuAgregar && (
-          <div className="glass glass-strong agregar-menu" onMouseLeave={() => setMenuAgregar(false)}>
-            <button
-              className="btn"
-              onClick={() => {
-                setMenuAgregar(false);
-                void agregarCanciones();
-              }}
-            >
-              🎵 Canciones sueltas…
-            </button>
-            <button
-              className="btn"
-              onClick={() => {
-                setMenuAgregar(false);
-                void agregarCarpeta();
-              }}
-            >
-              📁 Carpeta completa… <span className="sync-dim">(se escanea entera)</span>
-            </button>
-          </div>
-        )}
-      </span>
-      {musicRoot && <span className="path-chip">{musicRoot}</span>}
-
       <span className="spacer" />
 
-      {/* Salida de audio: sin esto, al conectar la cabina el sonido se queda
-          en los parlantes del portatil y no hay forma de cambiarlo. */}
-      <button
-        className="btn no-drag"
-        onClick={() => setAudioModalOpen(true)}
-        title="Elegir por dónde suena: cabina, HDMI, Bluetooth..."
-      >
-        Audio
-      </button>
-
-      <button
-        className="btn no-drag"
-        onClick={toggleMidi}
-        title={
-          midiConnected
-            ? "Controladora conectada. Clic para desconectarla."
-            : "Se conecta sola al enchufarla por USB. Clic para buscarla ahora."
-        }
-      >
-        <span className={`midi-dot ${midiConnected ? "on" : "off"}`} />
-        {midiConnected ? midiPort ?? "DDJ-200" : "DDJ-200"}
-      </button>
-
-      {/* Buscar actualizacion a mano. Existe porque si el aviso automatico no
-          aparece, sin esto no hay forma de saber si es que no hay version
-          nueva o es que la busqueda esta fallando. */}
-      <button
-        className="btn no-drag"
-        onClick={() =>
-          window.dispatchEvent(new CustomEvent(EVENTO_BUSCAR_ACTUALIZACION))
-        }
-        title="Buscar actualizacion"
-      >
-        ⬆️
-      </button>
-
-      {/* Boton de recarga: SOLO en desarrollo (no aparece en la app final). */}
-      {import.meta.env.DEV && (
+      {/* Barra casi libre (pedido del 31-oct): todo lo que se puede hacer va
+          dentro de «Configuración». YouTube es ahora un panel de la derecha. */}
+      <span className="config-wrap no-drag">
         <button
-          className="btn no-drag"
-          onClick={() => window.location.reload()}
-          title="Recargar la app (solo desarrollo)"
+          className={`btn config-btn ${menu ? "abierto" : ""}`}
+          onClick={() => setMenu((v) => !v)}
+          title="Sync, salida de audio, controladora, agregar canciones, actualizaciones"
         >
-          🔄
+          <IconEngranaje />
+          Configuración
+          {avisoSync && <span className="config-aviso" title={etiqueta.texto}>⚠</span>}
         </button>
-      )}
+        {menu && (
+          <>
+            {/* Clic fuera del menú = cerrarlo. */}
+            <div className="config-fondo" onClick={() => setMenu(false)} />
+            <div className="glass glass-strong config-menu">
+              <button className={`btn ${etiqueta.clase}`} onClick={opcion(() => setSyncOpen(true))}>
+                🔁 {etiqueta.texto}
+                <span className="sync-dim">sincronización entre las PC</span>
+              </button>
+              {/* Salida de audio: sin esto, al conectar la cabina el sonido se
+                  queda en los parlantes del portatil. */}
+              <button className="btn" onClick={opcion(() => setAudioModalOpen(true))}>
+                Audio
+                <span className="sync-dim">por dónde suena: cabina, Bluetooth, audífonos</span>
+              </button>
+              <button className="btn" onClick={opcion(() => void toggleMidi())}>
+                <span>
+                  <span className={`midi-dot ${midiConnected ? "on" : "off"}`} />
+                  {midiConnected ? `Controladora: ${midiPort ?? "DDJ-200"}` : "Controladora DDJ-200"}
+                </span>
+                <span className="sync-dim">
+                  {midiConnected ? "conectada · clic para desconectarla" : "se conecta sola por USB · clic para buscarla"}
+                </span>
+              </button>
+
+              <div className="config-sep" />
+              <button className="btn" disabled={!musicRoot} onClick={opcion(() => void agregarCanciones())}>
+                🎵 Agregar canciones sueltas…
+                <span className="sync-dim">van a Sin clasificar</span>
+              </button>
+              <button className="btn" disabled={!musicRoot} onClick={opcion(() => void agregarCarpeta())}>
+                📁 Agregar carpeta completa…
+                <span className="sync-dim">se escanea entera, todo a Sin clasificar</span>
+              </button>
+
+              <div className="config-sep" />
+              {/* Buscar actualizacion a mano: si el aviso automatico no
+                  aparece, sin esto no se sabe si no hay version nueva o si la
+                  busqueda esta fallando. */}
+              <button
+                className="btn"
+                onClick={opcion(() => window.dispatchEvent(new CustomEvent(EVENTO_BUSCAR_ACTUALIZACION)))}
+              >
+                ⬆ Buscar actualización
+                <span className="sync-dim">tienes la v{__APP_VERSION__}</span>
+              </button>
+              {/* Recarga: SOLO en desarrollo (no aparece en la app final). */}
+              {import.meta.env.DEV && (
+                <button className="btn" onClick={opcion(() => window.location.reload())}>
+                  Recargar la app <span className="sync-dim">solo desarrollo</span>
+                </button>
+              )}
+              {musicRoot && (
+                <div className="config-info" title={musicRoot}>
+                  Biblioteca: {musicRoot}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </span>
 
       <div className="win-controls no-drag">
         <button className="btn btn-icon" title="Minimizar" onClick={() => minimizeWindow()}>
           –
         </button>
-        <button
-          className="btn btn-icon"
-          title="Pantalla completa"
-          onClick={() => toggleFullscreen()}
-        >
+        <button className="btn btn-icon" title="Pantalla completa" onClick={() => toggleFullscreen()}>
           ⛶
         </button>
         <button className="btn btn-icon" title="Salir" onClick={() => quitApp()}>

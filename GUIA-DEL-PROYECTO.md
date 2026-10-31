@@ -239,7 +239,7 @@ es confirmar que la unidad física manda los mismos números de nota/CC.
 src/
 ├── App.tsx                      Arma la pantalla + listeners globales.
 ├── components/
-│   ├── TopBar.tsx               Barra: carpeta, ⬇️YouTube, Audio, DDJ-200, ⚡, tema, versión, 🔄(dev).
+│   ├── TopBar.tsx               Barra casi libre: nombre, versión, botón «Configuración» (Sync, Audio, DDJ-200, agregar canciones, actualizar) y ventana.
 │   ├── DeckPanel.tsx            Cada bandeja (drop de canción, editar BPM).
 │   ├── Mixer.tsx                MEZCLAR, crossfader (corte lineal + doble clic), master.
 │   ├── FolderTree.tsx           Carpetas (crear con PromptModal).
@@ -252,7 +252,7 @@ src/
 │   ├── StatsMonitor.tsx         🆕 Chip RAM/CPU + graba diagnóstico.
 │   ├── AutomixBar.tsx           Cola del automix (3ª columna): encender, Saltar, Limpiar, arrastrar.
 │   ├── Perilla.tsx              Perilla SVG de efecto (arrastre vertical, rueda, doble clic al neutro).
-│   ├── DownloadModal.tsx        🆕 Buscador de YouTube.
+│   ├── YoutubePanel.tsx         Panel de YouTube (columna derecha, plegable como el Automix).
 │   ├── DownloadIndicator.tsx    🆕 Descargas en 2do plano + reintento.
 │   └── AudioOutputModal.tsx     🆕 Elegir salida (cabina/HDMI/Bluetooth) + pitido de prueba.
 ├── audio/AudioEngine.ts         ⭐ Motor con AudioBuffer (ver 2.2) + auto-nivelación + transicion() con golpes alineados y cambio de graves + efectos por deck (crearFx/setFx).
@@ -290,7 +290,7 @@ src-tauri/src/
 - **Re-analizar BPM desde cero:** borrar `~/.local/share/com.infiniityeventos.dj/bpm_cache.json`.
 - **Confirmar qué versión corre:** mirar el número junto al logo dentro de la app.
 - **Herramientas de YouTube ya instaladas en la PC dev:** yt-dlp, deno, ffmpeg (no reinstalar).
-- **Suena por el portátil y no por la cabina:** botón **Audio** de la barra superior → elegir la
+- **Suena por el portátil y no por la cabina:** **Configuración → Audio** (barra superior) → elegir la
   salida → *Probar sonido*. Si la lista sale vacía o da error, al equipo le falta `pactl`
   (paquete `pulseaudio-utils` o `pipewire-pulse`). Un parlante Bluetooth tiene que estar
   emparejado y conectado desde el sistema para aparecer en la lista.

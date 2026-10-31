@@ -111,7 +111,7 @@ interface AppStore {
   /** Canción pedida para la pre-escucha en audífonos (`n` cambia en cada pedido). */
   preescuchaPedida: { ruta: string; nombre: string; desde: number; n: number } | null;
   promptBox: { message: string; defaultValue: string; onSubmit: (v: string) => void } | null; // pedir un dato (sin bloquear el audio)
-  downloaderOpen: boolean; // modal de descarga de YouTube abierto
+  youtubePlegado: boolean; // panel de YouTube (columna derecha) plegado
   downloads: DownloadItem[]; // descargas en curso (en segundo plano)
   highlightTrack: string | null; // ruta de la cancion recien descargada (para titilar)
   analyzing: Set<string>; // rutas en analisis (para el spinner del boton)
@@ -150,7 +150,7 @@ interface AppStore {
   cerrarPreescucha: () => void;
   askPrompt: (message: string, defaultValue: string, onSubmit: (v: string) => void) => void;
   closePrompt: () => void;
-  setDownloaderOpen: (v: boolean) => void;
+  setYoutubePlegado: (v: boolean) => void;
   addDownload: (d: DownloadItem) => void;
   updateDownload: (id: string, patch: Partial<DownloadItem>) => void;
   removeDownload: (id: string) => void;
@@ -234,6 +234,34 @@ function savePrefs(s: AppStore) {
 
 const initial = loadPrefs();
 
+// --- Paneles de la derecha (Automix y YouTube): plegado o abierto ---
+// Se recuerda entre aperturas: cada DJ los deja como le gusta.
+const LS_PANELES = "infiniity-dj-paneles";
+interface Paneles {
+  automix: boolean;
+  youtube: boolean;
+}
+function cargarPaneles(): Paneles {
+  try {
+    const raw = localStorage.getItem(LS_PANELES);
+    if (raw) {
+      const p = JSON.parse(raw) as Partial<Paneles>;
+      return { automix: p.automix === true, youtube: p.youtube === true };
+    }
+  } catch (e) {
+    console.warn("[paneles] no se pudo leer si estaban plegados", e);
+  }
+  return { automix: false, youtube: false };
+}
+export function guardarPaneles(p: Paneles) {
+  try {
+    localStorage.setItem(LS_PANELES, JSON.stringify(p));
+  } catch (e) {
+    console.warn("[paneles] no se pudo recordar si estaban plegados", e);
+  }
+}
+const panelesIniciales = cargarPaneles();
+
 export const useStore = create<AppStore>((set, get) => ({
   modoDibujo: null,
   musicRoot: initial.musicRoot,
@@ -259,7 +287,7 @@ export const useStore = create<AppStore>((set, get) => ({
   notaDe: null,
   preescuchaPedida: null,
   promptBox: null,
-  downloaderOpen: false,
+  youtubePlegado: panelesIniciales.youtube,
   downloads: [],
   highlightTrack: null,
   analyzing: new Set<string>(),
@@ -276,7 +304,7 @@ export const useStore = create<AppStore>((set, get) => ({
     siguienteLista: false,
     faltan: null,
     mensaje: null,
-    plegada: false,
+    plegada: panelesIniciales.automix,
   },
   efectosSonando: {},
 
@@ -339,7 +367,10 @@ export const useStore = create<AppStore>((set, get) => ({
   askPrompt: (message, defaultValue, onSubmit) =>
     set({ promptBox: { message, defaultValue, onSubmit } }),
   closePrompt: () => set({ promptBox: null }),
-  setDownloaderOpen: (v) => set({ downloaderOpen: v }),
+  setYoutubePlegado: (v) => {
+    set({ youtubePlegado: v });
+    guardarPaneles({ automix: get().automix.plegada, youtube: v });
+  },
   addDownload: (d) =>
     set((st) => ({ downloads: [...st.downloads.filter((x) => x.id !== d.id), d] })),
   updateDownload: (id, patch) =>
@@ -360,7 +391,10 @@ export const useStore = create<AppStore>((set, get) => ({
   setSync: (e) => set({ sync: e }),
   setSyncOpen: (v) => set({ syncOpen: v }),
   setSyncAviso: (v) => set({ syncAviso: v }),
-  patchAutomix: (p) => set((st) => ({ automix: { ...st.automix, ...p } })),
+  patchAutomix: (p) => {
+    set((st) => ({ automix: { ...st.automix, ...p } }));
+    if (p.plegada !== undefined) guardarPaneles({ automix: p.plegada, youtube: get().youtubePlegado });
+  },
   setEfectoSonando: (id, on) => set((st) => ({ efectosSonando: { ...st.efectosSonando, [id]: on } })),
   setAnalyzing: (path, on) =>
     set((st) => {

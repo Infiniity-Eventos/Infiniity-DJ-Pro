@@ -222,7 +222,7 @@ export function Preescucha() {
         <div className="dl-warn pre-aviso">
           No hay dónde pre-escuchar: la música sale por «{opciones.principal}», y por esa misma salida la oiría todo
           el mundo. Hace falta una de dos: la cabina por Bluetooth y los audífonos de cable, o la cabina por cable y
-          los audífonos Bluetooth (en «Audio», toca «Como audífonos»).
+          los audífonos Bluetooth (en «Configuración → Audio», toca «Como audífonos»).
         </div>
       )}
       {salidaActual?.audifonos === false && (

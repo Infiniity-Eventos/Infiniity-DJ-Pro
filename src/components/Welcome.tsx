@@ -100,7 +100,7 @@ export function Welcome() {
       </button>
       {error && <div className="dl-warn welcome-error">{error}</div>}
       <p className="welcome-alt">
-        El código te lo manda Camilo desde su app (botón <b>Sync</b>). Toda la música llega sola a esta
+        El código te lo manda Camilo desde su app (<b>Configuración → Sync</b>). Toda la música llega sola a esta
         PC; no hay que elegir ninguna carpeta.
       </p>
     </div>

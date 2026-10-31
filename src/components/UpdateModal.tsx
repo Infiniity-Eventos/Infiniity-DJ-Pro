@@ -72,7 +72,7 @@ export function UpdateModal() {
     return () => window.clearTimeout(t);
   }, [buscar]);
 
-  // Manual: la dispara el boton de la barra de arriba.
+  // Manual: la dispara «Configuración → Buscar actualización».
   useEffect(() => {
     const h = () => void buscar(true);
     window.addEventListener(EVENTO_BUSCAR_ACTUALIZACION, h);

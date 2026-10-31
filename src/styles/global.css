@@ -123,21 +123,33 @@ textarea {
 
 .library-area {
   display: grid;
-  /* Carpetas · Lista · Automix (la cola que se mezcla sola) */
-  grid-template-columns: 260px 1fr 300px;
+  /* Carpetas · Lista · Automix · YouTube. Automix y YouTube se pliegan a una
+     tira de 44px (clases am-/yt- en App.tsx). */
+  --col-carpetas: 260px;
+  --col-panel: 300px;
+  grid-template-columns: var(--col-carpetas) minmax(0, 1fr) var(--col-am, var(--col-panel)) var(--col-yt, var(--col-panel));
   gap: 12px;
   flex: 1 1 auto;
   min-height: 0;
 }
-.library-area.automix-plegada-area {
-  grid-template-columns: 260px 1fr 44px;
+.library-area.am-abierto {
+  --col-am: var(--col-panel);
 }
-@media (max-width: 1280px) {
+.library-area.am-plegado {
+  --col-am: 44px;
+}
+.library-area.yt-abierto {
+  --col-yt: var(--col-panel);
+}
+.library-area.yt-plegado {
+  --col-yt: 44px;
+}
+/* Portátiles (1366 px): con Automix y YouTube abiertos, la lista tiene que
+   seguir leyéndose. */
+@media (max-width: 1440px) {
   .library-area {
-    grid-template-columns: 220px 1fr 270px;
-  }
-  .library-area.automix-plegada-area {
-    grid-template-columns: 220px 1fr 44px;
+    --col-carpetas: 210px;
+    --col-panel: 260px;
   }
 }
 
@@ -1434,25 +1446,141 @@ body {
   position: relative;
   z-index: 60;
 }
-.agregar-wrap {
+/* Botón «Configuración» y su menú (todo lo que antes llenaba la barra). */
+.config-wrap {
   position: relative;
   display: inline-block;
 }
-.agregar-menu {
+.config-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.config-btn.abierto {
+  background: var(--accent-strong);
+  border-color: transparent;
+  color: #fff;
+}
+.config-aviso {
+  color: #fbbf24;
+  font-weight: 800;
+}
+/* Capa invisible detrás del menú: un clic fuera lo cierra. */
+.config-fondo {
+  position: fixed;
+  inset: 0;
+  z-index: 140;
+}
+.config-menu {
   position: absolute;
   top: calc(100% + 6px);
-  left: 0;
+  right: 0;
   z-index: 150;
   display: flex;
   flex-direction: column;
   gap: 6px;
   padding: 8px;
-  min-width: 260px;
+  width: 320px;
   border-radius: var(--radius-md);
 }
-.agregar-menu .btn {
+.config-menu .btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
   text-align: left;
+}
+.config-menu .btn .sync-dim {
+  font-size: 11px;
+  font-weight: 400;
+}
+.config-sep {
+  height: 1px;
+  background: var(--glass-border);
+  margin: 2px 4px;
+}
+.config-info {
+  font-size: 11px;
+  color: var(--text-dim);
+  padding: 4px 6px 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ---------------- Panel de YouTube (columna derecha) ---------------- */
+/* Usa la misma base que el Automix (.automix): vidrio, cabecera y plegado. */
+.yt-panel {
+  overflow: hidden;
+}
+.yt-nota {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.4;
+  padding: 4px 2px;
+}
+.yt-instalar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  min-height: 0;
+}
+.yt-buscar {
+  display: flex;
+  gap: 6px;
+}
+.yt-buscar .dl-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+.yt-buscar .btn {
+  flex: 0 0 auto;
+}
+.yt-resultados {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.yt-result {
+  gap: 8px;
+  padding: 6px;
+}
+.yt-result .dl-thumb {
+  width: 64px;
+  height: 36px;
+}
+.yt-result .dl-result-title {
+  font-size: 12px;
+}
+.yt-result .dl-result-sub {
+  font-size: 11px;
+}
+.yt-descargas {
+  flex: 0 0 auto;
+  max-height: 32%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid var(--glass-border);
+  padding-top: 8px;
+}
+.yt-descargas-titulo {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.automix-led.mal {
+  background: #f87171;
+  box-shadow: none;
 }
 
 /* Panel de carpetas: pestañas Géneros / Artistas */
@@ -1929,10 +2057,8 @@ body {
 }
 @media (max-width: 1100px) {
   .library-area {
-    grid-template-columns: 190px minmax(0, 1fr) 240px;
-  }
-  .library-area.automix-plegada-area {
-    grid-template-columns: 190px minmax(0, 1fr) 44px;
+    --col-carpetas: 190px;
+    --col-panel: 240px;
   }
 }
 
